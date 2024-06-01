@@ -19,13 +19,11 @@ fn encrypt(message: &str, state: State<'_, AppState>) -> String {
     let username = user.as_str().expect("Failed to convert to string");
     let full_message = format!("{}: {}", username, message);
 
-    // Encrypt
     let data = full_message.as_bytes();
     let enc_data = pub_key
         .encrypt(&mut rng, Pkcs1v15Encrypt, &data[..])
         .expect("failed to encrypt");
 
-    // Decrypt
     let dec_data = priv_key
         .decrypt(Pkcs1v15Encrypt, &enc_data)
         .expect("failed to decrypt");
@@ -41,6 +39,7 @@ pub fn run() {
         .plugin(tauri_plugin_store::Builder::default().build())
         .setup(|app| {
             let mut store = StoreBuilder::new("app_data.bin").build(app.handle().clone());
+
             store
                 .insert("username".to_string(), json!("Julian"))
                 .expect("Failed to insert into store");
