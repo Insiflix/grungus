@@ -1,67 +1,62 @@
-use ring::aead::{self, Aad, LessSafeKey, Nonce, UnboundKey};
-use ring::rand::SystemRandom;
-use ring::signature::{Ed25519KeyPair, KeyPair, UnparsedPublicKey, ED25519};
+use std::sync::Mutex;
+
+use rand::rngs::OsRng;
+use rsa::{Pkcs1v15Encrypt, RsaPrivateKey, RsaPublicKey};
+use serde_json::json;
+use tauri::{Manager, State, Wry};
+use tauri_plugin_store::StoreBuilder;
 
 #[tauri::command]
-fn encrypt(message: &str) -> String {
-    let rng = SystemRandom::new();
-    let pkcs8_bytes = Ed25519KeyPair::generate_pkcs8(&rng).unwrap();
-    let key_pair = Ed25519KeyPair::from_pkcs8(pkcs8_bytes.as_ref()).unwrap();
+fn encrypt(message: &str, state: State<'_, AppState>) -> String {
+    let mut rng = OsRng;
+    let bits = 2048;
+    let priv_key = RsaPrivateKey::new(&mut rng, bits).expect("failed to generate a key");
+    let pub_key = RsaPublicKey::from(&priv_key);
 
-    let public_key_bytes = key_pair.public_key().as_ref().to_vec();
-    let private_key_bytes = pkcs8_bytes.as_ref().to_vec();
+    let store = state.store.lock().unwrap();
+    let user = store.get("username").expect("Failed to get from store");
 
-    let public_key = UnparsedPublicKey::new(&ED25519, &public_key_bytes);
-    let signature = key_pair.sign(message.as_bytes());
-    let symmetric_key = &private_key_bytes[..32]; // Todo use a proper key derivation function
-    let encrypted_msg = encrypt_message(symmetric_key, message.as_bytes());
-    let decrypted_msg = decrypt_message(symmetric_key, &encrypted_msg);
-    let decrypted_msg = String::from_utf8(decrypted_msg).unwrap();
+    let username = user.as_str().expect("Failed to convert to string");
+    let full_message = format!("{}: {}", username, message);
 
-    let verified = public_key
-        .verify(message.as_bytes(), signature.as_ref())
-        .is_ok();
-    let verified = if verified { "verified" } else { "not verified" };
+    // Encrypt
+    let data = full_message.as_bytes();
+    let enc_data = pub_key
+        .encrypt(&mut rng, Pkcs1v15Encrypt, &data[..])
+        .expect("failed to encrypt");
 
-    format!(
-        "Public key: {:?}\nPrivate key: {:?}\nSignature: {:?}\nEncrypted message: {:?}\nDecrypted message: {:?}\n{}",
-        public_key_bytes,
-        private_key_bytes,
-        signature.as_ref(),
-        encrypted_msg,
-        decrypted_msg,
-        verified
-    )
-}
+    // Decrypt
+    let dec_data = priv_key
+        .decrypt(Pkcs1v15Encrypt, &enc_data)
+        .expect("failed to decrypt");
 
-fn encrypt_message(key: &[u8], msg: &[u8]) -> Vec<u8> {
-    let sealing_key = LessSafeKey::new(UnboundKey::new(&aead::AES_256_GCM, key).unwrap());
-    let mut in_out = msg.to_vec();
-    let tag_len = aead::AES_256_GCM.tag_len();
-    in_out.extend(vec![0u8; tag_len]);
-    let nonce = Nonce::assume_unique_for_key([0; 12]);
-    sealing_key
-        .seal_in_place_append_tag(nonce, Aad::empty(), &mut in_out)
-        .unwrap();
-    in_out
-}
+    let decrypted_message = String::from_utf8(dec_data).expect("failed to convert to string");
 
-fn decrypt_message(key: &[u8], encrypted_msg: &[u8]) -> Vec<u8> {
-    let opening_key =
-        aead::LessSafeKey::new(aead::UnboundKey::new(&aead::AES_256_GCM, key).unwrap());
-    let nonce = aead::Nonce::assume_unique_for_key([0; 12]);
-    let mut in_out = encrypted_msg.to_vec();
-    opening_key
-        .open_in_place(nonce, aead::Aad::empty(), &mut in_out)
-        .unwrap()
-        .to_vec()
+    format!("Decrypted data: {}", decrypted_message)
 }
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
     tauri::Builder::default()
-        .plugin(tauri_plugin_shell::init())
+        .plugin(tauri_plugin_store::Builder::default().build())
+        .setup(|app| {
+            let mut store = StoreBuilder::new("app_data.bin").build(app.handle().clone());
+            store
+                .insert("username".to_string(), json!("Julian"))
+                .expect("Failed to insert into store");
+            store.save().expect("Failed to save store");
+
+            app.manage(AppState {
+                store: Mutex::new(store),
+            });
+
+            Ok(())
+        })
         .invoke_handler(tauri::generate_handler![encrypt])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");
+}
+
+struct AppState {
+    store: Mutex<tauri_plugin_store::Store<Wry>>,
 }

@@ -8,7 +8,7 @@ function App() {
 
 	async function encrypt() {
 		const msg = (await invoke("encrypt", { message: input })) as string;
-		setMessage(msg.substring(0, msg.length - 42));
+		setMessage(msg);
 		setInput("");
 	}
 
@@ -17,10 +17,14 @@ function App() {
 			<input
 				placeholder="message"
 				value={input}
-				style={{ color: "black" }}
+				className="text-white bg-gray-800 p-2 rounded-lg"
 				onChange={e => setInput(e.target.value)}
 			/>
-			<button onClick={encrypt}>Encrypt</button>
+			<button
+				className="bg-blue-500 text-white p-2 rounded-lg ml-2"
+				onClick={encrypt}>
+				Encrypt
+			</button>
 			<h1>{message}</h1>
 		</div>
 	);
