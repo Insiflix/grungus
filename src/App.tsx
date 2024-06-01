@@ -3,17 +3,25 @@ import { invoke } from "@tauri-apps/api/core";
 import "./App.css";
 
 function App() {
-	const [greetMsg, setGreetMsg] = useState("");
-	const [name, setName] = useState("");
+	const [message, setMessage] = useState("");
+	const [input, setInput] = useState("");
 
-	async function greet() {
-		// Learn more about Tauri commands at https://tauri.app/v1/guides/features/command
-		setGreetMsg(await invoke("greet", { name }));
+	async function encrypt() {
+		const msg = (await invoke("encrypt", { message: input })) as string;
+		setMessage(msg.substring(0, msg.length - 42));
+		setInput("");
 	}
 
 	return (
-		<div>
-			<h1>Grungus</h1>
+		<div className="d-flex">
+			<input
+				placeholder="message"
+				value={input}
+				style={{ color: "black" }}
+				onChange={e => setInput(e.target.value)}
+			/>
+			<button onClick={encrypt}>Encrypt</button>
+			<h1>{message}</h1>
 		</div>
 	);
 }
