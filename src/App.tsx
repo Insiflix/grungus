@@ -26,6 +26,9 @@ function App() {
 				Encrypt
 			</button>
 			<h1>{message}</h1>
+			<a className="m-2" href="/login">
+				Login
+			</a>
 		</div>
 	);
 }
