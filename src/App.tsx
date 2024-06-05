@@ -1,6 +1,7 @@
 import { useState } from "react";
 import { invoke } from "@tauri-apps/api/core";
 import "./App.css";
+import Background from "./components/background";
 
 function App() {
 	const [message, setMessage] = useState("");
@@ -13,6 +14,8 @@ function App() {
 	}
 
 	return (
+		<>
+		<Background></Background>
 		<div className="d-flex">
 			<input
 				placeholder="message"
@@ -30,6 +33,7 @@ function App() {
 				Login
 			</a>
 		</div>
+		</>
 	);
 }
 
