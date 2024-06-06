@@ -19,7 +19,7 @@ const LoginScreen: React.FC = () => {
 
     const leftLoginStyle: React.CSSProperties = {
         width: '300px',
-        backgroundColor: 'rgba(92,100,228,255)',
+        backgroundColor: 'rgba(89,106,235,255)',
         backgroundImage: 'url("/grungo.png")',
         backgroundSize: 'contain',
         backgroundRepeat: 'no-repeat',
