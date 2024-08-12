@@ -1,11 +1,12 @@
 const ChatContainer = () => {
   const mainContainer: React.CSSProperties = {
-    margin: "0 0 10px 0",
+    margin: "0 0 1rem 0",
     backgroundColor: "rgba(0, 0, 0, 0.05)",
     backdropFilter: "blur(3px)",
+    WebkitBackdropFilter: "blur(3px)",
     border: "solid 2px rgba(255, 255, 255, 0.20)",
-    height: "91vh",
-    width: "calc(100% - 200px)",
+    height: "91.5vh",
+    width: "100%",
     borderRadius: "10px",
     display: "flex",
     flexDirection: "column"
@@ -24,12 +25,13 @@ const ChatContainer = () => {
 
   const inputStyle: React.CSSProperties = {
     width: "95%",
-    height: "40px",
+    height: "2.5rem",
     backgroundColor: "rgba(0, 0, 0, 0.05)",
     backdropFilter: "blur(3px)",
+    WebkitBackdropFilter: "blur(3px)",
     border: "solid 2px rgba(255, 255, 255, 0.20)",
     borderRadius: "10px",
-    padding: "5px"
+    padding: "0.3rem"
   }
 
   return (

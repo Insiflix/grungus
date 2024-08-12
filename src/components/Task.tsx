@@ -42,30 +42,27 @@ const Task = ({ id }: TaskID) => {
   }
 
   const taskContainer: React.CSSProperties = {
-    margin: "10px 0 0 5px",
+    margin: "0 0 0 0.7rem",
     display: "flex",
     borderRadius: "10px",
     backgroundColor: "rgba(148, 148, 148, 0.25)",
     backdropFilter: "blur(10px)",
-    height: "6vh",
-    minHeight: "50px",
-    maxWidth: "14vw",
+    WebkitBackdropFilter: "blur(10px)",
+    width: "11.9vw",
     alignItems: "center",
-    padding: "5px",
+    padding: "0.5rem",
     cursor: "pointer",
-    position: "relative",
   };
 
   const imageContainer: React.CSSProperties = {
     position: "relative",
-    marginRight: "5px",
+    marginRight: "0.5rem",
   };
 
   const taskImg: React.CSSProperties = {
-    height: "38px",
-    minHeight: "38px",
-    width: "38px",
-    minWidth: "38px",
+    height: "2.4rem",
+    width: "2.4rem",
+    minWidth: "2.4rem",
     borderRadius: "45px",
   };
 
@@ -78,10 +75,10 @@ const Task = ({ id }: TaskID) => {
         busy: "#FF0000", // Red for busy
       }[task.onlineStatus] || "#FFFFFF",
     position: "absolute",
-    height: "10px",
-    width: "10px",
-    right: "0px",
-    bottom: "0px",
+    height: "0.7rem",
+    width: "0.7rem",
+    right: "0rem",
+    bottom: "0rem",
     borderRadius: "50%",
   };
 
@@ -89,22 +86,26 @@ const Task = ({ id }: TaskID) => {
     margin: 0,
     fontWeight: "bold",
     color: "white",
-    fontSize: "90%",
+    fontSize: "80%",
     overflow: "hidden",
     whiteSpace: "nowrap",
     textOverflow: "ellipsis",
-    width: "9.5vw",
+    width: "85%",
   };
 
   const taskStatus: React.CSSProperties = {
     margin: 0,
-    fontSize: "small",
+    fontSize: "70%",
     color: "#B4B4B4",
+    overflow: "hidden",
+    whiteSpace: "nowrap",
+    textOverflow: "ellipsis",
+    width: "85%",
   };
 
   const iconStyle: React.CSSProperties = {
     margin: "0 0 0 auto",
-    fontSize: "25px",
+    fontSize: "1rem",
     cursor: "pointer",
   };
 
@@ -123,12 +124,12 @@ const Task = ({ id }: TaskID) => {
           display: "flex",
           flexDirection: "column",
           justifyContent: "center",
+          width: "75%"
         }}
       >
         <h3 style={taskName}>{task.name}</h3>
         <p style={taskStatus}>{task.status}</p>
       </div>
-      <HiOutlineX style={iconStyle} />
     </div>
   );
 };

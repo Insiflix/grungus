@@ -2,13 +2,14 @@ import React from "react";
 
 const Navbar = () => {
   const navbarContainer: React.CSSProperties = {
-    margin: "10px 0 10px 10px",
+    margin: "0.7rem 0 0.7rem 0.7rem",
     backgroundColor: "rgba(0, 0, 0, 0.05)",
     backdropFilter: "blur(3px)",
+    WebkitBackdropFilter: "blur(3px)",
     border: "solid 2px rgba(255, 255, 255, 0.20)",
-    height: "98vh",
-    width: "75px",
-    minWidth: "75px",
+    height: "calc(100vh - 1.4rem)",
+    width: "5rem",
+    minWidth: "5rem",
     borderRadius: "10px",
     display: "flex",
     justifyContent: "center",
@@ -32,7 +33,7 @@ const Navbar = () => {
   };
 
   const pfpStyle: React.CSSProperties = {
-    margin: "1vh 0 1vh 0",
+    margin: "0.5rem 0 0.5rem 0",
     borderRadius: "10px",
     width: "80%",
   };
