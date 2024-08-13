@@ -5,7 +5,7 @@ const ChatContainer = () => {
     backdropFilter: "blur(3px)",
     WebkitBackdropFilter: "blur(3px)",
     border: "solid 2px rgba(255, 255, 255, 0.20)",
-    height: "91.5vh",
+    height: "90.5vh",
     width: "100%",
     borderRadius: "10px",
     display: "flex",

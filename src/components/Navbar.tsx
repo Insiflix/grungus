@@ -13,6 +13,7 @@ const Navbar = () => {
     borderRadius: "10px",
     display: "flex",
     justifyContent: "center",
+    zIndex: 30
   };
 
   const ulStyle: React.CSSProperties = {

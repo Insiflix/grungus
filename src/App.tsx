@@ -1,22 +1,29 @@
 import "./App.css";
 import Background from "./components/background";
+import Channel from "./components/Channel";
 import Navbar from "./components/Navbar";
 import ChatContainer from "./components/ChatContainer";
+import Friendlist from "./components/Friendlist";
 import Task from "./components/Task";
+import { useState } from "react";
+
 function App() {
+  const [selectedTaskIndex, setSelectedTaskIndex] = useState<number | null>(
+    null
+  );
+
   const pageLayout: React.CSSProperties = {
     display: "flex",
     flexDirection: "row",
-    width: "100vw"
+    width: "100vw",
   };
 
   const middleContent: React.CSSProperties = {
     margin: "0.7rem 0 0 0",
     display: "flex",
     flexDirection: "column",
-    gap: "1rem",
     height: "calc(100vh-2.4rem)",
-    width: "100%"
+    width: "100%",
   };
 
   const taskBar: React.CSSProperties = {
@@ -24,34 +31,42 @@ function App() {
     flexDirection: "row",
     width: "inherit",
   };
-  const channelSelector: React.CSSProperties = {
-    height: "91.5vh",
-    backgroundColor: "rgba(0, 0, 0, 0.60)",
-    backdropFilter: "blur(2px)",
-    WebkitBackdropFilter: "blur(2px)",
-    borderRadius: "10px",
-    width: "12.5rem",
+
+  const middleContentLower: React.CSSProperties = {
+    display: "flex",
+    flexDirection: "row",
   };
+
+  const taskIds = [
+    "saveisdasneid",
+    "saveisdasneid",
+    "saveisdasneid",
+    "saveisdasneid",
+    "saveisdasneid",
+    "saveisdasneid",
+    "saveisdasneid",
+  ];
 
   return (
     <>
-      <Background></Background>
+      <Background />
       <div style={pageLayout}>
-        <Navbar></Navbar>
+        <Navbar />
         <div style={middleContent}>
           <div style={taskBar}>
-            <Task id={"saveisdasneid"}></Task>
-            <Task id={"saveisdasneid"}></Task>
-            <Task id={"saveisdasneid"}></Task>
-            <Task id={"saveisdasneid"}></Task>
-            <Task id={"saveisdasneid"}></Task>
-            <Task id={"saveisdasneid"}></Task>
-            <Task id={"saveisdasneid"}></Task>
+            {taskIds.map((id, index) => (
+              <Task
+                key={index}
+                id={id}
+                selected={selectedTaskIndex === index}
+                onClick={() => setSelectedTaskIndex(index)}
+              />
+            ))}
           </div>
-          <div style={{display: "flex", flexDirection: "row"}}>
-          <div style={channelSelector}></div>
-          <ChatContainer></ChatContainer>
-          <div style={channelSelector}></div>
+          <div style={middleContentLower}>
+            <Channel />
+            <ChatContainer />
+            <Friendlist />
           </div>
         </div>
       </div>

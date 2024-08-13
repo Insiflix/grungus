@@ -1,5 +1,5 @@
-import { useState, useEffect } from "react";
-import { HiOutlineX } from "react-icons/hi";
+import React, { useState, useEffect } from "react";
+import InvertedRadius from "./ui/invertedRadius";
 
 interface Task {
   pfp: string;
@@ -10,6 +10,8 @@ interface Task {
 
 interface TaskID {
   id: string;
+  selected: boolean;
+  onClick: () => void;
 }
 
 const testData: Task = {
@@ -19,7 +21,7 @@ const testData: Task = {
   onlineStatus: "online",
 };
 
-const Task = ({ id }: TaskID) => {
+const Task = ({ id, selected, onClick }: TaskID) => {
   const [task, setTask] = useState<Task | null>(testData);
 
   useEffect(() => {
@@ -41,10 +43,9 @@ const Task = ({ id }: TaskID) => {
     return null;
   }
 
+
   const taskContainer: React.CSSProperties = {
-    margin: "0 0 0 0.7rem",
     display: "flex",
-    borderRadius: "10px",
     backgroundColor: "rgba(148, 148, 148, 0.25)",
     backdropFilter: "blur(10px)",
     WebkitBackdropFilter: "blur(10px)",
@@ -52,7 +53,35 @@ const Task = ({ id }: TaskID) => {
     alignItems: "center",
     padding: "0.5rem",
     cursor: "pointer",
+    border: selected ? "1px solid #9E9E9E" : "0px",
+    borderTopLeftRadius: "10px",
+    borderTopRightRadius: "10px",
+    borderBottomLeftRadius: selected ? "0px" : "10px",
+    borderBottomRightRadius: selected ? "0px" : "10px",
+    transform: selected ? "scale(1.05)" : "scale(1)",
+    transition: "transform 0.3s ease",
   };
+
+  const transitionStyle: React.CSSProperties = {
+    backgroundColor: "rgba(148, 148, 148, 0.25)",
+    backdropFilter: "blur(10px)",
+    WebkitBackdropFilter: "blur(10px)",
+    border: selected ? "1px solid #9E9E9E" : "0px",
+    margin: "0.05rem 0 0 0",
+    height: "0.7rem",
+    width: "12.9vw",
+    borderTopLeftRadius: "10px",
+    borderTopRightRadius: "10px",
+    visibility: selected ? "visible" : "hidden",
+    transform: selected ? "scale(1.05)" : "scale(1)",
+    transition: "transform 0.3s ease",
+  };
+
+  const ttContainer: React.CSSProperties = {
+    display: "flex",
+    flexDirection: "column",
+    alignItems: "center"
+  }
 
   const imageContainer: React.CSSProperties = {
     position: "relative",
@@ -103,33 +132,30 @@ const Task = ({ id }: TaskID) => {
     width: "85%",
   };
 
-  const iconStyle: React.CSSProperties = {
-    margin: "0 0 0 auto",
-    fontSize: "1rem",
-    cursor: "pointer",
-  };
-
   return (
-    <div style={taskContainer}>
-      <div style={imageContainer}>
-        <img
-          src={task.pfp}
-          alt={`${task.name}'s profile picture`}
-          style={taskImg}
-        />
-        <div style={onlineStatusDot}></div>
+    <div style={ttContainer}>
+      <div style={taskContainer} onClick={onClick}>
+        <div style={imageContainer}>
+          <img
+            src={task.pfp}
+            alt={`${task.name}'s profile picture`}
+            style={taskImg}
+          />
+          <div style={onlineStatusDot}></div>
+        </div>
+        <div
+          style={{
+            display: "flex",
+            flexDirection: "column",
+            justifyContent: "center",
+            width: "75%",
+          }}
+        >
+          <h3 style={taskName}>{task.name}</h3>
+          <p style={taskStatus}>{task.status}</p>
+        </div>
       </div>
-      <div
-        style={{
-          display: "flex",
-          flexDirection: "column",
-          justifyContent: "center",
-          width: "75%"
-        }}
-      >
-        <h3 style={taskName}>{task.name}</h3>
-        <p style={taskStatus}>{task.status}</p>
-      </div>
+      <InvertedRadius style={transitionStyle} />
     </div>
   );
 };
