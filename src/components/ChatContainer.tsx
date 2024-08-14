@@ -26,9 +26,9 @@ const ChatContainer = () => {
   const inputStyle: React.CSSProperties = {
     width: "95%",
     height: "2.5rem",
-    backgroundColor: "rgba(0, 0, 0, 0.05)",
-    backdropFilter: "blur(3px)",
-    WebkitBackdropFilter: "blur(3px)",
+    backgroundColor: "rgba(148, 148, 148, 0.25)",
+    backdropFilter: "blur(10px)",
+    WebkitBackdropFilter: "blur(10px)",
     border: "solid 2px rgba(255, 255, 255, 0.20)",
     borderRadius: "10px",
     padding: "0.3rem"

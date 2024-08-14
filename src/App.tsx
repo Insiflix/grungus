@@ -1,16 +1,21 @@
 import "./App.css";
+import React, { useState } from "react";
 import Background from "./components/background";
 import Channel from "./components/Channel";
 import Navbar from "./components/Navbar";
 import ChatContainer from "./components/ChatContainer";
 import Friendlist from "./components/Friendlist";
-import Task from "./components/Task";
-import { useState } from "react";
+import Taskbar from "./components/Taskbar";
 
 function App() {
-  const [selectedTaskIndex, setSelectedTaskIndex] = useState<number | null>(
-    null
-  );
+  const [selectedIndex, setSelectedIndex] = useState<{
+    type: "task" | "server";
+    index: number | null;
+  }>({ type: "task", index: null });
+
+  const handleSelection = (type: "task" | "server", index: number) => {
+    setSelectedIndex({ type, index });
+  };
 
   const pageLayout: React.CSSProperties = {
     display: "flex",
@@ -22,14 +27,8 @@ function App() {
     margin: "0.7rem 0 0 0",
     display: "flex",
     flexDirection: "column",
-    height: "calc(100vh-2.4rem)",
+    height: "calc(100vh - 2.4rem)",
     width: "100%",
-  };
-
-  const taskBar: React.CSSProperties = {
-    display: "flex",
-    flexDirection: "row",
-    width: "inherit",
   };
 
   const middleContentLower: React.CSSProperties = {
@@ -38,6 +37,7 @@ function App() {
   };
 
   const taskIds = [
+    // recent userIDs stored locally
     "saveisdasneid",
     "saveisdasneid",
     "saveisdasneid",
@@ -47,26 +47,31 @@ function App() {
     "saveisdasneid",
   ];
 
+  const ChannelSelectorStyle: React.CSSProperties = {};
+  const FriendListStyle: React.CSSProperties = {};
+
   return (
     <>
       <Background />
       <div style={pageLayout}>
-        <Navbar />
+        <Navbar
+          selectedServerIndex={
+            selectedIndex.type === "server" ? selectedIndex.index : null
+          }
+          onSelectServer={(index) => handleSelection("server", index)}
+        />
         <div style={middleContent}>
-          <div style={taskBar}>
-            {taskIds.map((id, index) => (
-              <Task
-                key={index}
-                id={id}
-                selected={selectedTaskIndex === index}
-                onClick={() => setSelectedTaskIndex(index)}
-              />
-            ))}
-          </div>
+          <Taskbar
+            taskIds={taskIds}
+            selectedTaskIndex={
+              selectedIndex.type === "task" ? selectedIndex.index : null
+            }
+            onSelectTask={(index) => handleSelection("task", index)}
+          />
           <div style={middleContentLower}>
-            <Channel />
+            <Channel style={ChannelSelectorStyle} />
             <ChatContainer />
-            <Friendlist />
+            <Friendlist style={FriendListStyle} />
           </div>
         </div>
       </div>

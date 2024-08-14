@@ -1,6 +1,41 @@
-import React from "react";
+import React, { useState,useEffect } from "react";
 
-const Navbar = () => {
+interface Server {
+  id: string;
+  name: string;
+  picture: string;
+}
+
+const fallbackData: Server = {
+  id: "fallback",
+  name: "Fallback Server",
+  picture: "https://picsum.photos/200",
+};
+
+interface NavbarProps {
+  selectedServerIndex: number | null;
+  onSelectServer: (index: number) => void;
+}
+
+const Navbar: React.FC<NavbarProps> = ({ selectedServerIndex, onSelectServer }) => {
+  const [servers, setServers] = useState<Server[]>([]);
+  const [userPfp, setUserPfp] = useState<string>("./grungo.png"); // Placeholder for user pfp
+
+  useEffect(() => {
+    const fetchServers = async () => {
+      try {
+        const response = await fetch("http://localhost/api/servers");
+        const data: Server[] = await response.json();
+        setServers(data);
+      } catch (error) {
+        console.error("Failed to fetch server data:", error);
+        setServers([fallbackData]);
+      }
+    };
+
+    fetchServers();
+  }, []);
+
   const navbarContainer: React.CSSProperties = {
     margin: "0.7rem 0 0.7rem 0.7rem",
     backgroundColor: "rgba(0, 0, 0, 0.05)",
@@ -13,7 +48,7 @@ const Navbar = () => {
     borderRadius: "10px",
     display: "flex",
     justifyContent: "center",
-    zIndex: 30
+    zIndex: 30,
   };
 
   const ulStyle: React.CSSProperties = {
@@ -33,24 +68,46 @@ const Navbar = () => {
     width: "100%",
   };
 
-  const pfpStyle: React.CSSProperties = {
-    margin: "0.5rem 0 0.5rem 0",
+  const pfpStyle = (selected: boolean): React.CSSProperties => ({
+    margin: "0.5rem 0",
     borderRadius: "10px",
     width: "80%",
-  };
+    cursor: "pointer",
+    border: selected ? "2px solid #9E9E9E" : "0px",
+    transform: selected ? "scale(1.05)" : "scale(1)",
+    transition: "transform 0.3s ease",
+    WebkitTransform: selected ? "scale(1.05)" : "scale(1)",
+    WebkitTransition: "transform 0.3s ease",
+  });
 
   return (
-    <>
-      <div style={navbarContainer}>
-        <ul style={ulStyle}>
-          <li style={liStyle}>
-            <img style={pfpStyle} src="https://picsum.photos/200" alt="pfp" />
-          </li>
-          <li style={liStyle}>test</li>
-          <li style={liStyle}>test2</li>
-        </ul>
-      </div>
-    </>
+    <div style={navbarContainer}>
+      <ul style={ulStyle}>
+        {/* User's Profile Picture */}
+        <li style={liStyle}>
+          <img style={pfpStyle(false)} src={userPfp} alt="User Profile" />
+        </li>
+
+        {/* Server Profile Pictures */}
+        {servers.length > 0 ? (
+          servers.map((server, index) => (
+            <li
+              key={server.id}
+              style={liStyle}
+              onClick={() => onSelectServer(index)}
+            >
+              <img
+                style={pfpStyle(selectedServerIndex === index)}
+                src={server.picture}
+                alt={server.name}
+              />
+            </li>
+          ))
+        ) : (
+          <li style={liStyle}>No servers found</li>
+        )}
+      </ul>
+    </div>
   );
 };
 
