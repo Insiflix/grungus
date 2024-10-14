@@ -1,0 +1,128 @@
+.taskbar-container {
+    display: flex;
+    flex-direction: row;
+    width: 100%;
+  }
+  
+  .tt-container {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+  }
+  
+  .task-container {
+    display: flex;
+    position: relative;
+    margin: 0;
+    padding: 0.5rem;
+    width: 11.9vw;
+    align-items: center;
+    background-color: rgba(148, 148, 148, 0.25);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    cursor: pointer;
+    border-top-left-radius: 10px;
+    border-top-right-radius: 10px;
+    transition: transform 0.3s ease;
+    -webkit-transition: transform 0.3s ease;
+  }
+  
+  .task-container-selected {
+    border: 1px solid #9E9E9E;
+    transform: scale(1.05);
+  }
+  
+  .task-container-unselected {
+    border: 0;
+    transform: scale(1);
+  }
+  
+  .inner-task-style {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    width: 75%;
+  }
+  
+  .image-container {
+    display: block;
+    position: relative;
+    margin-right: 0.5rem;
+  }
+  
+  .task-img {
+    display: block;
+    position: relative;
+    width: 2.4rem;
+    height: 2.4rem;
+    min-width: 2.4rem;
+    border-radius: 45px;
+  }
+  
+  .online-status-dot {
+    position: absolute;
+    right: 0;
+    bottom: 0;
+    width: 0.7rem;
+    height: 0.7rem;
+    border-radius: 50%;
+  }
+  
+  .online-status-dot.online {
+    background-color: #21B514; /* Green for online */
+  }
+  
+  .online-status-dot.offline {
+    background-color: #808080; /* Grey for offline */
+  }
+  
+  .online-status-dot.absent {
+    background-color: #FFA500; /* Orange for absent */
+  }
+  
+  .online-status-dot.busy {
+    background-color: #FF0000; /* Red for busy */
+  }
+  
+  .task-name {
+    display: block;
+    margin: 0;
+    width: 85%;
+    font-weight: bold;
+    font-size: 80%;
+    color: white;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    -webkit-font-smoothing: antialiased;
+    -webkit-user-select: none;
+  }
+  
+  .task-status {
+    display: block;
+    margin: 0;
+    width: 85%;
+    font-size: 70%;
+    color: #B4B4B4;
+    overflow: hidden;
+    white-space: nowrap;
+    text-overflow: ellipsis;
+    -webkit-font-smoothing: antialiased;
+    -webkit-user-select: none;
+  }
+  
+  .connector-style {
+    display: block;
+    position: relative;
+    width: 12.9vw;
+    height: 0.7rem;
+    margin: 0.05rem 0 0 0;
+    background-color: rgba(148, 148, 148, 0.25);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border: 1px solid #9E9E9E;
+    border-top-left-radius: 10px;
+    border-top-right-radius: 10px;
+    transition: transform 0.3s ease;
+  }
+  

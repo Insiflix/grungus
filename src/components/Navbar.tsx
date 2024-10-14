@@ -1,4 +1,5 @@
-import React, { useState,useEffect } from "react";
+import React, { useState, useEffect } from "react";
+import "./css/Navbar.css";
 
 interface Server {
   id: string;
@@ -36,75 +37,26 @@ const Navbar: React.FC<NavbarProps> = ({ selectedServerIndex, onSelectServer }) 
     fetchServers();
   }, []);
 
-  const navbarContainer: React.CSSProperties = {
-    margin: "0.7rem 0 0.7rem 0.7rem",
-    backgroundColor: "rgba(0, 0, 0, 0.05)",
-    backdropFilter: "blur(3px)",
-    WebkitBackdropFilter: "blur(3px)",
-    border: "solid 2px rgba(255, 255, 255, 0.20)",
-    height: "calc(100vh - 1.4rem)",
-    width: "5rem",
-    minWidth: "5rem",
-    borderRadius: "10px",
-    display: "flex",
-    justifyContent: "center",
-    zIndex: 30,
-  };
-
-  const ulStyle: React.CSSProperties = {
-    listStyle: "none",
-    padding: 0,
-    margin: 0,
-    display: "flex",
-    flexDirection: "column",
-    alignItems: "center",
-    width: "100%",
-  };
-
-  const liStyle: React.CSSProperties = {
-    display: "flex",
-    justifyContent: "center",
-    alignItems: "center",
-    width: "100%",
-  };
-
-  const pfpStyle = (selected: boolean): React.CSSProperties => ({
-    margin: "0.5rem 0",
-    borderRadius: "10px",
-    width: "80%",
-    cursor: "pointer",
-    border: selected ? "2px solid #9E9E9E" : "0px",
-    transform: selected ? "scale(1.05)" : "scale(1)",
-    transition: "transform 0.3s ease",
-    WebkitTransform: selected ? "scale(1.05)" : "scale(1)",
-    WebkitTransition: "transform 0.3s ease",
-  });
+  const pfpStyle = (selected: boolean) =>
+    selected ? "pfp-style pfp-selected" : "pfp-style pfp-unselected";
 
   return (
-    <div style={navbarContainer}>
-      <ul style={ulStyle}>
+    <div className="navbar-container">
+      <ul className="ul-style">
         {/* User's Profile Picture */}
-        <li style={liStyle}>
-          <img style={pfpStyle(false)} src={userPfp} alt="User Profile" />
+        <li className="li-style">
+          <img className="pfp-style pfp-unselected" src={userPfp} alt="User Profile" />
         </li>
 
         {/* Server Profile Pictures */}
         {servers.length > 0 ? (
           servers.map((server, index) => (
-            <li
-              key={server.id}
-              style={liStyle}
-              onClick={() => onSelectServer(index)}
-            >
-              <img
-                style={pfpStyle(selectedServerIndex === index)}
-                src={server.picture}
-                alt={server.name}
-              />
+            <li key={server.id} className="li-style" onClick={() => onSelectServer(index)}>
+              <img className={pfpStyle(selectedServerIndex === index)} src={server.picture} alt={server.name} />
             </li>
           ))
         ) : (
-          <li style={liStyle}>No servers found</li>
+          <li className="li-style">No servers found</li>
         )}
       </ul>
     </div>

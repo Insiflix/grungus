@@ -1,0 +1,34 @@
+.main-container {
+    margin: 0 0 1rem 0;
+    background-color: rgba(0, 0, 0, 0.05);
+    backdrop-filter: blur(3px);
+    -webkit-backdrop-filter: blur(3px);
+    border: solid 2px rgba(255, 255, 255, 0.20);
+    height: 90.5vh;
+    width: 100%;
+    border-radius: 10px;
+    display: flex;
+    flex-direction: column;
+  }
+  
+  .chat-style {
+    height: 90%;
+  }
+  
+  .input-bar-style {
+    height: 10%;
+    display: flex;
+    justify-content: center;
+    align-items: center;
+  }
+  
+  .input-style {
+    width: 95%;
+    height: 2.5rem;
+    background-color: rgba(148, 148, 148, 0.25);
+    backdrop-filter: blur(10px);
+    -webkit-backdrop-filter: blur(10px);
+    border: solid 2px rgba(255, 255, 255, 0.20);
+    border-radius: 10px;
+    padding: 0.3rem;
+  }
