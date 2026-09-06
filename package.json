@@ -1,0 +1,76 @@
+{
+  "name": "grungus-matrix",
+  "version": "0.1.0",
+  "private": true,
+  "description": "A secure, extensible Matrix desktop client proof of concept",
+  "type": "module",
+  "main": "dist-electron/main.js",
+  "scripts": {
+    "dev": "concurrently -k \"vite\" \"npm:dev:electron\"",
+    "dev:electron": "tsc -p tsconfig.electron.json && concurrently -k \"tsc -p tsconfig.electron.json --watch --preserveWatchOutput\" \"wait-on http://127.0.0.1:5173 && cross-env VITE_DEV_SERVER_URL=http://127.0.0.1:5173 node scripts/start-electron.mjs\"",
+    "typecheck": "tsc -p tsconfig.app.json --noEmit && tsc -p tsconfig.electron.json --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "build": "npm run typecheck && vite build && tsc -p tsconfig.electron.json && electron-builder",
+    "build:dir": "npm run typecheck && vite build && tsc -p tsconfig.electron.json && electron-builder --dir"
+  },
+  "build": {
+    "appId": "dev.grungus.matrix",
+    "productName": "Grungus Matrix",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**",
+      "dist-electron/**",
+      "package.json"
+    ],
+    "protocols": [
+      {
+        "name": "Grungus Matrix authentication",
+        "schemes": [
+          "grungus-matrix"
+        ]
+      }
+    ],
+    "win": {
+      "target": "nsis"
+    },
+    "linux": {
+      "target": [
+        "AppImage"
+      ]
+    },
+    "mac": {
+      "target": [
+        "dmg"
+      ],
+      "category": "public.app-category.social-networking"
+    }
+  },
+  "dependencies": {
+    "@tanstack/react-query": "^5.102.8",
+    "axios": "^1.20.0",
+    "lucide-react": "^1.41.0",
+    "matrix-js-sdk": "^42.3.0",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8"
+  },
+  "devDependencies": {
+    "@tailwindcss/vite": "^4.3.3",
+    "@types/node": "^26.4.1",
+    "@types/react": "^19.2.18",
+    "@types/react-dom": "^19.2.7",
+    "@vitejs/plugin-react": "^6.1.1",
+    "concurrently": "^10.0.5",
+    "cross-env": "^10.1.0",
+    "electron": "^44.2.0",
+    "electron-builder": "^26.15.3",
+    "tailwindcss": "^4.3.3",
+    "typescript": "^7.0.2",
+    "vite": "^8.2.2",
+    "vitest": "^5.0.0",
+    "wait-on": "^9.1.0"
+  }
+}
+
