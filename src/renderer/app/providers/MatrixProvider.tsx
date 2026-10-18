@@ -1,7 +1,9 @@
+import { ScreenShareDialogHost } from "../../features/chat/ScreenShareDialog";
 import { createContext, useContext, useEffect, type PropsWithChildren } from "react";
 import { MatrixAuthProvider } from "../../../infrastructure/matrix/MatrixAuthProvider";
 import { MatrixJsSdkClient } from "../../../infrastructure/matrix/MatrixJsSdkClient";
 import { MatrixRuntime } from "../MatrixRuntime";
+import { AvatarMediaProvider } from "../../components/common/AvatarMediaContext";
 
 const authProvider = new MatrixAuthProvider();
 const matrixClient = new MatrixJsSdkClient({
@@ -20,7 +22,7 @@ export function MatrixProvider({ children }: PropsWithChildren) {
 
   return (
     <MatrixRuntimeContext.Provider value={runtime}>
-      {children}
+      <AvatarMediaProvider load={runtime.loadAvatar}>{children}<ScreenShareDialogHost /></AvatarMediaProvider>
     </MatrixRuntimeContext.Provider>
   );
 }
@@ -30,3 +32,9 @@ export function useMatrixRuntime(): MatrixRuntime {
   if (!value) throw new Error("useMatrixRuntime must be used within MatrixProvider");
   return value;
 }
+
+export const mountCall = matrixClient.mountCall;
+
+export const observeCalls = matrixClient.observeCalls;
+
+export const directCalls = matrixClient.directCalls;

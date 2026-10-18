@@ -1,22 +1,31 @@
+import { ChevronDown } from "lucide-react";
+import { Phone, Video } from "lucide-react";
 import { useEffect, useRef, useState } from "react";
 import type { MatrixRoom } from "../../../domain/matrix/MatrixTypes";
-import { LockKeyhole as LockIcon, UsersRound as UsersIcon } from "lucide-react";
+import { LockKeyhole as LockIcon, UsersRound as UsersIcon, UserPlus } from "lucide-react";
+import { PeopleDialog } from "../rooms/PeopleDialog";
 import { useMatrixTimeline } from "../../hooks/matrix/useMatrixTimeline";
 import { MessageComposer } from "./MessageComposer";
 import { MessageRow } from "./MessageRow";
 
 interface TimelinePanelProps {
   room: MatrixRoom | null;
+  onOpenIdentity: () => void;
+  onCall: (video: boolean) => void;
+  callActive: boolean;
+  onDirectCall: (video: boolean) => void;
 }
 
-export function TimelinePanel({ room }: TimelinePanelProps) {
+export function TimelinePanel({ room, onOpenIdentity, onCall, callActive, onDirectCall }: TimelinePanelProps) {
   const { messages, typingMembers, loadOlder, sendMessage, setTyping, toggleReaction } =
     useMatrixTimeline(room?.id ?? null);
   const [loadingOlder, setLoadingOlder] = useState(false);
   const [hasMore, setHasMore] = useState(true);
+  const [inviting, setInviting] = useState(false);
   const endRef = useRef<HTMLDivElement>(null);
   const previousRoom = useRef<string | null>(null);
   const previousLength = useRef(0);
+  const nearBottom = useRef(true);
 
   useEffect(() => {
     const changedRoom = previousRoom.current !== room?.id;
@@ -33,7 +42,7 @@ export function TimelinePanel({ room }: TimelinePanelProps) {
       <div className="empty-chat">
         <div className="empty-chat__glyph">G</div>
         <h2>Select a room</h2>
-        <p>Choose one from the room list.</p>
+        <p>Choose a room on the left or a direct message above.</p>
       </div>
     );
   }
@@ -56,12 +65,19 @@ export function TimelinePanel({ room }: TimelinePanelProps) {
           </div>
         </div>
         <div className="room-header__actions">
-          {room.isEncrypted && <span className="encrypted-pill"><LockIcon /> Encrypted</span>}
+          <button className="icon-button" title="Sprachanruf / laufendem Anruf beitreten" aria-label="Sprachanruf starten" disabled={callActive} onClick={() => onCall(false)}><Phone /></button>
+          <button className="icon-button" title="Videoanruf / laufendem Anruf beitreten" aria-label="Videoanruf starten" disabled={callActive} onClick={() => onCall(true)}><Video /></button>
+          {room.memberCount === 2 && <details className="call-options"><summary title="Klassische Matrix-Anrufe" aria-label="Weitere Anrufoptionen"><ChevronDown size={16} /></summary><div><button disabled={callActive} onClick={event => { event.currentTarget.closest("details")?.removeAttribute("open"); onDirectCall(false); }}>Klassischer Sprachanruf</button><button disabled={callActive} onClick={event => { event.currentTarget.closest("details")?.removeAttribute("open"); onDirectCall(true); }}>Klassischer Videoanruf</button></div></details>}
+          <button type="button" className="icon-button room-invite-button" aria-label="Invite people to this room" title="Invite people" onClick={() => setInviting(true)}><UserPlus /></button>
+          {room.isEncrypted && <button type="button" className="encrypted-pill" onClick={onOpenIdentity} title="Identität & Verschlüsselung"><LockIcon /> Encrypted</button>}
           <span className="member-count"><UsersIcon /> {room.memberCount}</span>
         </div>
       </header>
 
-      <section className="timeline" aria-label={`${room.name} message timeline`}>
+      <section className="timeline" aria-label={`${room.name} message timeline`} onScroll={(event) => {
+        const element = event.currentTarget;
+        nearBottom.current = element.scrollHeight - element.scrollTop - element.clientHeight < 160;
+      }}>
         <div className="timeline__inner">
           {hasMore && messages.length > 0 && (
             <button
@@ -91,6 +107,7 @@ export function TimelinePanel({ room }: TimelinePanelProps) {
                 message={message}
                 grouped={grouped}
                 onReact={(key) => void toggleReaction(message, key)}
+                onMediaLoad={() => { if (nearBottom.current) endRef.current?.scrollIntoView({ block: "end" }); }}
               />
             );
           })}
@@ -106,11 +123,13 @@ export function TimelinePanel({ room }: TimelinePanelProps) {
           )}
         </div>
         <MessageComposer
+          key={room.id}
           roomName={room.name}
           onSend={sendMessage}
           onTyping={setTyping}
         />
       </div>
+      {inviting && <PeopleDialog key={room.id} room={room} onClose={() => setInviting(false)} />}
     </>
   );
 }

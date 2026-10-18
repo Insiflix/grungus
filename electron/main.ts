@@ -1,7 +1,8 @@
-import { app, BrowserWindow, ipcMain, safeStorage, shell, session } from "electron";
+import { DesktopCaptureBroker } from "./desktopCapture.js";
+import { app, BrowserWindow, ipcMain, safeStorage, shell, session, protocol, net, desktopCapturer } from "electron";
 import { promises as fs } from "node:fs";
 import path from "node:path";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import type {
   PersistedMatrixSession,
   SessionStoreResult,
@@ -10,8 +11,11 @@ import type {
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+protocol.registerSchemesAsPrivileged([{ scheme: "grungus-app", privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true, stream: true } }]);
+
 const PROTOCOL = "grungus-matrix";
 const SESSION_FILE = "matrix-session.bin";
+let desktopCapture: DesktopCaptureBroker | null = null;
 let mainWindow: BrowserWindow | null = null;
 let pendingAuthCallback: string | null = null;
 
@@ -101,8 +105,7 @@ async function removeSession(): Promise<void> {
 }
 
 function isTrustedRendererUrl(url: string): boolean {
-  if (app.isPackaged) return url.startsWith("file://");
-  return url.startsWith("http://127.0.0.1:5173");
+  try { const parsed = new URL(url); return app.isPackaged ? (parsed.protocol === "grungus-app:" && parsed.hostname === "client") : parsed.origin === "http://127.0.0.1:5173"; } catch { return false; }
 }
 
 function createWindow(): void {
@@ -129,6 +132,7 @@ function createWindow(): void {
     return { action: "deny" };
   });
   mainWindow.webContents.on("will-navigate", (event, url) => {
+    desktopCapture?.cancel();
     if (!isTrustedRendererUrl(url)) event.preventDefault();
   });
   mainWindow.webContents.on("did-finish-load", () => {
@@ -139,15 +143,21 @@ function createWindow(): void {
   });
   mainWindow.once("ready-to-show", () => mainWindow?.show());
   mainWindow.on("closed", () => {
+    desktopCapture?.cancel();
     mainWindow = null;
   });
 
   const developmentUrl = process.env.VITE_DEV_SERVER_URL;
   if (developmentUrl) void mainWindow.loadURL(developmentUrl);
-  else void mainWindow.loadFile(path.join(__dirname, "../dist/index.html"));
+  else void mainWindow.loadURL("grungus-app://client/index.html");
 }
 
 function registerIpc(): void {
+  ipcMain.handle("desktop-capture:respond", (event, requestId: unknown, sourceId: unknown, audio: unknown) => {
+    if (event.sender !== mainWindow?.webContents || event.senderFrame !== mainWindow.webContents.mainFrame || !isTrustedRendererUrl(event.senderFrame.url)) throw new Error("Untrusted capture response");
+    if (typeof requestId !== "string" || (sourceId !== null && typeof sourceId !== "string") || typeof audio !== "boolean") throw new Error("Invalid capture response");
+    desktopCapture?.respond(requestId, sourceId, audio);
+  });
   ipcMain.handle("matrix-session:load", () => loadSession());
   ipcMain.handle(
     "matrix-session:save",
@@ -183,8 +193,28 @@ if (!app.requestSingleInstanceLock()) {
 
   consumeProtocolArg(process.argv);
   void app.whenReady().then(() => {
+    protocol.handle("grungus-app", async (request) => {
+      const url = new URL(request.url);
+      const root = path.resolve(__dirname, "../dist");
+      const destination = path.resolve(root, "." + decodeURIComponent(url.pathname));
+      if (url.hostname !== "client" || !destination.startsWith(root + path.sep)) return new Response("Forbidden", { status: 403 });
+      return net.fetch(pathToFileURL(destination).href);
+    });
+    desktopCapture = new DesktopCaptureBroker({
+      platform: process.platform,
+      getSources: () => desktopCapturer.getSources({ types: ["screen", "window"], thumbnailSize: { width: 320, height: 180 }, fetchWindowIcons: true }),
+      isTrusted: request => Boolean(mainWindow && request.frame && request.frame.top === mainWindow.webContents.mainFrame && isTrustedRendererUrl(request.frame.url) && ["/", "/index.html", "/element-call/index.html"].includes(new URL(request.frame.url).pathname)),
+      notify: request => mainWindow?.webContents.send("desktop-capture:request", request),
+      dismiss: id => mainWindow?.webContents.send("desktop-capture:dismiss", id),
+    });
+    session.defaultSession.setDisplayMediaRequestHandler((request, callback) => { void desktopCapture!.request(request, callback); });
+    app.on("before-quit", () => desktopCapture?.cancel());
     session.defaultSession.setPermissionRequestHandler(
-      (_webContents, _permission, callback) => callback(false),
+      (contents, permission, callback, details) => {
+        let trustedCall = false;
+        try { const requested = new URL(details.requestingUrl); const expected = app.isPackaged ? new URL("grungus-app://client/element-call/index.html") : new URL("http://127.0.0.1:5173/element-call/index.html"); trustedCall = requested.protocol === expected.protocol && requested.host === expected.host && (requested.pathname === expected.pathname || requested.pathname === "/" || requested.pathname === "/index.html"); } catch {}
+        callback(contents === mainWindow?.webContents && (permission === "media" || permission === "display-capture") && trustedCall);
+      },
     );
     registerIpc();
     createWindow();

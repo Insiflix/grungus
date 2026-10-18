@@ -12,7 +12,8 @@
     "test": "vitest run",
     "test:watch": "vitest",
     "build": "npm run typecheck && vite build && tsc -p tsconfig.electron.json && electron-builder",
-    "build:dir": "npm run typecheck && vite build && tsc -p tsconfig.electron.json && electron-builder --dir"
+    "build:dir": "npm run typecheck && vite build && tsc -p tsconfig.electron.json && electron-builder --dir",
+    "test:call": "node scripts/smoke-element-call.mjs"
   },
   "build": {
     "appId": "dev.grungus.matrix",
@@ -49,10 +50,13 @@
     }
   },
   "dependencies": {
+    "@element-hq/element-call-embedded": "^0.28.0",
+    "@emoji-mart/data": "^1.2.1",
     "@tanstack/react-query": "^5.102.8",
     "axios": "^1.20.0",
     "lucide-react": "^1.41.0",
     "matrix-js-sdk": "^42.3.0",
+    "matrix-widget-api": "^1.19.0",
     "react": "^19.2.8",
     "react-dom": "^19.2.8"
   },
@@ -73,4 +77,3 @@
     "wait-on": "^9.1.0"
   }
 }
-

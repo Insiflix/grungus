@@ -5,3 +5,7 @@ release/
 coverage/
 *.log
 .vite/
+.env
+.env.local
+.env.*.local
+public/element-call/

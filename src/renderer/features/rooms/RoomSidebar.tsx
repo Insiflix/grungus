@@ -1,32 +1,40 @@
 import { useState, type FormEvent } from "react";
 import { Avatar } from "../../components/common/Avatar";
-import { Hash as HashIcon, LockKeyhole as LockIcon, LogOut as LogoutIcon, Plus as PlusIcon, Search as SearchIcon } from "lucide-react";
+import { Hash as HashIcon, LockKeyhole as LockIcon, LogOut as LogoutIcon, Plus as PlusIcon, Search as SearchIcon, UserPlus, ShieldCheck } from "lucide-react";
 import { useMatrixRooms } from "../../hooks/matrix/useMatrixRooms";
 import { useMatrixSession } from "../../hooks/matrix/useMatrixSession";
+import type { MatrixRoom } from "../../../domain/matrix/MatrixTypes";
+import { InvitationList } from "./InvitationList";
+import { PeopleDialog } from "./PeopleDialog";
 
-export function RoomSidebar() {
+export function RoomSidebar({ space, onOpenIdentity }: { space: MatrixRoom | null; onOpenIdentity: () => void }) {
   const [filter, setFilter] = useState("");
   const [joining, setJoining] = useState(false);
   const [roomAddress, setRoomAddress] = useState("");
-  const { rooms, selectedRoomId, selectRoom, joinRoom } = useMatrixRooms(filter);
-  const { session, sync, logout } = useMatrixSession();
+  const [joinPending, setJoinPending] = useState(false);
+  const [inviting, setInviting] = useState(false);
+  const { rooms: allRooms, selectedRoomId, selectRoom, joinRoom } = useMatrixRooms(filter);
+  const rooms = allRooms.filter((room) => room.membership === "join" && !room.isDirect && !room.isSpace && (!space || space.childRoomIds?.includes(room.id)));
+  const { session, profile, sync, logout } = useMatrixSession();
 
   const handleJoin = async (event: FormEvent) => {
     event.preventDefault();
     if (!roomAddress.trim()) return;
-    await joinRoom(roomAddress);
-    setRoomAddress("");
-    setJoining(false);
+    setJoinPending(true);
+    try {
+      if (await joinRoom(roomAddress)) { setRoomAddress(""); setJoining(false); }
+    } finally { setJoinPending(false); }
   };
 
   return (
     <aside className="room-sidebar">
       <header className="sidebar-header">
         <div>
-          <span className="sidebar-kicker">ROOMS</span>
-          <strong>Joined rooms</strong>
+          <span className="sidebar-kicker">YOUR CORNER OF THE FOREST</span>
+          <strong>{space?.name ?? "All rooms"}</strong>
         </div>
-        <button className="icon-button" aria-label="Join room" onClick={() => setJoining((value) => !value)}>
+        {space && <button type="button" className="icon-button" aria-label="Invite people to this server" title="Invite people to this server" onClick={() => setInviting(true)}><UserPlus /></button>}
+        <button type="button" className="icon-button" aria-label="Join room" onClick={() => setJoining((value) => !value)}>
           <PlusIcon />
         </button>
       </header>
@@ -39,9 +47,10 @@ export function RoomSidebar() {
             value={roomAddress}
             onChange={(event) => setRoomAddress(event.target.value)}
             placeholder="#room:example.org"
+            disabled={joinPending}
             autoFocus
           />
-          <button className="button button--compact" type="submit">Join</button>
+          <button className="button button--compact" type="submit" disabled={joinPending || !roomAddress.trim()}>{joinPending ? "Joining…" : "Join"}</button>
         </form>
       )}
 
@@ -61,6 +70,7 @@ export function RoomSidebar() {
         <span>{rooms.length}</span>
       </div>
       <div className="room-list" role="list">
+        <InvitationList />
         {rooms.map((room) => (
           <button
             type="button"
@@ -92,16 +102,18 @@ export function RoomSidebar() {
         )}
       </div>
 
-      <footer className="account-strip">
-        <Avatar name={session?.userId ?? "You"} status />
+      <footer className="account-strip account-strip--security">
+        <Avatar name={profile?.displayName ?? session?.userId ?? "You"} url={profile?.avatarUrl} status />
         <span>
-          <strong>{session?.userId.split(":")[0].replace("@", "")}</strong>
+          <strong>{profile?.displayName ?? session?.userId.split(":")[0].replace("@", "")}</strong>
           <small>{sync.state === "ready" ? "Online" : sync.state}</small>
         </span>
+        <button type="button" className="icon-button" aria-label="Identität und Verschlüsselung" title="Identität & Verschlüsselung" onClick={onOpenIdentity}><ShieldCheck /></button>
         <button className="icon-button" aria-label="Log out" title="Log out" onClick={() => void logout()}>
           <LogoutIcon />
         </button>
       </footer>
+      {inviting && space && <PeopleDialog key={space.id} room={space} onClose={() => setInviting(false)} />}
     </aside>
   );
 }

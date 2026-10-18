@@ -1,4 +1,7 @@
 import type { MatrixMessage } from "../../../domain/matrix/MatrixTypes";
+import { parseGifMessage } from "../../../domain/messaging/GifMessage";
+import { GifMessage } from "./GifMessage";
+import { replaceEmojiShortcodes } from "../../../domain/messaging/Emojis";
 import { Avatar } from "../../components/common/Avatar";
 import { LockKeyhole as LockIcon } from "lucide-react";
 
@@ -6,6 +9,7 @@ interface MessageRowProps {
   message: MatrixMessage;
   grouped: boolean;
   onReact(key: string): void;
+  onMediaLoad?: () => void;
 }
 
 const timeFormatter = new Intl.DateTimeFormat(undefined, {
@@ -13,9 +17,10 @@ const timeFormatter = new Intl.DateTimeFormat(undefined, {
   minute: "2-digit",
 });
 
-export function MessageRow({ message, grouped, onReact }: MessageRowProps) {
+export function MessageRow({ message, grouped, onReact, onMediaLoad }: MessageRowProps) {
   const timestamp = Number.isFinite(message.timestamp) ? message.timestamp : Date.now();
   const special = message.type === "encrypted" || message.type === "unsupported";
+  const gif = message.type === "text" && !message.isRedacted ? parseGifMessage(message.body) : null;
   return (
     <article className={`message-row ${grouped ? "is-grouped" : ""} ${message.sendState === "failed" ? "is-failed" : ""}`}>
       <div className="message-row__avatar">
@@ -33,11 +38,11 @@ export function MessageRow({ message, grouped, onReact }: MessageRowProps) {
           </header>
         )}
         {message.replyTo && <div className="reply-context">↳ Reply to {message.replyTo.slice(0, 10)}…</div>}
-        <p className={special ? "message-special" : message.type === "notice" ? "message-notice" : ""}>
+        {gif ? <GifMessage key={gif} url={gif} onLoad={onMediaLoad} /> : <p className={special ? "message-special" : message.type === "notice" ? "message-notice" : ""}>
           {message.type === "encrypted" && <LockIcon />}
           {message.type === "emote" && <em>* {message.sender.displayName} </em>}
-          {message.body}
-        </p>
+          {message.type === "text" || message.type === "notice" || message.type === "emote" ? replaceEmojiShortcodes(message.body) : message.body}
+        </p>}
         {message.reactions.length > 0 && (
           <div className="reactions">
             {message.reactions.map((reaction) => (

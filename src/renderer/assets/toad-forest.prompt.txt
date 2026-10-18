@@ -1,0 +1,9 @@
+Generated with the built-in image_gen tool.
+
+Use case: stylized-concept
+Asset type: widescreen desktop chat application background, 16:9 landscape
+Primary request: a moody enchanted toad forest at night, painterly cinematic realism.
+Scene/backdrop: ancient gnarled trees and enormous twisting roots covered in dark moss, blue-green moonlight through mist, a quiet woodland clearing fading into depth. A large peaceful realistic warty toad sits on a mossy root in the lower right foreground, a smaller toad half hidden on the left. Fine fern and moss textures.
+Composition/framing: wide landscape, tree trunks frame the sides, atmospheric open center for legible glass UI layered over it; toad visible in lower right third. Forest fills the entire frame.
+Lighting/mood: mysterious, tranquil, soft cyan moonlight, deep teal shadows, muted moss green, restrained highlights.
+Constraints: background art only, no UI, no text, no logos, no watermark. High quality detailed illustration.

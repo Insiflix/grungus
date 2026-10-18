@@ -13,6 +13,9 @@ import type {
 import type {
   MatrixAuthCapabilities,
   MatrixSession,
+  MatrixRegistrationAuth,
+  MatrixRegistrationResult,
+  MatrixRegistrationChallenge,
 } from "../../domain/matrix/MatrixTypes";
 
 const CALLBACK_URL = "grungus-matrix://auth/callback";
@@ -62,6 +65,43 @@ function sessionFromLogin(
 
 export class MatrixAuthProvider implements IMatrixAuthProvider {
   private pendingBrowserLogin: PendingBrowserLogin | null = null;
+
+  async register(capabilities: MatrixAuthCapabilities, username: string, password: string, auth?: MatrixRegistrationAuth): Promise<MatrixRegistrationResult> {
+    const localpart = username.trim();
+    if (!localpart || localpart.includes(":") || localpart.startsWith("@")) {
+      throw new Error("Enter a username without the @ or homeserver suffix.");
+    }
+    if (!password) throw new Error("Enter a password.");
+    const client = createClient({ baseUrl: capabilities.homeserverUrl });
+    try {
+      const response = await client.registerRequest({
+        username: localpart, password, auth,
+        initial_device_display_name: DEVICE_NAME,
+        refresh_token: true,
+        inhibit_login: false,
+      });
+      if (!response.access_token || !response.device_id) {
+        throw new Error("Account created. Sign in with your new username and password.");
+      }
+      return { session: sessionFromLogin({ ...response, access_token: response.access_token, device_id: response.device_id }, capabilities) };
+    } catch (error) {
+      const failure = error as { httpStatus?: number; data?: Partial<MatrixRegistrationChallenge> & { errcode?: string; error?: string } };
+      if (failure.httpStatus === 401 && failure.data?.session && failure.data.flows?.length) {
+        const challenge: MatrixRegistrationChallenge = {
+          session: failure.data.session, flows: failure.data.flows, completed: failure.data.completed ?? [],
+        };
+        // A dummy stage needs no user input. Complete it only when it finishes a flow.
+        if (auth?.type !== "m.login.dummy" && challenge.flows.some((flow) =>
+          flow.stages.includes("m.login.dummy") && flow.stages.every((stage) => stage === "m.login.dummy" || challenge.completed.includes(stage)))) {
+          return this.register(capabilities, username, password, { session: challenge.session, type: "m.login.dummy" });
+        }
+        if (failure.data.errcode) throw new Error(failure.data.error ?? "Registration verification failed. Try again.");
+        return { challenge };
+      }
+      if (failure.data?.errcode === "M_FORBIDDEN") throw new Error(failure.data.error ?? "Registration is disabled on this homeserver.");
+      throw error;
+    }
+  }
 
   async discover(serverNameOrUrl: string): Promise<MatrixAuthCapabilities> {
     const serverName = normalizeServerName(serverNameOrUrl);
@@ -155,7 +195,7 @@ export class MatrixAuthProvider implements IMatrixAuthProvider {
       CALLBACK_URL,
       "sso",
       request.identityProviderId,
-      SSOAction.LOGIN,
+      request.register ? SSOAction.REGISTER : SSOAction.LOGIN,
     );
     this.pendingBrowserLogin = { capabilities };
     await window.desktop.auth.openExternal(url);

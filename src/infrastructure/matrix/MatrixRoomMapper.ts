@@ -34,10 +34,10 @@ export class MatrixRoomMapper {
   }
 
   map(room: Room): MatrixRoom {
-    const topicEvent = room
+    const state = room
       .getLiveTimeline()
-      .getState(Direction.Forward)
-      ?.getStateEvents(EventType.RoomTopic, "");
+      .getState(Direction.Forward);
+    const topicEvent = state?.getStateEvents(EventType.RoomTopic, "");
     const topic = Array.isArray(topicEvent)
       ? null
       : topicEvent?.getContent().topic;
@@ -45,7 +45,7 @@ export class MatrixRoomMapper {
     return {
       id: room.roomId,
       name: room.name || "Unnamed room",
-      avatarUrl: this.media.resolve(room.getMxcAvatarUrl(), 128, 128),
+      avatarUrl: this.media.resolve(room.getMxcAvatarUrl() || room.getAvatarFallbackMember?.()?.getMxcAvatarUrl(), 128, 128),
       topic: typeof topic === "string" ? topic : null,
       unreadCount: room.getUnreadNotificationCount(NotificationCountType.Total),
       highlightCount: room.getUnreadNotificationCount(
@@ -54,6 +54,14 @@ export class MatrixRoomMapper {
       isEncrypted: room.hasEncryptionStateEvent(),
       membership: membership(room.getMyMembership()),
       memberCount: room.getJoinedMemberCount(),
+      isDirect: Object.values(this.client.getAccountData?.(EventType.Direct)?.getContent() ?? {})
+        .some((ids) => Array.isArray(ids) && ids.includes(room.roomId)) || Boolean(room.getDMInviter?.()),
+      isSpace: room.isSpaceRoom?.() ?? false,
+      childRoomIds: room.isSpaceRoom?.()
+        ? (state?.getStateEvents(EventType.SpaceChild) ?? [])
+            .filter((event) => Array.isArray(event.getContent().via) && event.getContent().via.length > 0)
+            .map((event) => event.getStateKey()!)
+        : [],
     };
   }
 

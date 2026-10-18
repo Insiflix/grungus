@@ -62,7 +62,34 @@ The Electron main process and shared session types are ES modules. The preload a
 
 The current MVP discovers delegated OAuth/MAS metadata through `matrix-js-sdk`, but uses the broadly deployed Matrix SSO compatibility/login-token flow for interactive desktop login. A direct native OAuth dynamic-registration/PKCE flow can be added inside `MatrixAuthProvider` without changing React code.
 
+## Registration, invitations, and people
+
+- After homeserver discovery, choose **Register** to create an account. Browser SSO registration is available when advertised by the server. Traditional registration supports automatic dummy authentication, registration tokens, and server-provided browser verification for CAPTCHA, terms, email, and other stages. Finish each browser step, then choose **Continue registration**. The homeserver controls whether registration is enabled and which verification steps are required, as described in the [Matrix registration and user-interactive authentication specification](https://spec.matrix.org/latest/client-server-api/).
+- Choose **Add people** beside the DM tabs to search the user directory or enter a full Matrix ID such as `@alice:example.org`. **Message** reopens an existing DM or creates a private, encrypted room and invites that person. Full IDs work even when the server directory cannot find a person.
+- Use the **Invite people** button in a room header to send a room invitation. A selected server also has an invite button above its room list. Invite permissions and federation are enforced by the homeserver; failures appear in the people dialog.
+- Incoming DM, room, and server invitations appear under **Invitations** in the left sidebar. **Accept** joins the room; **Decline** rejects the invitation. Controls remain pending during the request, and failed requests keep the invitation available to retry.
+
+## GIFs with KLIPY
+
+The **GIF** button beside the message input opens a compact picker with trending GIFs, a debounced search, and pagination. Selecting a GIF sends the full-size media URL as an ordinary Matrix text message in the format `/gif https://…/image.gif`. Existing text drafts stay intact. Failed sends keep the picker open to retry, and both incoming and outgoing `/gif` messages render inline with a link fallback if the image is unavailable. Received GIFs do not need an API key.
+
+The supplied KLIPY key is configured in the ignored `.env.local` file as `VITE_KLIPY_API_KEY` and automatically included when Vite starts or builds. A configured build key always takes precedence over older local picker settings, and the API-key setup control is hidden while it is configured. Without a build key, the picker can still accept a local key. The integration uses KLIPY's [documented Tenor-compatible API](https://klipy.com/migrate), hosted at `https://api.klipy.com/v2`; it does not call Tenor. Small `tinygif` images are used for search previews and full `gif` URLs for messages. A share event is registered with KLIPY only after the Matrix send succeeds.
+
+## Emojis and profile pictures
+
+The smiley beside the input opens a native emoji picker with search, categories, and skin tones. Type `:smi` for shortcode suggestions; Up/Down changes the selection, Enter or Tab inserts it, and Escape dismisses suggestions. Complete shortcodes such as `:smile:`, `:thumbsup:`, `:herz:`, and `:frosch:` become Unicode emoji when sent and when received in text. Code spans, code fences, links, and unknown shortcodes stay unchanged. The bundled Emoji Mart dataset works offline.
+
+Matrix avatars are fetched with the session's Authorization header and displayed through cached blob URLs, rather than placing access tokens in image URLs. The loader sends credentials only to the connected homeserver's authenticated media paths, falls back to the original image if thumbnails are unsupported, and revokes blob URLs when the session ends. Missing or broken images show initials. DM tabs use the counterpart's member avatar when there is no room avatar; the account strip loads the signed-in user's profile picture and display name.
+
 ## Encryption and security
+
+Open **Identität & Verschlüsselung** with the shield next to your account, the encrypted-room badge, or the unverified-device banner. You can request verification from an existing device, accept incoming SAS requests, and explicitly compare the emoji/number sequence before confirming a match. Incoming requests identify the other user and device. Only SAS is advertised; QR verification is not implemented.
+
+You can also unlock the existing identity with its Matrix recovery key. The adapter checks the key against secret storage before importing cross-signing keys, then restores the message-key backup when available. Recovery never silently replaces missing identity keys. Late SDK decryption events update existing timeline messages.
+
+**Identität ersetzen** prepares a new recovery key for the user to save before the reset can run. Explicit acknowledgement is required: the SDK's [resetEncryption operation](https://matrix-org.github.io/matrix-js-sdk/interfaces/crypto-api.CryptoApi.html#resetEncryption) replaces cross-signing and deletes the previous server key backups and secret-storage configuration. A new secret store and backup are then configured using the saved key. Missing historical message keys are not recovered by a reset. Password and server-provided browser UI-authentication steps are supported; cancellation can leave a partially completed setup and is reported accordingly. No identity reset runs automatically.
+
+Recovery keys and authentication passwords stay in memory; the application does not persist them to localStorage or the session file. New recovery keys remain visible until the user dismisses the saved-key step.
 
 - `nodeIntegration: false`, `contextIsolation: true`, and Electron renderer sandboxing are enabled.
 - The preload exposes only session load/save/remove, HTTPS system-browser launch, and auth callback subscription.
@@ -111,6 +138,7 @@ npm run build:dir
 
 - Arbitrary homeserver discovery and validated direct homeserver URLs
 - Browser SSO/MAS compatibility login and advertised legacy password login
+- Account registration with interactive verification, incoming invitation acceptance/rejection, user search, room/server invitations, and encrypted DM creation/reuse
 - OS-encrypted session restore, refresh-token persistence, and logout
 - Rust-crypto initialization and encrypted room/message handling
 - Joined room list, room names, topics, avatars, encryption status, unread counts, and member counts
@@ -122,14 +150,36 @@ npm run build:dir
 
 ## Deliberately deferred
 
-- Cross-signing, interactive device verification, recovery-key, and key-backup UX
+- QR-code device verification, recovery passphrases, and manual key-backup import/export UX
 - Direct native delegated OAuth dynamic registration/PKCE (the SSO compatibility path is implemented)
-- Polished reply/edit/delete controls, reaction picker, threads, search, invites, moderation, and room settings
+- Polished reply/edit/delete controls, reaction picker, threads, message search, moderation, and room settings
 - Inline image/file rendering and upload UI (media resolution and domain extension points exist)
 - Push notifications and background sync
-- Voice/video calls; `ICallProvider` is reserved for a future Element Call/MatrixRTC adapter
+- Native incoming-call notifications
 
 ## Tests
 
-The focused Vitest suite covers Matrix event-to-domain message mapping, live-timeline room-state mapping, supported/unsupported message types, reply metadata, runtime bootstrap idempotency, and live event propagation into selected room timelines.
+The focused Vitest suite covers Matrix event-to-domain message mapping, live-timeline room-state mapping, registration and UI authentication, invitations, DM creation/reuse, runtime event propagation, recovery-key validation, explicit identity reset confirmation, SAS comparisons and cancellation, and late decryption updates. Multi-device verification and recovery still require end-to-end testing against a live homeserver.
 
+
+## MatrixRTC calls
+
+The room header provides voice/video calls using the locally bundled `@element-hq/element-call-embedded` widget. Calls stay mounted across room changes, can be minimized, and ongoing room calls offer a join button. The widget has a dark forest palette; its standard microphone/camera/device controls remain available. Screen sharing uses an explicit desktop/window picker with optional Windows system audio.
+
+The host brokers call-scoped Matrix events, encrypted to-device keys, OpenID, delayed/sticky membership events, authenticated media, and RTC transport discovery. Matrix access tokens are never passed in widget URLs. Packaged Electron assets use a secure local `grungus-app` origin so widget messaging and camera/microphone work without file-origin restrictions. Electron must be restarted after main-process changes.
+
+A compatible MatrixRTC backend (LiveKit SFU and authorization service) must be configured/discoverable on the homeserver. See [Element Call embedding](https://github.com/element-hq/element-call/blob/main/docs/embedded_standalone.md). Vite copies the official widget assets and upstream licenses into `public/element-call` and the production bundle; this generated directory is ignored by Git. Call policy/driver tests cover event and room isolation, membership cleanup, and URL parameters. Live audio/video interoperability still needs verification against a configured homeserver with a second participant.
+
+The emoji picker virtualizes category grids (at most about 88 buttons), resets scrolling per category/search, and memoizes the grid so preview hover updates do not rerender every emoji.
+
+The generated widget bundle includes an explicit `config.json` (compatibility mode). The host waits for `content_loaded` before negotiating capabilities and acknowledges Element Call lifecycle/mute/always-on-screen requests. Two-person calls use DM ringing intents; joining an existing session uses the matching join intent. Classic Matrix 1:1 calls are supported through the room header call-options menu and an incoming accept/reject interface. Call signalling is excluded from chat messages. `npm run test:call` launches an isolated Vite/Electron browser smoke test with synthetic media, no account token, and blocked external network access; it verifies config loading, widget handshake, room state, and the visible voice-call lobby.
+
+## Camera quality and screen sharing
+
+Call headers offer 360p/15 FPS, 720p/30 FPS, and 1080p/30 FPS camera capture presets. The choice is saved locally and applies to active camera tracks without reconnecting the call; device and network limits can lower the achieved quality. Element Call keeps its own device controls and uses a locally injected capture adapter. Its publication ceiling is 1080p/30 FPS for camera and 1440p/30 FPS for screen sharing.
+
+Both Element Call and classic Matrix calls can share screens. Electron presents thumbnails for complete displays and individual windows, then waits for explicit confirmation. The optional Windows system-audio checkbox captures the entire computer output (including other programs when sharing just one window) using loopback without muting local playback. Audio is requested without microphone noise filtering in Element Call. Unsupported platforms and old classic peers fall back to video-only sharing and show that state. Local shared audio/video is muted in preview. Cancelling the picker, unknown sources, or expired requests grants no capture stream.
+
+`npm run test:call` also checks changing a live synthetic camera to 360p and screen-picker selection/audio consent, without recording a real desktop. Unit tests cover native capture decisions and the media adapter. Hearing real system audio at another participant remains a manual end-to-end check.
+
+The pre-join preview uses a centered responsive window with a solid background and explicit cancel button. Minimizing becomes available only after the widget reports joining the call. Browser smoke checks use the actual CallPanel component and verify visible join controls at desktop and narrow sizes, camera quality, screen-source consent, and the preview-to-call layout transition.

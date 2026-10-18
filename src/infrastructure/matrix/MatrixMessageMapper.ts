@@ -1,3 +1,4 @@
+import { isCallSignallingEvent } from "./MatrixCallSignalling";
 import {
   EventStatus,
   EventType,
@@ -56,6 +57,7 @@ export class MatrixMessageMapper {
     const wireType = event.getWireType();
     const relation = event.getRelation();
     if (
+      isCallSignallingEvent(type) ||
       type === EventType.Reaction ||
       type === EventType.RoomRedaction ||
       relation?.rel_type === RelationType.Replace

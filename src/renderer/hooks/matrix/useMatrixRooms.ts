@@ -18,5 +18,6 @@ export function useMatrixRooms(filter = "") {
     selectedRoomId: snapshot.selectedRoomId,
     selectRoom: (roomId: string) => runtime.selectRoom(roomId),
     joinRoom: (roomIdOrAlias: string) => runtime.joinRoom(roomIdOrAlias),
+    declineInvite: (roomId: string) => runtime.declineInvite(roomId),
   };
 }

@@ -69,3 +69,8 @@ describe("MatrixMessageMapper", () => {
     });
   });
 });
+
+it.each(["m.call.invite", "m.call.candidates", "m.call.negotiate", "m.call.hangup", "io.element.call.encryption_keys", "org.matrix.msc3401.call.member", "org.matrix.msc4075.rtc.notification"])("keeps %s signalling out of the chat timeline", type => {
+ const event = new MatrixEvent({ event_id: "$signal", room_id: room.roomId, sender: "@alice:example", type, content: {}, origin_server_ts: 1 });
+ expect(mapper.map(event, room)).toBeNull();
+});
