@@ -7,6 +7,10 @@ import type {
   MatrixRoomMember,
   MatrixSession,
   MatrixSyncStatus,
+  MatrixRegistrationAuth,
+  MatrixRegistrationChallenge,
+  MatrixIdentityState,
+  MatrixUser,
 } from "../../domain/matrix/MatrixTypes";
 
 export type MatrixSessionPhase =
@@ -27,6 +31,9 @@ export interface MatrixRuntimeSnapshot {
   discoveryPending: boolean;
   error: string | null;
   persistenceWarning: string | null;
+  registrationChallenge: MatrixRegistrationChallenge | null;
+  identity: MatrixIdentityState | null;
+  profile: MatrixUser | null;
 }
 
 function messageOf(error: unknown): string {
@@ -46,6 +53,9 @@ export class MatrixRuntime {
     discoveryPending: false,
     error: null,
     persistenceWarning: null,
+    registrationChallenge: null,
+    identity: null,
+    profile: null,
   };
   private listeners = new Set<() => void>();
   private bootstrapPromise: Promise<void> | null = null;
@@ -55,6 +65,10 @@ export class MatrixRuntime {
     private readonly client: IMatrixClient,
     private readonly auth: IMatrixAuthProvider,
   ) {
+    client.subscribe("identityChanged", (identity) => this.update({ identity }));
+    client.subscribe("profileUpdated", (profile) => {
+      if (profile.id === this.snapshot.session?.userId) this.update({ profile });
+    });
     client.subscribe("syncStateChanged", (sync) => this.update({ sync }));
     client.subscribe("roomsChanged", (rooms) => this.update({ rooms }));
     client.subscribe("roomUpdated", (room) => {
@@ -112,6 +126,7 @@ export class MatrixRuntime {
         session,
         rooms: this.client.getRooms(),
       });
+      void this.refreshProfile();
     } catch (error) {
       await this.auth.clearSession();
       this.update({
@@ -133,7 +148,28 @@ export class MatrixRuntime {
   }
 
   resetDiscovery(): void {
-    this.update({ discovery: null, error: null });
+    this.update({ discovery: null, error: null, registrationChallenge: null });
+  }
+
+  cancelRegistration(): void {
+    this.update({ registrationChallenge: null, error: null });
+  }
+
+  async register(username: string, password: string, auth?: MatrixRegistrationAuth): Promise<void> {
+    const discovery = this.snapshot.discovery;
+    if (!discovery) return;
+    this.update({ phase: "authenticating", error: null });
+    try {
+      const result = await this.auth.register(discovery, username, password, auth);
+      if (result.challenge) {
+        this.update({ phase: "signed-out", registrationChallenge: result.challenge });
+      } else {
+        this.update({ registrationChallenge: null });
+        await this.connect(result.session);
+      }
+    } catch (error) {
+      this.update({ phase: "signed-out", error: messageOf(error) });
+    }
   }
 
   async loginWithPassword(user: string, password: string): Promise<void> {
@@ -152,12 +188,12 @@ export class MatrixRuntime {
     }
   }
 
-  async startBrowserLogin(identityProviderId?: string): Promise<void> {
+  async startBrowserLogin(identityProviderId?: string, register = false): Promise<void> {
     const discovery = this.snapshot.discovery;
     if (!discovery) return;
     this.update({ phase: "authenticating", error: null });
     try {
-      await this.auth.startBrowserLogin(discovery, { identityProviderId });
+      await this.auth.startBrowserLogin(discovery, { identityProviderId, register });
     } catch (error) {
       this.update({ phase: "signed-out", error: messageOf(error) });
     }
@@ -182,6 +218,16 @@ export class MatrixRuntime {
       error: null,
       persistenceWarning,
     });
+    void this.refreshProfile();
+  }
+
+  loadAvatar = (url: string) => this.client.loadAvatar(url);
+  private async refreshProfile() {
+    const userId = this.snapshot.session?.userId;
+    try {
+      const profile = await this.client.getOwnProfile();
+      if (this.snapshot.session?.userId === userId) this.update({ profile });
+    } catch { /* An unavailable profile never blocks the Matrix session. */ }
   }
 
   async logout(): Promise<void> {
@@ -201,15 +247,20 @@ export class MatrixRuntime {
         sync: { state: "stopped", error: null },
         error: null,
         persistenceWarning: null,
+        registrationChallenge: null,
+        identity: null,
+        profile: null,
       };
       this.notify();
     }
   }
 
   selectRoom(roomId: string): void {
+    const room = this.snapshot.rooms.find((candidate) => candidate.id === roomId);
+    if (!room || room.membership !== "join" || room.isSpace) return;
     const timelines = this.snapshot.timelines[roomId]
       ? this.snapshot.timelines
-      : { ...this.snapshot.timelines, [roomId]: this.client.getTimeline(roomId) };
+      : { ...this.snapshot.timelines, [roomId]: this.client.getRoom(roomId) ? this.client.getTimeline(roomId) : [] };
     this.update({ selectedRoomId: roomId, timelines });
     const latest = timelines[roomId]?.at(-1);
     if (latest?.sendState === "sent") {
@@ -217,14 +268,42 @@ export class MatrixRuntime {
     }
   }
 
-  async joinRoom(roomIdOrAlias: string): Promise<void> {
+  async joinRoom(roomIdOrAlias: string): Promise<boolean> {
     try {
       const room = await this.client.joinRoom(roomIdOrAlias.trim());
       this.update({ rooms: this.client.getRooms() });
       this.selectRoom(room.id);
+      return true;
     } catch (error) {
       this.update({ error: messageOf(error) });
+      return false;
     }
+  }
+
+  async declineInvite(roomId: string): Promise<boolean> {
+    try {
+      await this.client.leaveRoom(roomId);
+      this.update({ rooms: this.client.getRooms().filter((room) => room.id !== roomId) });
+      return true;
+    } catch (error) {
+      this.update({ error: messageOf(error) });
+      return false;
+    }
+  }
+
+  searchUsers(term: string) {
+    return this.client.searchUsers(term);
+  }
+
+  async inviteUser(roomId: string, userId: string): Promise<void> {
+    await this.client.inviteUser(roomId, userId);
+  }
+
+  async startDirectMessage(userId: string): Promise<void> {
+    const room = await this.client.startDirectMessage(userId);
+    const rooms = [...this.snapshot.rooms.filter((candidate) => candidate.id !== room.id), room];
+    this.update({ rooms });
+    this.selectRoom(room.id);
   }
 
   async loadOlder(roomId: string): Promise<boolean> {
@@ -268,6 +347,19 @@ export class MatrixRuntime {
   clearError(): void {
     this.update({ error: null });
   }
+
+  refreshIdentity = () => this.client.refreshIdentity();
+  requestIdentityVerification = () => this.client.requestIdentityVerification();
+  acceptIdentityVerification = () => this.client.acceptIdentityVerification();
+  startIdentityComparison = () => this.client.startIdentityComparison();
+  confirmIdentityComparison = (matches: boolean) => this.client.confirmIdentityComparison(matches);
+  cancelIdentityVerification = () => this.client.cancelIdentityVerification();
+  recoverIdentity = (key: string) => this.client.recoverIdentity(key);
+  prepareIdentityReset = () => this.client.prepareIdentityReset();
+  resetIdentity = (confirmed: boolean) => this.client.resetIdentity(confirmed);
+  submitIdentityAuth = (password?: string) => this.client.submitIdentityAuth(password);
+  cancelIdentityAuth = () => this.client.cancelIdentityAuth();
+  clearIdentitySecrets = () => this.client.clearIdentitySecrets();
 
   private upsertMessage(message: MatrixMessage): void {
     const current = this.snapshot.timelines[message.roomId];

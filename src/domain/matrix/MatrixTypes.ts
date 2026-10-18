@@ -1,5 +1,27 @@
 export type MatrixMembership = "join" | "invite" | "leave" | "ban" | "knock";
 
+export interface MatrixIdentityState {
+  available: boolean;
+  deviceId: string;
+  verified: boolean;
+  hasIdentity: boolean;
+  hasRecovery: boolean;
+  busy: boolean;
+  error: string | null;
+  notice: string | null;
+  newRecoveryKey: string | null;
+  resetComplete: boolean;
+  verification: {
+    userId: string;
+    deviceId?: string;
+    incoming: boolean;
+    phase: "requested" | "ready" | "started" | "done" | "cancelled";
+    emoji?: [string, string][];
+    decimal?: number[];
+  } | null;
+  auth: { session: string; stage: string; url: string; error?: string } | null;
+}
+
 export interface MatrixUser {
   id: string;
   displayName: string;
@@ -16,6 +38,9 @@ export interface MatrixRoom {
   isEncrypted: boolean;
   membership: MatrixMembership;
   memberCount: number;
+  isDirect?: boolean;
+  isSpace?: boolean;
+  childRoomIds?: string[];
 }
 
 export type MatrixMessageType =
@@ -96,6 +121,22 @@ export interface MatrixAuthCapabilities {
   delegatedOAuth: boolean;
   identityProviders: MatrixIdentityProvider[];
 }
+
+export interface MatrixRegistrationAuth {
+  session?: string;
+  type?: string;
+  token?: string;
+}
+
+export interface MatrixRegistrationChallenge {
+  session: string;
+  flows: { stages: string[] }[];
+  completed: string[];
+}
+
+export type MatrixRegistrationResult =
+  | { session: MatrixSession; challenge?: never }
+  | { challenge: MatrixRegistrationChallenge; session?: never };
 
 export interface MatrixSendTextOptions {
   replyToEventId?: string;

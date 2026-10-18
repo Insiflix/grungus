@@ -22,5 +22,13 @@ export interface DesktopBridge {
     openExternal(url: string): Promise<void>;
     onCallback(listener: (url: string) => void): () => void;
   };
+  capture: {
+    onRequest(listener: (request: ScreenShareRequest) => void): () => void;
+    onDismiss(listener: (requestId: string) => void): () => void;
+    respond(requestId: string, sourceId: string | null, audio: boolean): Promise<void>;
+  };
   platform: NodeJS.Platform;
 }
+
+export interface ScreenShareSource { id: string; name: string; kind: "screen" | "window"; thumbnail: string; icon?: string }
+export interface ScreenShareRequest { id: string; sources: ScreenShareSource[]; audioRequested: boolean; systemAudioSupported: boolean }

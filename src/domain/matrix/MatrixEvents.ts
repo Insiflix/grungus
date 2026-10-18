@@ -3,9 +3,13 @@ import type {
   MatrixRoom,
   MatrixRoomMember,
   MatrixSyncStatus,
+  MatrixIdentityState,
+  MatrixUser,
 } from "./MatrixTypes";
 
 export interface MatrixApplicationEvents {
+  profileUpdated: MatrixUser;
+  identityChanged: MatrixIdentityState;
   syncStateChanged: MatrixSyncStatus;
   roomsChanged: MatrixRoom[];
   roomUpdated: MatrixRoom;

@@ -1,6 +1,7 @@
 import { useState, type FormEvent } from "react";
 import { ShieldCheck as ShieldIcon } from "lucide-react";
 import { useMatrixSession } from "../../hooks/matrix/useMatrixSession";
+import { RegistrationForm } from "./RegistrationForm";
 
 export function LoginScreen() {
   const {
@@ -12,10 +13,12 @@ export function LoginScreen() {
     resetDiscovery,
     loginWithPassword,
     startBrowserLogin,
+    cancelRegistration,
   } = useMatrixSession();
   const [server, setServer] = useState("matrix.org");
   const [user, setUser] = useState("");
   const [password, setPassword] = useState("");
+  const [registering, setRegistering] = useState(false);
   const busy = discoveryPending || phase === "authenticating";
 
   const handleDiscovery = (event: FormEvent) => {
@@ -43,7 +46,7 @@ export function LoginScreen() {
         {!discovery ? (
           <>
             <div className="login-copy">
-              <h1 id="login-title">Sign in</h1>
+              <h1 id="login-title">Welcome to Grungus</h1>
               <p>Enter your Matrix homeserver name or URL.</p>
             </div>
             <form className="auth-form" onSubmit={handleDiscovery}>
@@ -72,10 +75,15 @@ export function LoginScreen() {
             </button>
             <div className="login-copy login-copy--compact">
               <span className="eyebrow">Homeserver</span>
-              <h1 id="login-title">Authentication</h1>
+              <h1 id="login-title">{registering ? "Create an account" : "Sign in"}</h1>
               <p className="server-chip">
                 <span className="server-chip__dot" /> {discovery.homeserverUrl}
               </p>
+            </div>
+
+            <div className="auth-mode" aria-label="Account access">
+              <button type="button" aria-pressed={!registering} disabled={busy} onClick={() => { setRegistering(false); cancelRegistration(); }}>Sign in</button>
+              <button type="button" aria-pressed={registering} disabled={busy} onClick={() => { setRegistering(true); cancelRegistration(); setPassword(""); }}>Register</button>
             </div>
 
             {discovery.browser && (
@@ -84,11 +92,11 @@ export function LoginScreen() {
                   className="button button--primary"
                   type="button"
                   disabled={busy}
-                  onClick={() => void startBrowserLogin()}
+                  onClick={() => void startBrowserLogin(undefined, registering)}
                 >
                   {phase === "authenticating"
                     ? "Waiting for browser…"
-                    : discovery.delegatedOAuth
+                    : registering ? "Register in browser" : discovery.delegatedOAuth
                       ? "Continue securely in browser"
                       : "Continue with SSO"}
                 </button>
@@ -99,7 +107,7 @@ export function LoginScreen() {
                         type="button"
                         className="button button--secondary"
                         key={provider.id}
-                        onClick={() => void startBrowserLogin(provider.id)}
+                        onClick={() => void startBrowserLogin(provider.id, registering)}
                         disabled={busy}
                       >
                         {provider.iconUrl && <img src={provider.iconUrl} alt="" />}
@@ -111,9 +119,11 @@ export function LoginScreen() {
               </div>
             )}
 
-            {discovery.browser && discovery.password && <div className="divider"><span>or</span></div>}
+            {discovery.browser && (discovery.password || registering) && <div className="divider"><span>or</span></div>}
 
-            {discovery.password && (
+            {registering && <RegistrationForm />}
+
+            {discovery.password && !registering && (
               <form className="auth-form" onSubmit={handlePassword}>
                 <label htmlFor="matrix-user">Matrix ID or username</label>
                 <input
@@ -142,7 +152,7 @@ export function LoginScreen() {
               </form>
             )}
 
-            {!discovery.browser && !discovery.password && (
+            {!registering && !discovery.browser && !discovery.password && (
               <p className="error-banner">This server did not advertise a supported login flow.</p>
             )}
           </>

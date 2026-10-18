@@ -1,13 +1,17 @@
 import type {
   MatrixAuthCapabilities,
   MatrixSession,
+  MatrixRegistrationAuth,
+  MatrixRegistrationResult,
 } from "./MatrixTypes";
 
 export interface BrowserLoginRequest {
   identityProviderId?: string;
+  register?: boolean;
 }
 
 export interface IMatrixAuthProvider {
+  register(capabilities: MatrixAuthCapabilities, username: string, password: string, auth?: MatrixRegistrationAuth): Promise<MatrixRegistrationResult>;
   discover(serverNameOrUrl: string): Promise<MatrixAuthCapabilities>;
   loginWithPassword(
     capabilities: MatrixAuthCapabilities,

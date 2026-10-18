@@ -1,21 +1,28 @@
-import { Hash as HashIcon, Plus as PlusIcon } from "lucide-react";
+import { Hash, Leaf } from "lucide-react";
+import { Avatar } from "../../components/common/Avatar";
+import type { MatrixRoom } from "../../../domain/matrix/MatrixTypes";
 
-export function WorkspaceRail() {
+interface WorkspaceRailProps {
+  spaces: MatrixRoom[];
+  selectedSpaceId: string | null;
+  onSelectSpace: (id: string | null) => void;
+}
+
+export function WorkspaceRail({ spaces, selectedSpaceId, onSelectSpace }: WorkspaceRailProps) {
   return (
-    <nav className="workspace-rail" aria-label="Workspaces">
-      <button className="rail-button rail-button--brand is-active" aria-label="Matrix home">
-        G
-      </button>
+    <nav className="workspace-rail" aria-label="Servers">
+      <button type="button" className="rail-button rail-button--brand" aria-label="Grungus home" title="Grungus home" onClick={() => onSelectSpace(null)}><Leaf /></button>
       <div className="rail-divider" />
-      <button className="rail-button" aria-label="All rooms" title="All rooms">
-        <HashIcon />
-      </button>
+      <button type="button" className={`rail-button ${selectedSpaceId === null ? "is-active" : ""}`} aria-label="All rooms" title="All rooms" aria-pressed={selectedSpaceId === null} onClick={() => onSelectSpace(null)}><Hash /></button>
+      <div className="rail-servers">
+        {spaces.map((space) => (
+          <button type="button" key={space.id} className={`rail-button ${selectedSpaceId === space.id ? "is-active" : ""}`} aria-label={space.name} title={space.name} aria-pressed={selectedSpaceId === space.id} onClick={() => onSelectSpace(space.id)}>
+            <Avatar name={space.name} url={space.avatarUrl} />
+          </button>
+        ))}
+      </div>
       <div className="rail-spacer" />
-      <button className="rail-button rail-button--muted" aria-label="Add workspace (planned)" title="Workspace organization is planned">
-        <PlusIcon />
-      </button>
-      <span className="rail-connection" title="Connected to Matrix" />
+      <span className="rail-caption">GRUNGUS</span>
     </nav>
   );
 }
-
