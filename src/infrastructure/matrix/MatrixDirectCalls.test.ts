@@ -6,7 +6,8 @@ import { CallEventHandlerEvent } from "matrix-js-sdk/lib/webrtc/callEventHandler
 import { MatrixDirectCalls } from "./MatrixDirectCalls";
 vi.mock("matrix-js-sdk/lib/webrtc/call", async importOriginal => ({ ...await importOriginal<object>(), createNewMatrixCall: vi.fn() }));
 function fixture() {
-  const client = Object.assign(new EventEmitter(), { getRoom: () => ({ name: "Chat", getMyMembership: () => "join", getJoinedMemberCount: () => 2 }) });
+  const media = { setMediaInputs: vi.fn().mockResolvedValue(undefined), setAudioSettings: vi.fn().mockResolvedValue(undefined) };
+  const client = Object.assign(new EventEmitter(), { getMediaHandler: () => media, getRoom: () => ({ name: "Chat", getMyMembership: () => "join", getJoinedMemberCount: () => 2 }) });
   const controller = new MatrixDirectCalls();
   controller.attach(client as unknown as MatrixClient);
   const observer = vi.fn(); controller.subscribe(observer);

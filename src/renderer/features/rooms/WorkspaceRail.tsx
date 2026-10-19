@@ -1,6 +1,7 @@
-import { Hash, Leaf } from "lucide-react";
+import { Hash } from "lucide-react";
 import { Avatar } from "../../components/common/Avatar";
 import type { MatrixRoom } from "../../../domain/matrix/MatrixTypes";
+import { BrandLogo } from "../../components/common/BrandLogo";
 
 interface WorkspaceRailProps {
   spaces: MatrixRoom[];
@@ -11,7 +12,7 @@ interface WorkspaceRailProps {
 export function WorkspaceRail({ spaces, selectedSpaceId, onSelectSpace }: WorkspaceRailProps) {
   return (
     <nav className="workspace-rail" aria-label="Servers">
-      <button type="button" className="rail-button rail-button--brand" aria-label="Grungus home" title="Grungus home" onClick={() => onSelectSpace(null)}><Leaf /></button>
+      <button type="button" className="rail-button rail-button--brand" aria-label="Grungus home" title="Grungus home" onClick={() => onSelectSpace(null)}><BrandLogo /></button>
       <div className="rail-divider" />
       <button type="button" className={`rail-button ${selectedSpaceId === null ? "is-active" : ""}`} aria-label="All rooms" title="All rooms" aria-pressed={selectedSpaceId === null} onClick={() => onSelectSpace(null)}><Hash /></button>
       <div className="rail-servers">

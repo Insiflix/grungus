@@ -39,6 +39,7 @@ export interface MatrixRoom {
   membership: MatrixMembership;
   memberCount: number;
   isDirect?: boolean;
+  isDirectClosed?: boolean;
   isSpace?: boolean;
   childRoomIds?: string[];
 }
@@ -78,6 +79,10 @@ export interface MatrixMessage {
   sendState: MatrixMessageSendState;
   isOwn: boolean;
   isRedacted: boolean;
+  isPinned?: boolean;
+  canPin?: boolean;
+  mentions?: MatrixUser[];
+  mentionsOwnUser?: boolean;
 }
 
 export interface MatrixRoomMember extends MatrixUser {

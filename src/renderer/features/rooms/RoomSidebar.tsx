@@ -1,21 +1,23 @@
 import { useState, type FormEvent } from "react";
 import { Avatar } from "../../components/common/Avatar";
-import { Hash as HashIcon, LockKeyhole as LockIcon, LogOut as LogoutIcon, Plus as PlusIcon, Search as SearchIcon, UserPlus, ShieldCheck } from "lucide-react";
+import { Hash as HashIcon, LockKeyhole as LockIcon, Plus as PlusIcon, Search as SearchIcon, UserPlus, ShieldCheck } from "lucide-react";
 import { useMatrixRooms } from "../../hooks/matrix/useMatrixRooms";
 import { useMatrixSession } from "../../hooks/matrix/useMatrixSession";
 import type { MatrixRoom } from "../../../domain/matrix/MatrixTypes";
 import { InvitationList } from "./InvitationList";
 import { PeopleDialog } from "./PeopleDialog";
+import { Settings } from "lucide-react";
 
-export function RoomSidebar({ space, onOpenIdentity }: { space: MatrixRoom | null; onOpenIdentity: () => void }) {
+export function RoomSidebar({ space, onOpenIdentity, onOpenSettings, onManageSpace }: { space: MatrixRoom | null; onOpenIdentity: () => void; onOpenSettings: () => void; onManageSpace: () => void }) {
   const [filter, setFilter] = useState("");
   const [joining, setJoining] = useState(false);
   const [roomAddress, setRoomAddress] = useState("");
   const [joinPending, setJoinPending] = useState(false);
   const [inviting, setInviting] = useState(false);
   const { rooms: allRooms, selectedRoomId, selectRoom, joinRoom } = useMatrixRooms(filter);
-  const rooms = allRooms.filter((room) => room.membership === "join" && !room.isDirect && !room.isSpace && (!space || space.childRoomIds?.includes(room.id)));
-  const { session, profile, sync, logout } = useMatrixSession();
+  const searching = Boolean(filter.trim());
+  const rooms = allRooms.filter((room) => room.membership === "join" && !room.isSpace && (searching || (!room.isDirect && (!space || space.childRoomIds?.includes(room.id)))));
+  const { session, profile, sync } = useMatrixSession();
 
   const handleJoin = async (event: FormEvent) => {
     event.preventDefault();
@@ -34,6 +36,7 @@ export function RoomSidebar({ space, onOpenIdentity }: { space: MatrixRoom | nul
           <strong>{space?.name ?? "All rooms"}</strong>
         </div>
         {space && <button type="button" className="icon-button" aria-label="Invite people to this server" title="Invite people to this server" onClick={() => setInviting(true)}><UserPlus /></button>}
+        {space && <button type="button" className="icon-button" aria-label="Space settings" title="Space settings" onClick={onManageSpace}><Settings /></button>}
         <button type="button" className="icon-button" aria-label="Join room" onClick={() => setJoining((value) => !value)}>
           <PlusIcon />
         </button>
@@ -59,14 +62,14 @@ export function RoomSidebar({ space, onOpenIdentity }: { space: MatrixRoom | nul
         <input
           value={filter}
           onChange={(event) => setFilter(event.target.value)}
-          placeholder="Find a room"
-          aria-label="Find a room"
+          placeholder="Find a room or DM"
+          aria-label="Find a room or direct message"
         />
         <kbd>⌘ K</kbd>
       </div>
 
       <div className="room-section-label">
-        <span>Rooms</span>
+        <span>{searching ? "Matching chats · all spaces" : "Rooms"}</span>
         <span>{rooms.length}</span>
       </div>
       <div className="room-list" role="list">
@@ -82,7 +85,7 @@ export function RoomSidebar({ space, onOpenIdentity }: { space: MatrixRoom | nul
             <Avatar name={room.name} url={room.avatarUrl} />
             <span className="room-row__copy">
               <strong>{room.name}</strong>
-              <span>{room.topic || `${room.memberCount} members`}</span>
+              <span>{room.isDirect ? "Direct message" : room.topic || `${room.memberCount} members`}</span>
             </span>
             <span className="room-row__meta">
               {room.isEncrypted ? <LockIcon /> : <HashIcon />}
@@ -97,7 +100,7 @@ export function RoomSidebar({ space, onOpenIdentity }: { space: MatrixRoom | nul
         {rooms.length === 0 && (
           <div className="empty-rooms">
             <HashIcon />
-            <p>{filter ? "No matching rooms" : sync.state === "ready" ? "No joined rooms" : "Rooms will appear after sync"}</p>
+            <p>{searching ? "No matching chats" : sync.state === "ready" ? "No joined rooms" : "Rooms will appear after sync"}</p>
           </div>
         )}
       </div>
@@ -109,8 +112,8 @@ export function RoomSidebar({ space, onOpenIdentity }: { space: MatrixRoom | nul
           <small>{sync.state === "ready" ? "Online" : sync.state}</small>
         </span>
         <button type="button" className="icon-button" aria-label="Identität und Verschlüsselung" title="Identität & Verschlüsselung" onClick={onOpenIdentity}><ShieldCheck /></button>
-        <button className="icon-button" aria-label="Log out" title="Log out" onClick={() => void logout()}>
-          <LogoutIcon />
+        <button type="button" className="icon-button" aria-label="Settings" title="Settings (Ctrl+,)" onClick={onOpenSettings}>
+          <Settings />
         </button>
       </footer>
       {inviting && space && <PeopleDialog key={space.id} room={space} onClose={() => setInviting(false)} />}

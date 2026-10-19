@@ -39,8 +39,10 @@ export interface IMatrixClient extends MatrixEventSource {
   inviteUser(roomId: string, userId: string): Promise<void>;
   searchUsers(term: string): Promise<MatrixUser[]>;
   startDirectMessage(userId: string): Promise<MatrixRoom>;
+  setDirectMessageClosed(roomId: string, closed: boolean): Promise<void>;
 
   getTimeline(roomId: string): MatrixMessage[];
+  refreshTimeline(roomId: string): Promise<MatrixMessage[]>;
   loadOlderMessages(roomId: string, limit?: number): Promise<MatrixTimelinePage>;
 
   sendTextMessage(
@@ -50,6 +52,7 @@ export interface IMatrixClient extends MatrixEventSource {
   ): Promise<string>;
   editMessage(roomId: string, eventId: string, body: string): Promise<string>;
   redactMessage(roomId: string, eventId: string, reason?: string): Promise<void>;
+  setMessagePinned(roomId: string, eventId: string, pinned: boolean): Promise<void>;
 
   setTyping(roomId: string, typing: boolean): Promise<void>;
   sendReadReceipt(roomId: string, eventId: string): Promise<void>;

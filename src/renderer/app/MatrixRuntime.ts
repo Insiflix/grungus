@@ -1,5 +1,6 @@
 import type { IMatrixAuthProvider } from "../../domain/matrix/IMatrixAuthProvider";
 import type { IMatrixClient } from "../../domain/matrix/IMatrixClient";
+import { preferences } from "../../domain/settings/Preferences";
 import type {
   MatrixAuthCapabilities,
   MatrixMessage,
@@ -81,9 +82,9 @@ export class MatrixRuntime {
     });
     client.subscribe("messageAdded", (message) => this.upsertMessage(message));
     client.subscribe("messageUpdated", (message) => this.upsertMessage(message));
-    client.subscribe("messageRemoved", ({ roomId, eventId }) => {
+    client.subscribe("messageRemoved", ({ roomId, eventId, placeholderOnly }) => {
       const timeline = (this.snapshot.timelines[roomId] ?? []).filter(
-        (message) => message.id !== eventId,
+        (message) => message.id !== eventId || Boolean(placeholderOnly && message.type !== "encrypted"),
       );
       this.update({
         timelines: { ...this.snapshot.timelines, [roomId]: timeline },
@@ -119,7 +120,8 @@ export class MatrixRuntime {
         this.update({ phase: "signed-out" });
         return;
       }
-      this.update({ phase: "authenticating", session, error: null });
+      // Keep the startup splash visible until the saved session is ready.
+      this.update({ session, error: null });
       await this.client.start(session);
       this.update({
         phase: "connected",
@@ -262,8 +264,22 @@ export class MatrixRuntime {
       ? this.snapshot.timelines
       : { ...this.snapshot.timelines, [roomId]: this.client.getRoom(roomId) ? this.client.getTimeline(roomId) : [] };
     this.update({ selectedRoomId: roomId, timelines });
+    if (room.isDirectClosed) void this.client.setDirectMessageClosed(roomId, false).catch(error => this.update({ error: messageOf(error) }));
+    const session = this.snapshot.session;
+    void this.client.refreshTimeline(roomId).then(messages => {
+      if (this.snapshot.session !== session) return;
+      const merged = [...new Map([...(this.snapshot.timelines[roomId] ?? []), ...messages].map(message => [message.id, message])).values()]
+        .sort((left, right) => left.timestamp - right.timestamp);
+      this.update({ timelines: { ...this.snapshot.timelines, [roomId]: merged } });
+      const latest = merged.at(-1);
+      if (this.snapshot.selectedRoomId === roomId && latest?.sendState === "sent" && preferences.getSnapshot().sendReadReceipts) {
+        void this.client.sendReadReceipt(roomId, latest.id).catch(() => undefined);
+      }
+    }).catch(error => {
+      if (this.snapshot.session === session) this.update({ error: `Unable to refresh messages: ${messageOf(error)}` });
+    });
     const latest = timelines[roomId]?.at(-1);
-    if (latest?.sendState === "sent") {
+    if (latest?.sendState === "sent" && preferences.getSnapshot().sendReadReceipts) {
       void this.client.sendReadReceipt(roomId, latest.id);
     }
   }
@@ -291,6 +307,25 @@ export class MatrixRuntime {
     }
   }
 
+  async closeDirectMessage(roomId: string): Promise<boolean> {
+    try {
+      const closing = this.snapshot.rooms.find(room => room.id === roomId);
+      await this.client.setDirectMessageClosed(roomId, true);
+      const rooms = this.client.getRooms();
+      this.update({ rooms });
+      if (this.snapshot.selectedRoomId === roomId) {
+        const remaining = rooms.filter(room => room.id !== roomId && room.isDirect && !room.isDirectClosed && room.membership === "join");
+        const next = remaining.find(room => room.name === closing?.name) ?? remaining[0];
+        if (next) this.selectRoom(next.id);
+        else this.update({ selectedRoomId: null });
+      }
+      return true;
+    } catch (error) {
+      this.update({ error: messageOf(error) });
+      return false;
+    }
+  }
+
   searchUsers(term: string) {
     return this.client.searchUsers(term);
   }
@@ -309,8 +344,10 @@ export class MatrixRuntime {
   async loadOlder(roomId: string): Promise<boolean> {
     try {
       const page = await this.client.loadOlderMessages(roomId);
+      const messages = [...new Map([...(this.snapshot.timelines[roomId] ?? []), ...page.messages].map(message => [message.id, message])).values()]
+        .sort((left, right) => left.timestamp - right.timestamp);
       this.update({
-        timelines: { ...this.snapshot.timelines, [roomId]: page.messages },
+        timelines: { ...this.snapshot.timelines, [roomId]: messages },
       });
       return page.hasMore;
     } catch (error) {
@@ -319,9 +356,9 @@ export class MatrixRuntime {
     }
   }
 
-  async sendMessage(roomId: string, body: string): Promise<void> {
+  async sendMessage(roomId: string, body: string, replyToEventId?: string): Promise<void> {
     try {
-      await this.client.sendTextMessage(roomId, body);
+      await this.client.sendTextMessage(roomId, body, replyToEventId ? { replyToEventId } : undefined);
       await this.client.setTyping(roomId, false);
     } catch (error) {
       this.update({ error: messageOf(error) });
@@ -333,8 +370,38 @@ export class MatrixRuntime {
     void this.client.setTyping(roomId, typing).catch(() => undefined);
   }
 
-  async toggleReaction(roomId: string, message: MatrixMessage, key: string): Promise<void> {
-    const ownReaction = message.reactions.find(
+  getRoomMembers(roomId: string) {
+    return this.client.getRoomMembers(roomId);
+  }
+
+  async editMessage(roomId: string, message: MatrixMessage, body: string): Promise<void> {
+    if (!message.isOwn || message.isRedacted) throw new Error("You can only edit your own messages.");
+    await this.client.editMessage(roomId, message.id, body);
+  }
+
+  async deleteMessage(roomId: string, message: MatrixMessage): Promise<void> {
+    if (!message.isOwn || message.isRedacted) throw new Error("You can only delete your own messages.");
+    await this.client.redactMessage(roomId, message.id);
+  }
+
+  setMessagePinned(roomId: string, message: MatrixMessage): Promise<void> {
+    return this.client.setMessagePinned(roomId, message.id, !message.isPinned);
+  }
+
+  private readonly reactionQueues = new Map<string, Promise<void>>();
+
+  toggleReaction(roomId: string, message: MatrixMessage, key: string): Promise<void> {
+    const id = JSON.stringify([roomId, message.id, key]);
+    const previous = this.reactionQueues.get(id) ?? Promise.resolve();
+    const next = previous.catch(() => undefined).then(() => this.applyReaction(roomId, message, key));
+    this.reactionQueues.set(id, next);
+    void next.finally(() => { if (this.reactionQueues.get(id) === next) this.reactionQueues.delete(id); }).catch(() => undefined);
+    return next;
+  }
+
+  private async applyReaction(roomId: string, message: MatrixMessage, key: string): Promise<void> {
+    const latest = this.client.getTimeline(roomId).find(candidate => candidate.id === message.id) ?? message;
+    const ownReaction = latest.reactions.find(
       (reaction) => reaction.key === key && reaction.eventId,
     );
     if (ownReaction?.eventId) {

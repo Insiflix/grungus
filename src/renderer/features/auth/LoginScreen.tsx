@@ -2,6 +2,7 @@ import { useState, type FormEvent } from "react";
 import { ShieldCheck as ShieldIcon } from "lucide-react";
 import { useMatrixSession } from "../../hooks/matrix/useMatrixSession";
 import { RegistrationForm } from "./RegistrationForm";
+import { BrandLogo } from "../../components/common/BrandLogo";
 
 export function LoginScreen() {
   const {
@@ -36,7 +37,7 @@ export function LoginScreen() {
       <div className="login-ambient login-ambient--two" />
       <section className="login-panel" aria-labelledby="login-title">
         <div className="login-brand">
-          <div className="brand-mark">G</div>
+          <BrandLogo className="brand-mark" />
           <div>
             <strong>GRUNGUS</strong>
             <span>MATRIX DESKTOP</span>

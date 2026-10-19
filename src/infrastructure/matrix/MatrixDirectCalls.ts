@@ -3,6 +3,7 @@ import { cameraConstraints, isCameraQuality, loadCameraQuality, saveCameraQualit
 import type { MatrixClient } from "matrix-js-sdk";
 import { CallEventHandlerEvent } from "matrix-js-sdk/lib/webrtc/callEventHandler";
 import type { DirectCallState } from "../../domain/calls/DirectCall";
+import { preferences } from "../../domain/settings/Preferences";
 
 export class MatrixDirectCalls {
   private cameraQuality = loadCameraQuality();
@@ -44,6 +45,7 @@ export class MatrixDirectCalls {
     if (this.call && this.call.state !== CallState.Ended) throw new Error("Es läuft bereits ein Anruf");
     const room = this.client.getRoom(roomId);
     if (room?.getMyMembership() !== "join" || room.getJoinedMemberCount() !== 2) throw new Error("Klassische Anrufe benötigen einen Raum mit genau zwei Mitgliedern");
+    await this.applyMediaPreferences();
     const call = createNewMatrixCall(this.client, roomId);
     if (!call) throw new Error("WebRTC ist auf diesem Gerät nicht verfügbar");
     this.track(call);
@@ -53,7 +55,7 @@ export class MatrixDirectCalls {
   answer = async () => {
     const call = this.call;
     if (!call || call.state !== CallState.Ringing) return;
-    try { await call.answer(true, call.type === CallType.Video); }
+    try { await this.applyMediaPreferences(); await call.answer(true, call.type === CallType.Video); }
     catch (error) { this.error = error instanceof Error ? error.message : "Anruf konnte nicht angenommen werden"; this.publish(); }
   };
   reject = () => { this.call?.reject(); this.publish(); };
@@ -74,5 +76,12 @@ export class MatrixDirectCalls {
     this.publish();
   };
   toggleMicrophone = async () => { if (this.call) await this.call.setMicrophoneMuted(!this.call.isMicrophoneMuted()); this.publish(); };
+  private async applyMediaPreferences() {
+    if (!this.client) return;
+    const prefs = preferences.getSnapshot();
+    const handler = this.client.getMediaHandler();
+    await handler.setMediaInputs(prefs.audioInput, prefs.videoInput);
+    await handler.setAudioSettings({ echoCancellation: prefs.echoCancellation, noiseSuppression: prefs.noiseSuppression, autoGainControl: prefs.autoGainControl });
+  }
   toggleCamera = async () => { if (this.call) await this.call.setLocalVideoMuted(!this.call.isLocalVideoMuted()); this.publish(); };
 }

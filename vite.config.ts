@@ -17,6 +17,7 @@ function bundleElementCall() {
   return { name: "bundle-element-call" };
 }
 export default defineConfig({
+  define: { __APP_VERSION__: JSON.stringify(JSON.parse(readFileSync(resolve("package.json"), "utf8")).version) },
   base: "./",
   plugins: [bundleElementCall(), react(), tailwindcss()],
   server: { host: "127.0.0.1", port: 5173, strictPort: true },

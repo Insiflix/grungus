@@ -10,6 +10,14 @@ const message: MatrixMessage = {
 };
 const render = (changes: Partial<MatrixMessage> = {}) => renderToStaticMarkup(<MessageRow message={{ ...message, ...changes }} grouped={false} onReact={() => undefined} />);
 describe("inline GIF messages", () => {
+  it("highlights messages mentioning you and displays mention names safely", () => {
+    const html = render({ body: "Hello @me:example.org", mentionsOwnUser: true, mentions: [{ id: "@me:example.org", displayName: "Me <script>", avatarUrl: null }] });
+    expect(html).toContain("is-mentioned");
+    expect(html).toContain('aria-label="Message mentioning you"');
+    expect(html).toContain("@Me &lt;script&gt;");
+    expect(render({ body: "Hello @me:example.org" })).not.toContain("is-mentioned");
+    expect(render({ isRedacted: true, mentionsOwnUser: true })).not.toContain("is-mentioned");
+  });
   it("renders incoming emoji shortcodes and preserves literal code examples", () => {
     const html = render({ body: "Hello :smile: `:heart:`" });
     expect(html).toContain("Hello 😄 `:heart:`");

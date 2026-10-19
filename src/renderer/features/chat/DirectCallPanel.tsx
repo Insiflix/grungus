@@ -4,17 +4,23 @@ import { MonitorUp, MonitorOff } from "lucide-react";
 import { Mic, MicOff, Video, VideoOff, Phone, PhoneOff, X } from "lucide-react";
 import type { DirectCallFeed, DirectCallState } from "../../../domain/calls/DirectCall";
 import { directCalls } from "../../app/providers/MatrixProvider";
+import { usePreferences } from "../../hooks/usePreferences";
 const states: Record<string, string> = { fledgling: "Anruf wird vorbereitet", wait_local_media: "Warte auf Mikrofon / Kamera", create_offer: "Anruf wird vorbereitet", invite_sent: "Es klingelt …", ringing: "Eingehender Anruf", create_answer: "Anruf wird angenommen", connecting: "Verbindung wird aufgebaut …", connected: "Verbunden", ended: "Anruf beendet" };
 function Feed({ feed }: { feed: DirectCallFeed }) {
+  const prefs = usePreferences();
+  const [outputError, setOutputError] = useState(false);
   const [blocked, setBlocked] = useState(false);
   const [node, setNode] = useState<HTMLVideoElement | null>(null);
+  useEffect(() => {
+    if (node && !feed.local && typeof node.setSinkId === "function") void node.setSinkId(prefs.audioOutput).then(() => setOutputError(false)).catch(() => setOutputError(true));
+  }, [node, feed.local, prefs.audioOutput]);
   useEffect(() => {
     if (!node) return;
     node.srcObject = feed.stream;
     void node.play().catch(() => setBlocked(true));
     return () => { node.srcObject = null; };
   }, [node, feed.stream]);
-  return <div className={feed.local && !feed.screenshare ? "direct-call__local" : "direct-call__remote"}><video ref={setNode} autoPlay playsInline muted={feed.local} />{blocked && <button onClick={() => { void node?.play().then(() => setBlocked(false)); }}>Audio / Video wiedergeben</button>}</div>;
+  return <div className={feed.local && !feed.screenshare ? "direct-call__local" : "direct-call__remote"}><video ref={setNode} autoPlay playsInline muted={feed.local} />{outputError && <p role="alert">Selected speaker unavailable. Choose another speaker in settings.</p>}{blocked && <button onClick={() => { void node?.play().then(() => setBlocked(false)); }}>Audio / Video wiedergeben</button>}</div>;
 }
 export function DirectCallPanel({ call, canAnswer = true }: { call: DirectCallState; canAnswer?: boolean }) {
   const [actionError, setActionError] = useState<string | null>(null);

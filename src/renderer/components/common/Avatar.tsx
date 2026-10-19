@@ -30,7 +30,7 @@ export function Avatar({ name, url, size = "medium", status = false }: AvatarPro
   const src = image && image.url === url && failed !== url ? image.src : null;
   return (
     <span className={`avatar avatar--${size}`} data-avatar-state={!url ? "missing" : failed === url ? "failed" : src ? "loaded" : "loading"} aria-hidden="true">
-      {src ? <img src={src} alt="" loading="lazy" referrerPolicy="no-referrer" onError={() => setFailed(url ?? null)} /> : initials(name)}
+      {src ? <img src={src} alt="" referrerPolicy="no-referrer" onError={() => setFailed(url ?? null)} /> : initials(name)}
       {status && <span className="avatar__status" />}
     </span>
   );

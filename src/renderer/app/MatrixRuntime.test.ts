@@ -54,11 +54,17 @@ class FakeClient implements IMatrixClient {
   inviteUser = vi.fn(async () => undefined);
   searchUsers = vi.fn(async () => []);
   startDirectMessage = vi.fn(async () => this.rooms[0]!);
+  setDirectMessageClosed = vi.fn(async (roomId: string, closed: boolean) => {
+    this.rooms = this.rooms.map(room => room.id === roomId ? { ...room, isDirectClosed: closed } : room);
+    this.emit("roomsChanged", this.rooms);
+  });
   getTimeline = (id: string) => this.timelines[id] ?? [];
+  refreshTimeline = vi.fn(async (id: string) => this.getTimeline(id));
   loadOlderMessages = vi.fn(async (id: string) => ({ messages: this.getTimeline(id), hasMore: false }));
   sendTextMessage = vi.fn(async () => "$sent");
   editMessage = vi.fn(async () => "$edit");
   redactMessage = vi.fn(async () => undefined);
+  setMessagePinned = vi.fn(async () => undefined);
   setTyping = vi.fn(async () => undefined);
   sendReadReceipt = vi.fn(async () => undefined);
   addReaction = vi.fn(async () => "$reaction");
@@ -80,6 +86,104 @@ const auth: IMatrixAuthProvider = {
 };
 
 describe("MatrixRuntime event bridge", () => {
+  it("limits placeholder cleanup to encrypted rows and preserves actual chat messages", () => {
+    const client = new FakeClient();
+    const runtime = new MatrixRuntime(client, auth);
+    const room: MatrixRoom = { id: "!room:example", name: "Room", avatarUrl: null, topic: null, unreadCount: 0, highlightCount: 0, isEncrypted: true, membership: "join", memberCount: 2 };
+    const message: MatrixMessage = { id: "$hui", roomId: room.id, sender: { id: "@slitix:example", displayName: "Slitix", avatarUrl: null }, timestamp: 1, type: "text", body: "hui", edited: false, replyTo: null, reactions: [], sendState: "sent", isOwn: false, isRedacted: false };
+    client.rooms = [room]; client.timelines[room.id] = [message, { ...message, id: "$placeholder", type: "encrypted" }];
+    client.emit("roomsChanged", client.rooms); runtime.selectRoom(room.id);
+    client.emit("messageRemoved", { roomId: room.id, eventId: "$hui", placeholderOnly: true });
+    client.emit("messageRemoved", { roomId: room.id, eventId: "$placeholder", placeholderOnly: true });
+    expect(runtime.getSnapshot().timelines[room.id].map(message => message.id)).toEqual(["$hui"]);
+    client.emit("messageRemoved", { roomId: room.id, eventId: "$hui" });
+    expect(runtime.getSnapshot().timelines[room.id]).toEqual([]);
+  });
+
+  it("keeps displayed messages when older pagination returns another SDK history window", async () => {
+    const client = new FakeClient();
+    const runtime = new MatrixRuntime(client, auth);
+    const room: MatrixRoom = { id: "!room:example", name: "Room", avatarUrl: null, topic: null, unreadCount: 0, highlightCount: 0, isEncrypted: true, membership: "join", memberCount: 2 };
+    const message: MatrixMessage = { id: "$hui", roomId: room.id, sender: { id: "@slitix:example", displayName: "Slitix", avatarUrl: null }, timestamp: 2, type: "text", body: "hui", edited: false, replyTo: null, reactions: [], sendState: "sent", isOwn: false, isRedacted: false };
+    client.rooms = [room]; client.timelines[room.id] = [message];
+    client.emit("roomsChanged", client.rooms); runtime.selectRoom(room.id);
+    client.loadOlderMessages.mockResolvedValueOnce({ messages: [{ ...message, id: "$older", timestamp: 1 }], hasMore: true });
+    await runtime.loadOlder(room.id);
+    expect(runtime.getSnapshot().timelines[room.id].map(message => message.id)).toEqual(["$older", "$hui"]);
+  });
+  it("closes a duplicate tab, selects the original conversation, and reopens closed DMs from search", async () => {
+    const client = new FakeClient();
+    const runtime = new MatrixRuntime(client, auth);
+    const original: MatrixRoom = { id: "!original:example", name: "Slitix", avatarUrl: null, topic: null, unreadCount: 0, highlightCount: 0, isEncrypted: true, membership: "join", memberCount: 2, isDirect: true };
+    const duplicate = { ...original, id: "!duplicate:example" };
+    client.rooms = [original, duplicate]; client.emit("roomsChanged", client.rooms);
+    runtime.selectRoom(duplicate.id);
+    expect(await runtime.closeDirectMessage(duplicate.id)).toBe(true);
+    expect(runtime.getSnapshot().selectedRoomId).toBe(original.id);
+    expect(runtime.getSnapshot().rooms.find(room => room.id === duplicate.id)?.isDirectClosed).toBe(true);
+    expect(client.leaveRoom).not.toHaveBeenCalled();
+    runtime.selectRoom(duplicate.id);
+    expect(client.setDirectMessageClosed).toHaveBeenLastCalledWith(duplicate.id, false);
+    expect(runtime.getSnapshot().rooms.find(room => room.id === duplicate.id)?.isDirectClosed).toBe(false);
+  });
+
+  it("does not hide a DM when saving its closed state fails", async () => {
+    const client = new FakeClient();
+    const runtime = new MatrixRuntime(client, auth);
+    client.setDirectMessageClosed.mockRejectedValueOnce(new Error("Offline"));
+    expect(await runtime.closeDirectMessage("!dm:example")).toBe(false);
+    expect(runtime.getSnapshot().error).toBe("Offline");
+  });
+  it("refreshes an opened chat without dropping older history or messages arriving in flight", async () => {
+    const client = new FakeClient();
+    const runtime = new MatrixRuntime(client, auth);
+    const room: MatrixRoom = { id: "!room:example", name: "Hanno", avatarUrl: null, topic: null, unreadCount: 0, highlightCount: 0, isEncrypted: true, membership: "join", memberCount: 2 };
+    const old: MatrixMessage = { id: "$old", roomId: room.id, sender: { id: "@hanno:example", displayName: "Hanno", avatarUrl: null }, timestamp: 1, type: "text", body: "Old", edited: false, replyTo: null, reactions: [], sendState: "sent", isOwn: false, isRedacted: false };
+    client.rooms = [room]; client.timelines[room.id] = [old];
+    client.emit("roomsChanged", client.rooms);
+    let finish!: (messages: MatrixMessage[]) => void;
+    client.refreshTimeline.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    runtime.selectRoom(room.id);
+    client.emit("messageAdded", { ...old, id: "$live", timestamp: 3 });
+    finish([{ ...old, id: "$new", timestamp: 2 }]);
+    await vi.waitFor(() => expect(runtime.getSnapshot().timelines[room.id].map(message => message.id)).toEqual(["$old", "$new", "$live"]));
+    expect(client.refreshTimeline).toHaveBeenCalledWith(room.id);
+  });
+
+  it("keeps cached chat history visible when refreshing the latest messages fails", async () => {
+    const client = new FakeClient();
+    const runtime = new MatrixRuntime(client, auth);
+    const room: MatrixRoom = { id: "!room:example", name: "Hanno", avatarUrl: null, topic: null, unreadCount: 0, highlightCount: 0, isEncrypted: true, membership: "join", memberCount: 2 };
+    client.rooms = [room]; client.emit("roomsChanged", client.rooms);
+    client.refreshTimeline.mockRejectedValueOnce(new Error("Offline"));
+    runtime.selectRoom(room.id);
+    await vi.waitFor(() => expect(runtime.getSnapshot().error).toContain("Unable to refresh messages: Offline"));
+    expect(runtime.getSnapshot().selectedRoomId).toBe(room.id);
+    expect(runtime.getSnapshot().timelines[room.id]).toEqual([]);
+  });
+  it("removes an own reaction using its current server ID rather than a stale local ID", async () => {
+    const client = new FakeClient();
+    const runtime = new MatrixRuntime(client, auth);
+    const message: MatrixMessage = { id: "$message", roomId: "!room:example", sender: { id: "@me:example", displayName: "Me", avatarUrl: null }, timestamp: 1, type: "text", body: "Hi", edited: false, replyTo: null, reactions: [{ key: "👍", count: 1, userIds: ["@me:example"], eventId: "~local" }], sendState: "sent", isOwn: true, isRedacted: false };
+    client.timelines[message.roomId] = [{ ...message, reactions: [{ ...message.reactions[0], eventId: "$server-reaction" }] }];
+    await runtime.toggleReaction(message.roomId, message, "👍");
+    expect(client.removeReaction).toHaveBeenCalledWith(message.roomId, "$server-reaction");
+    expect(client.addReaction).not.toHaveBeenCalled();
+  });
+
+  it("serializes quick repeated toggles and reads the updated reactions", async () => {
+    const client = new FakeClient();
+    const runtime = new MatrixRuntime(client, auth);
+    const message: MatrixMessage = { id: "$message", roomId: "!room:example", sender: { id: "@me:example", displayName: "Me", avatarUrl: null }, timestamp: 1, type: "text", body: "Hi", edited: false, replyTo: null, reactions: [], sendState: "sent", isOwn: true, isRedacted: false };
+    client.timelines[message.roomId] = [message];
+    client.addReaction.mockImplementationOnce(async () => {
+      client.timelines[message.roomId] = [{ ...message, reactions: [{ key: "👍", count: 1, userIds: ["@me:example"], eventId: "$reaction" }] }];
+      return "$reaction";
+    });
+    await Promise.all([runtime.toggleReaction(message.roomId, message, "👍"), runtime.toggleReaction(message.roomId, message, "👍")]);
+    expect(client.addReaction).toHaveBeenCalledOnce();
+    expect(client.removeReaction).toHaveBeenCalledWith(message.roomId, "$reaction");
+  });
   beforeEach(() => vi.clearAllMocks());
   it("bootstraps only once and transitions to signed out without a session", async () => {
     const client = new FakeClient();
@@ -89,6 +193,48 @@ describe("MatrixRuntime event bridge", () => {
 
     expect(auth.restoreSession).toHaveBeenCalledTimes(1);
     expect(runtime.getSnapshot().phase).toBe("signed-out");
+  });
+
+  it("keeps the splash visible throughout saved-session startup", async () => {
+    const client = new FakeClient();
+    const runtime = new MatrixRuntime(client, auth);
+    const session: MatrixSession = {
+      homeserverUrl: "https://example.org", serverName: "example.org",
+      accessToken: "token", userId: "@alice:example.org", deviceId: "DEVICE",
+    };
+    vi.mocked(auth.restoreSession).mockResolvedValueOnce(session);
+    let finishStartup!: () => void;
+    client.start.mockImplementationOnce(() => new Promise<void>((resolve) => { finishStartup = resolve; }));
+    const phases = [runtime.getSnapshot().phase];
+    runtime.subscribe(() => phases.push(runtime.getSnapshot().phase));
+
+    const bootstrap = runtime.bootstrap();
+    await vi.waitFor(() => expect(client.start).toHaveBeenCalledWith(session));
+    expect(runtime.getSnapshot()).toMatchObject({ phase: "restoring", session });
+    expect(phases.every((phase) => phase === "restoring")).toBe(true);
+
+    finishStartup();
+    await bootstrap;
+    expect(runtime.getSnapshot().phase).toBe("connected");
+    expect(phases).not.toContain("authenticating");
+    expect(phases).not.toContain("signed-out");
+  });
+
+  it("returns to login with an error when saved-session startup fails", async () => {
+    const client = new FakeClient();
+    const runtime = new MatrixRuntime(client, auth);
+    vi.mocked(auth.restoreSession).mockResolvedValueOnce({
+      homeserverUrl: "https://example.org", serverName: "example.org",
+      accessToken: "token", userId: "@alice:example.org", deviceId: "DEVICE",
+    });
+    client.start.mockRejectedValueOnce(new Error("Session expired"));
+
+    await runtime.bootstrap();
+
+    expect(auth.clearSession).toHaveBeenCalledOnce();
+    expect(runtime.getSnapshot()).toMatchObject({
+      phase: "signed-out", session: null, error: "Session restore failed: Session expired",
+    });
   });
 
   it("merges incoming application messages into the selected timeline", () => {

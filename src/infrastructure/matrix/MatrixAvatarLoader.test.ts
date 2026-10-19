@@ -8,10 +8,24 @@ function setup() {
   const client = { getHomeserverUrl: () => "https://matrix.example.org", getAccessToken: () => "test-matrix-token" } as MatrixClient;
   vi.spyOn(URL, "createObjectURL").mockReturnValue("blob:test-avatar");
   vi.spyOn(URL, "revokeObjectURL").mockImplementation(() => undefined);
-  return { loader: new MatrixAvatarLoader(client, request), request };
+  return { loader: new MatrixAvatarLoader(client, request), request, client };
 }
-afterEach(() => vi.restoreAllMocks());
+afterEach(() => { vi.restoreAllMocks(); vi.unstubAllGlobals(); });
 describe("authenticated Matrix avatars", () => {
+  it("binds the default native fetch to the browser global instead of the loader", async () => {
+    const { client, request } = setup();
+    const nativeFetch = vi.fn(function (this: unknown, ...args: Parameters<typeof fetch>) {
+      if (this !== globalThis) throw new TypeError("Failed to execute 'fetch' on 'Window': Illegal invocation");
+      return request(...args);
+    });
+    vi.stubGlobal("fetch", nativeFetch);
+    const loader = new MatrixAvatarLoader(client);
+    expect(await loader.load(url)).toBe("blob:test-avatar");
+    expect(nativeFetch).toHaveBeenCalledExactlyOnceWith(url, expect.objectContaining({
+      headers: { Authorization: "Bearer test-matrix-token" },
+    }));
+    loader.clear();
+  });
   it("uses a bearer header, shares concurrent requests, and returns a token-free blob URL", async () => {
     const { loader, request } = setup();
     expect(await Promise.all([loader.load(url), loader.load(url)])).toEqual(["blob:test-avatar", "blob:test-avatar"]);

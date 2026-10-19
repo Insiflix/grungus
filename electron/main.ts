@@ -1,5 +1,6 @@
 import { DesktopCaptureBroker } from "./desktopCapture.js";
-import { app, BrowserWindow, ipcMain, safeStorage, shell, session, protocol, net, desktopCapturer } from "electron";
+import { configureAppPermissions } from "./permissions.js";
+import { app, BrowserWindow, clipboard, ipcMain, safeStorage, shell, session, protocol, net, desktopCapturer } from "electron";
 import { promises as fs } from "node:fs";
 import path from "node:path";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -115,6 +116,7 @@ function createWindow(): void {
     minWidth: 980,
     minHeight: 640,
     backgroundColor: "#090d18",
+    icon: path.join(app.getAppPath(), app.isPackaged ? "dist" : "public", process.platform === "win32" ? "grungus.ico" : "grungus.png"),
     titleBarStyle: process.platform === "darwin" ? "hiddenInset" : "default",
     show: false,
     webPreferences: {
@@ -153,6 +155,11 @@ function createWindow(): void {
 }
 
 function registerIpc(): void {
+  ipcMain.handle("clipboard:write-text", (event, text: unknown) => {
+    if (event.sender !== mainWindow?.webContents || event.senderFrame !== mainWindow.webContents.mainFrame || !isTrustedRendererUrl(event.senderFrame.url)) throw new Error("Untrusted clipboard request");
+    if (typeof text !== "string") throw new Error("Invalid clipboard text");
+    clipboard.writeText(text);
+  });
   ipcMain.handle("desktop-capture:respond", (event, requestId: unknown, sourceId: unknown, audio: unknown) => {
     if (event.sender !== mainWindow?.webContents || event.senderFrame !== mainWindow.webContents.mainFrame || !isTrustedRendererUrl(event.senderFrame.url)) throw new Error("Untrusted capture response");
     if (typeof requestId !== "string" || (sourceId !== null && typeof sourceId !== "string") || typeof audio !== "boolean") throw new Error("Invalid capture response");
@@ -209,13 +216,11 @@ if (!app.requestSingleInstanceLock()) {
     });
     session.defaultSession.setDisplayMediaRequestHandler((request, callback) => { void desktopCapture!.request(request, callback); });
     app.on("before-quit", () => desktopCapture?.cancel());
-    session.defaultSession.setPermissionRequestHandler(
-      (contents, permission, callback, details) => {
-        let trustedCall = false;
-        try { const requested = new URL(details.requestingUrl); const expected = app.isPackaged ? new URL("grungus-app://client/element-call/index.html") : new URL("http://127.0.0.1:5173/element-call/index.html"); trustedCall = requested.protocol === expected.protocol && requested.host === expected.host && (requested.pathname === expected.pathname || requested.pathname === "/" || requested.pathname === "/index.html"); } catch {}
-        callback(contents === mainWindow?.webContents && (permission === "media" || permission === "display-capture") && trustedCall);
-      },
-    );
+    configureAppPermissions(session.defaultSession, () => mainWindow, app.isPackaged);
+    if (process.platform === "win32") app.setAppUserModelId("dev.grungus.matrix");
+    if (process.platform === "darwin" && !app.isPackaged) {
+      app.dock?.setIcon(path.join(app.getAppPath(), "public", "grungus.png"));
+    }
     registerIpc();
     createWindow();
     app.on("activate", () => {

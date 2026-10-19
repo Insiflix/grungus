@@ -38,3 +38,5 @@ export const mountCall = matrixClient.mountCall;
 export const observeCalls = matrixClient.observeCalls;
 
 export const directCalls = matrixClient.directCalls;
+export const matrixSettings = matrixClient.settings;
+export const matrixNotifications = matrixClient.notifications;
