@@ -13,6 +13,7 @@ export interface SessionStoreResult {
 }
 
 export interface DesktopBridge {
+  clipboard: { writeText(text: string): Promise<void> };
   session: {
     load(): Promise<PersistedMatrixSession | null>;
     save(session: PersistedMatrixSession): Promise<SessionStoreResult>;

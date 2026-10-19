@@ -11,7 +11,10 @@ import type {
   MatrixRoom,
   MatrixRoomMember,
 } from "../../domain/matrix/MatrixTypes";
+import type { MatrixProfileAvatars } from "./MatrixProfileAvatars";
 import { MatrixMediaResolver } from "./MatrixMediaResolver";
+import { directInvitePeer } from "./MatrixDirectRooms";
+import { closedDirectRoomIds, closedDirectRoomsEvent } from "./MatrixClosedDirectRooms";
 
 function membership(value: string | undefined): MatrixMembership {
   if (
@@ -29,7 +32,7 @@ function membership(value: string | undefined): MatrixMembership {
 export class MatrixRoomMapper {
   private readonly media: MatrixMediaResolver;
 
-  constructor(private readonly client: MatrixClient) {
+  constructor(private readonly client: MatrixClient, private readonly profiles?: MatrixProfileAvatars, private readonly isDirectClosed?: (roomId: string) => boolean) {
     this.media = new MatrixMediaResolver(client);
   }
 
@@ -42,10 +45,18 @@ export class MatrixRoomMapper {
       ? null
       : topicEvent?.getContent().topic;
 
+    const directPeer = Object.entries(this.client.getAccountData?.(EventType.Direct)?.getContent() ?? {})
+      .find(([userId, ids]) => userId !== this.client.getUserId?.() && Array.isArray(ids) && ids.includes(room.roomId))?.[0] ?? directInvitePeer(room, this.client.getUserId?.());
+    const peer = (directPeer && room.getMember?.(directPeer)) || room.getAvatarFallbackMember?.();
+    const peerId = directPeer || peer?.userId;
+    const roomAvatar = room.getMxcAvatarUrl();
+    const peerAvatar = roomAvatar ? undefined : (this.profiles && peerId
+      ? this.profiles.resolve(peer, peerId)
+      : peer?.getMxcAvatarUrl());
     return {
       id: room.roomId,
       name: room.name || "Unnamed room",
-      avatarUrl: this.media.resolve(room.getMxcAvatarUrl() || room.getAvatarFallbackMember?.()?.getMxcAvatarUrl(), 128, 128),
+      avatarUrl: this.media.resolve(roomAvatar || peerAvatar, 128, 128),
       topic: typeof topic === "string" ? topic : null,
       unreadCount: room.getUnreadNotificationCount(NotificationCountType.Total),
       highlightCount: room.getUnreadNotificationCount(
@@ -55,7 +66,8 @@ export class MatrixRoomMapper {
       membership: membership(room.getMyMembership()),
       memberCount: room.getJoinedMemberCount(),
       isDirect: Object.values(this.client.getAccountData?.(EventType.Direct)?.getContent() ?? {})
-        .some((ids) => Array.isArray(ids) && ids.includes(room.roomId)) || Boolean(room.getDMInviter?.()),
+        .some((ids) => Array.isArray(ids) && ids.includes(room.roomId)) || Boolean(directPeer),
+      isDirectClosed: this.isDirectClosed?.(room.roomId) ?? closedDirectRoomIds(this.client.getAccountData?.(closedDirectRoomsEvent)?.getContent()).includes(room.roomId),
       isSpace: room.isSpaceRoom?.() ?? false,
       childRoomIds: room.isSpaceRoom?.()
         ? (state?.getStateEvents(EventType.SpaceChild) ?? [])
@@ -68,8 +80,8 @@ export class MatrixRoomMapper {
   mapMember(member: RoomMember): MatrixRoomMember {
     return {
       id: member.userId,
-      displayName: member.name || member.userId,
-      avatarUrl: this.media.resolve(member.getMxcAvatarUrl(), 80, 80),
+      displayName: this.profiles?.displayName(member, member.userId) || member.name || member.userId.replace(/^@/, "").split(":")[0],
+      avatarUrl: this.media.resolve((this.profiles ? this.profiles.resolve(member, member.userId) : member.getMxcAvatarUrl()), 80, 80),
       membership: membership(member.membership),
       isTyping: member.typing,
     };

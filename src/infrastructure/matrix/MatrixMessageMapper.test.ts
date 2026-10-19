@@ -26,6 +26,24 @@ function messageEvent(msgtype: string, body: string): MatrixEvent {
 }
 
 describe("MatrixMessageMapper", () => {
+  it("recognizes intentional incoming mentions of the signed-in user", () => {
+    const event = messageEvent("m.text", "Hello Me");
+    event.event.content!["m.mentions"] = { user_ids: ["@me:example"] };
+    expect(mapper.map(event, room)).toMatchObject({ mentionsOwnUser: true, mentions: [{ id: "@me:example" }] });
+    event.event.content!["m.mentions"] = { user_ids: ["@other:example"] };
+    expect(mapper.map(event, room)?.mentionsOwnUser).toBe(false);
+    (event.event.content! as Record<string, unknown>)["m.mentions"] = { user_ids: "@me:example" };
+    expect(mapper.map(event, room)?.mentionsOwnUser).toBe(false);
+  });
+  it.each(["m.room.create", "m.room.member", "m.room.power_levels", "m.room.join_rules", "m.room.history_visibility", "m.room.guest_access", "m.room.encryption", "m.room.pinned_events", "com.example.custom_state"])("keeps %s room state out of the message timeline", type => {
+    const event = new MatrixEvent({ event_id: "$state", room_id: room.roomId, sender: "@alice:example", type, state_key: "", content: {}, origin_server_ts: 1 });
+    expect(mapper.map(event, room)).toBeNull();
+  });
+
+  it("keeps pending encrypted messages visible", () => {
+    const event = new MatrixEvent({ event_id: "$encrypted", room_id: room.roomId, sender: "@alice:example", type: "m.room.encrypted", content: {}, origin_server_ts: 1 });
+    expect(mapper.map(event, room)?.type).toBe("encrypted");
+  });
   it.each([
     ["m.text", "text"],
     ["m.notice", "notice"],

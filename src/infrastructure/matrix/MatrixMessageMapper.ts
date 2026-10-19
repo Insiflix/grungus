@@ -1,4 +1,4 @@
-import { isCallSignallingEvent } from "./MatrixCallSignalling";
+import { isHiddenTimelineEvent } from "./MatrixTimelinePolicy";
 import {
   EventStatus,
   EventType,
@@ -14,6 +14,7 @@ import type {
   MatrixMessageType,
   MatrixReaction,
 } from "../../domain/matrix/MatrixTypes";
+import type { MatrixProfileAvatars } from "./MatrixProfileAvatars";
 import { MatrixMediaResolver } from "./MatrixMediaResolver";
 
 function sendState(status: EventStatus | null): MatrixMessageSendState {
@@ -47,7 +48,7 @@ function contentRecord(value: unknown): Record<string, unknown> {
 export class MatrixMessageMapper {
   private readonly media: MatrixMediaResolver;
 
-  constructor(private readonly client: MatrixClient) {
+  constructor(private readonly client: MatrixClient, private readonly profiles?: MatrixProfileAvatars) {
     this.media = new MatrixMediaResolver(client);
   }
 
@@ -55,15 +56,7 @@ export class MatrixMessageMapper {
     const type = event.getType();
     const rawTimestamp = event.getTs();
     const wireType = event.getWireType();
-    const relation = event.getRelation();
-    if (
-      isCallSignallingEvent(type) ||
-      type === EventType.Reaction ||
-      type === EventType.RoomRedaction ||
-      relation?.rel_type === RelationType.Replace
-    ) {
-      return null;
-    }
+    if (isHiddenTimelineEvent(event)) return null;
 
     const eventId = event.getId() ?? event.getTxnId();
     if (!eventId) return null;
@@ -72,8 +65,8 @@ export class MatrixMessageMapper {
     const senderMember = room.getMember(senderId);
     const sender = {
       id: senderId,
-      displayName: senderMember?.name || senderId,
-      avatarUrl: this.media.resolve(senderMember?.getMxcAvatarUrl(), 80, 80),
+      displayName: this.profiles?.displayName(senderMember, senderId) || senderMember?.name || this.client.getUser?.(senderId)?.displayName || senderId.replace(/^@/, "").split(":")[0],
+      avatarUrl: this.media.resolve((this.profiles ? this.profiles.resolve(senderMember, senderId) : senderMember?.getMxcAvatarUrl()), 80, 80),
     };
     const encryptedFailure =
       wireType === EventType.RoomMessageEncrypted && event.isDecryptionFailure();
@@ -84,6 +77,8 @@ export class MatrixMessageMapper {
     const relatesTo = contentRecord(content["m.relates_to"]);
     const inReplyTo = contentRecord(relatesTo["m.in_reply_to"]);
     const redacted = event.isRedacted();
+    const mentionIds = contentRecord(content["m.mentions"]).user_ids;
+    const mentions = Array.isArray(mentionIds) ? [...new Set(mentionIds.filter((id): id is string => typeof id === "string"))] : [];
 
     let mappedType: MatrixMessageType;
     let mappedBody: string;
@@ -118,6 +113,10 @@ export class MatrixMessageMapper {
       sendState: sendState(event.status),
       isOwn: senderId === this.client.getUserId(),
       isRedacted: redacted,
+      mentions: redacted ? [] : mentions.map(id => ({ id, displayName: this.profiles?.displayName(room.getMember(id), id) || room.getMember(id)?.name || id, avatarUrl: null })),
+      mentionsOwnUser: !redacted && mentions.includes(this.client.getUserId() ?? ""),
+      isPinned: room.currentState.getStateEvents(EventType.RoomPinnedEvents, "")?.getContent().pinned?.includes(eventId) ?? false,
+      canPin: room.currentState.maySendStateEvent(EventType.RoomPinnedEvents, this.client.getUserId() ?? ""),
     };
   }
 

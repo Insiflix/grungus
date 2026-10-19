@@ -6,7 +6,7 @@ export class MatrixAvatarLoader {
   private urls = new Set<string>();
   private controllers = new Set<AbortController>();
   private generation = 0;
-  constructor(private readonly client: MatrixClient, private readonly request: typeof fetch = fetch) {}
+  constructor(private readonly client: MatrixClient, private readonly request: typeof fetch = globalThis.fetch.bind(globalThis)) {}
 
   async load(url: string): Promise<string> {
     const target = new URL(url);

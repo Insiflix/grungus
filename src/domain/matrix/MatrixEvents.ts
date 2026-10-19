@@ -15,7 +15,7 @@ export interface MatrixApplicationEvents {
   roomUpdated: MatrixRoom;
   messageAdded: MatrixMessage;
   messageUpdated: MatrixMessage;
-  messageRemoved: { roomId: string; eventId: string };
+  messageRemoved: { roomId: string; eventId: string; placeholderOnly?: boolean };
   typingChanged: { roomId: string; members: MatrixRoomMember[] };
   receiptsChanged: { roomId: string };
 }

@@ -13,6 +13,7 @@ ipcRenderer.on("matrix-auth:callback", (_event, url: string) => {
 });
 
 const bridge: DesktopBridge = {
+  clipboard: { writeText: (text: string) => ipcRenderer.invoke("clipboard:write-text", text) },
   session: {
     load: () => ipcRenderer.invoke("matrix-session:load"),
     save: (value: PersistedMatrixSession) =>
