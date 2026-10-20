@@ -13,6 +13,13 @@ export interface SessionStoreResult {
 }
 
 export interface DesktopBridge {
+  windowControls: {
+    getState(): Promise<{ maximized: boolean }>;
+    minimize(): Promise<void>;
+    toggleMaximize(): Promise<void>;
+    close(): Promise<void>;
+    onStateChange(listener: (state: { maximized: boolean }) => void): () => void;
+  };
   clipboard: { writeText(text: string): Promise<void> };
   session: {
     load(): Promise<PersistedMatrixSession | null>;

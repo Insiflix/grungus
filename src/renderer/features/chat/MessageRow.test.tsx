@@ -20,7 +20,7 @@ describe("inline GIF messages", () => {
   });
   it("renders incoming emoji shortcodes and preserves literal code examples", () => {
     const html = render({ body: "Hello :smile: `:heart:`" });
-    expect(html).toContain("Hello 😄 `:heart:`");
+    expect(html).toContain("Hello 😄 <code>:heart:</code>");
   });
   it("renders received /gif messages as images rather than command text", () => {
     const html = render();

@@ -1,15 +1,27 @@
 import { ChevronDown } from "lucide-react";
 import { Phone, Video } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useRef, useState } from "react";
 import type { MatrixRoom, MatrixMessage } from "../../../domain/matrix/MatrixTypes";
 import { LockKeyhole as LockIcon, UsersRound as UsersIcon, UserPlus } from "lucide-react";
 import { PeopleDialog } from "../rooms/PeopleDialog";
 import { useMatrixTimeline } from "../../hooks/matrix/useMatrixTimeline";
 import { MessageComposer } from "./MessageComposer";
 import { MessageRow } from "./MessageRow";
+import type { MessageAction } from "./MessageContextMenu";
 import { BrandLogo } from "../../components/common/BrandLogo";
 import { usePreferences } from "../../hooks/usePreferences";
 import { Settings } from "lucide-react";
+
+// Typing and sync updates must not re-render unchanged Markdown message bodies.
+const TimelineMessage = memo(function TimelineMessage({ message, grouped, onReact, onAction, onMediaLoad }: {
+  message: MatrixMessage;
+  grouped: boolean;
+  onReact: (message: MatrixMessage, key: string) => Promise<void>;
+  onAction: (message: MatrixMessage, type: MessageAction) => Promise<void>;
+  onMediaLoad: () => void;
+}) {
+  return <MessageRow message={message} grouped={grouped} onReact={key => onReact(message, key)} onAction={type => onAction(message, type)} onMediaLoad={onMediaLoad} />;
+});
 
 interface TimelinePanelProps {
   room: MatrixRoom | null;
@@ -22,7 +34,7 @@ interface TimelinePanelProps {
 
 export function TimelinePanel({ room, onOpenIdentity, onOpenSettings, onCall, callActive, onDirectCall }: TimelinePanelProps) {
   const prefs = usePreferences();
-  const { messages, members, typingMembers, loadOlder, sendMessage, setTyping, toggleReaction, editMessage, deleteMessage, togglePin } =
+  const { messages, members, typingMembers, loadOlder, sendMessage, sendAttachment, getUploadLimit, setTyping, toggleReaction, editMessage, deleteMessage, togglePin } =
     useMatrixTimeline(room?.id ?? null);
   const [loadingOlder, setLoadingOlder] = useState(false);
   const [hasMore, setHasMore] = useState(true);
@@ -33,6 +45,15 @@ export function TimelinePanel({ room, onOpenIdentity, onOpenSettings, onCall, ca
   const previousRoom = useRef<string | null>(null);
   const previousLength = useRef(0);
   const nearBottom = useRef(true);
+
+  const handleMessageAction = useCallback(async (message: MatrixMessage, type: MessageAction) => {
+    if (type === "reply" || type === "edit") setAction({ type, message });
+    else if (type === "delete") await deleteMessage(message);
+    else await togglePin(message);
+  }, [deleteMessage, togglePin]);
+  const handleMediaLoad = useCallback(() => {
+    if (nearBottom.current) endRef.current?.scrollIntoView({ block: "end" });
+  }, []);
 
   useEffect(() => {
     const changedRoom = previousRoom.current !== room?.id;
@@ -111,17 +132,13 @@ export function TimelinePanel({ room, onOpenIdentity, onOpenSettings, onCall, ca
                 message.timestamp - previous.timestamp < 5 * 60_000,
             );
             return (
-              <MessageRow
+              <TimelineMessage
                 key={message.id}
                 message={message}
                 grouped={grouped}
-                onReact={(key) => toggleReaction(message, key)}
-                onAction={async type => {
-                  if (type === "reply" || type === "edit") setAction({ type, message });
-                  else if (type === "delete") await deleteMessage(message);
-                  else await togglePin(message);
-                }}
-                onMediaLoad={() => { if (nearBottom.current) endRef.current?.scrollIntoView({ block: "end" }); }}
+                onReact={toggleReaction}
+                onAction={handleMessageAction}
+                onMediaLoad={handleMediaLoad}
               />
             );
           })}
@@ -148,6 +165,8 @@ export function TimelinePanel({ room, onOpenIdentity, onOpenSettings, onCall, ca
             else await sendMessage(body, activeAction?.message.id);
             setAction(null);
           }}
+          getUploadLimit={getUploadLimit}
+          onSendAttachment={async (file, onProgress) => { await sendAttachment(file, onProgress, activeAction?.type === "reply" ? activeAction.message.id : undefined); setAction(null); }}
           onTyping={setTyping}
         />
       </div>

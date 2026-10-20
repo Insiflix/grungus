@@ -13,6 +13,17 @@ ipcRenderer.on("matrix-auth:callback", (_event, url: string) => {
 });
 
 const bridge: DesktopBridge = {
+  windowControls: {
+    getState: () => ipcRenderer.invoke("window:state"),
+    minimize: () => ipcRenderer.invoke("window:minimize"),
+    toggleMaximize: () => ipcRenderer.invoke("window:toggle-maximize"),
+    close: () => ipcRenderer.invoke("window:close"),
+    onStateChange: listener => {
+      const callback = (_event: Electron.IpcRendererEvent, state: { maximized: boolean }) => listener(state);
+      ipcRenderer.on("window:state-changed", callback);
+      return () => { ipcRenderer.removeListener("window:state-changed", callback); };
+    },
+  },
   clipboard: { writeText: (text: string) => ipcRenderer.invoke("clipboard:write-text", text) },
   session: {
     load: () => ipcRenderer.invoke("matrix-session:load"),

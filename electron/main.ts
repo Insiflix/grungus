@@ -1,3 +1,4 @@
+import { registerWindowControls } from "./windowControls.js";
 import { DesktopCaptureBroker } from "./desktopCapture.js";
 import { configureAppPermissions } from "./permissions.js";
 import { app, BrowserWindow, clipboard, ipcMain, safeStorage, shell, session, protocol, net, desktopCapturer } from "electron";
@@ -117,7 +118,8 @@ function createWindow(): void {
     minHeight: 640,
     backgroundColor: "#090d18",
     icon: path.join(app.getAppPath(), app.isPackaged ? "dist" : "public", process.platform === "win32" ? "grungus.ico" : "grungus.png"),
-    titleBarStyle: process.platform === "darwin" ? "hiddenInset" : "default",
+    frame: false,
+    autoHideMenuBar: true,
     show: false,
     webPreferences: {
       preload: path.join(__dirname, "preload.cjs"),
@@ -128,6 +130,11 @@ function createWindow(): void {
       allowRunningInsecureContent: false,
     },
   });
+
+  mainWindow.removeMenu();
+  const publishWindowState = () => mainWindow?.webContents.send("window:state-changed", { maximized: mainWindow.isMaximized() });
+  mainWindow.on("maximize", publishWindowState);
+  mainWindow.on("unmaximize", publishWindowState);
 
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
     if (url.startsWith("https://")) void shell.openExternal(url);
@@ -155,6 +162,7 @@ function createWindow(): void {
 }
 
 function registerIpc(): void {
+  registerWindowControls(ipcMain, () => mainWindow, isTrustedRendererUrl);
   ipcMain.handle("clipboard:write-text", (event, text: unknown) => {
     if (event.sender !== mainWindow?.webContents || event.senderFrame !== mainWindow.webContents.mainFrame || !isTrustedRendererUrl(event.senderFrame.url)) throw new Error("Untrusted clipboard request");
     if (typeof text !== "string") throw new Error("Invalid clipboard text");
