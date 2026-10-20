@@ -1,0 +1,98 @@
+/* Static procedural wallpapers stay sharp at every window size. */
+:root[data-theme="aurora"], [data-theme-preview="aurora"] {
+  color-scheme: dark;
+  --bg-deep: #080f20; --bg-base: #111d30;
+  --surface-1: #17273ce0; --surface-2: #233b516b; --surface-3: #7eacbe2b;
+  --glass: #102035b0; --glass-heavy: #0e1c2ff5;
+  --border: #a4d8df24; --border-strong: #a4d8df45;
+  --text: #ecf8ff; --text-soft: #c2d7e6; --text-muted: #a0b8cf;
+  --accent: #8de6cc; --accent-strong: #64c9b0; --accent-soft: #8de6cc20; --cyan: #b9c6ff;
+  --theme-primary-ink: #09251f;
+  --theme-wallpaper: radial-gradient(ellipse at 72% -15%, #8c58bc80, transparent 60%), radial-gradient(ellipse at 26% 40%, #1d9e9278, transparent 46%), conic-gradient(from 225deg at 5% 100%, #090f20 0deg, #142a43 20deg, #2d8979 33deg, #142139 43deg, #080f20 72deg);
+}
+:root[data-theme="orbit"], [data-theme-preview="orbit"] {
+  color-scheme: dark;
+  --bg-deep: #0a091b; --bg-base: #17142b;
+  --surface-1: #211c38e8; --surface-2: #3b315a75; --surface-3: #ad96e92b;
+  --glass: #171327b8; --glass-heavy: #161226f5;
+  --border: #c5b9f024; --border-strong: #c5b9f047;
+  --text: #f4f0ff; --text-soft: #d9ceef; --text-muted: #b6a7cd;
+  --accent: #c9b3ff; --accent-strong: #aa8ce9; --accent-soft: #c9b3ff22; --cyan: #8edbe9;
+  --theme-primary-ink: #24143c;
+  --theme-wallpaper: radial-gradient(circle at 27px 39px, #e6ddffb3 .7px, transparent 1.5px), radial-gradient(circle at 102px 118px, #c5ddff80 .8px, transparent 1.6px), radial-gradient(ellipse at 75% 22%, #67417e70, transparent 49%), linear-gradient(130deg, #080d22, #20152f 62%, #091325);
+  --theme-wallpaper-size: 211px 197px, 337px 283px, cover, cover;
+  --theme-wallpaper-repeat: repeat, repeat, no-repeat, no-repeat;
+}
+:root[data-theme="sundown"], [data-theme-preview="sundown"] {
+  color-scheme: dark;
+  --bg-deep: #211015; --bg-base: #2b1b21;
+  --surface-1: #402a2ce8; --surface-2: #76504d66; --surface-3: #f3b58a24;
+  --glass: #2b1b21b3; --glass-heavy: #291b20f5;
+  --border: #f6c3a224; --border-strong: #f6c3a245;
+  --text: #fff2e7; --text-soft: #ecd0c2; --text-muted: #c9a99f;
+  --accent: #ffbd8c; --accent-strong: #e7a174; --accent-soft: #ffbd8c22; --cyan: #f0c7ac;
+  --theme-primary-ink: #3b2016;
+  --theme-wallpaper: linear-gradient(165deg, transparent 60%, #3f2335 60.2%, #251725 79%, transparent 79.2%), linear-gradient(20deg, #1d1624 28%, transparent 28.2%), radial-gradient(circle at 76% 27%, #eeb893 0 8%, #eeb89300 8.15%), linear-gradient(#482c46, #a56563 53%, #4e3040);
+}
+:root[data-theme="rosewater"], [data-theme-preview="rosewater"] {
+  color-scheme: light;
+  --bg-deep: #f2e4e8; --bg-base: #fff8fa;
+  --surface-1: #fffbfdf2; --surface-2: #eedce699; --surface-3: #be8fa82b;
+  --glass: #fff8fac7; --glass-heavy: #fff8faf7;
+  --border: #713b5a24; --border-strong: #713b5a45;
+  --text: #3c253a; --text-soft: #63465c; --text-muted: #795d73;
+  --accent: #95426c; --accent-strong: #7b3159; --accent-soft: #95426c16; --cyan: #7657a8;
+  --success: #32725c; --danger: #b13153; --warning: #89601e;
+  --theme-primary-ink: #fff8fa; --shadow-lg: 0 18px 55px #74466024; --shadow-soft: 0 8px 28px #74466016;
+  --theme-wallpaper: radial-gradient(ellipse at 8% 18%, #ecd4e9, transparent 55%), radial-gradient(ellipse at 92% 75%, #d9d1eb, transparent 58%), linear-gradient(140deg, #fff3ed, #f0e4ed 64%, #e2e8e3);
+}
+
+/* Retheme the full interface, including surfaces that predate theme tokens. */
+:root:is([data-theme="aurora"], [data-theme="orbit"], [data-theme="sundown"], [data-theme="rosewater"]) {
+  --reaction-own-bg: var(--accent-soft); --reaction-own-hover: var(--surface-3);
+  --reaction-own-border: var(--accent); --reaction-own-text: var(--accent);
+  --mention-bg: var(--accent-soft); --mention-text: var(--accent);
+  --theme-pane: color-mix(in srgb, var(--bg-base) 76%, transparent);
+  --theme-workspace: color-mix(in srgb, var(--bg-base) 62%, transparent);
+  --theme-field: color-mix(in srgb, var(--bg-base) 88%, transparent);
+}
+:root:is([data-theme="aurora"], [data-theme="orbit"], [data-theme="sundown"], [data-theme="rosewater"]) body {
+  background-color: var(--bg-deep); background-image: var(--theme-wallpaper); background-size: var(--theme-wallpaper-size, cover); background-attachment: fixed; background-repeat: var(--theme-wallpaper-repeat, no-repeat);
+}
+:root:is([data-theme="aurora"], [data-theme="orbit"], [data-theme="sundown"], [data-theme="rosewater"]) :is(.app-shell, .login-screen, .splash-screen) { background: transparent; }
+:root:is([data-theme="aurora"], [data-theme="orbit"], [data-theme="sundown"], [data-theme="rosewater"]) :is(.workspace-rail, .room-sidebar, .room-header, .composer, .dm-tab, .account-strip, .login-panel, .voice-channel-chat, .room-members) { background: var(--theme-pane); border-color: var(--border-strong); }
+:root:is([data-theme="aurora"], [data-theme="orbit"], [data-theme="sundown"], [data-theme="rosewater"]) .chat-workspace { background: var(--theme-workspace); }
+:root:is([data-theme="aurora"], [data-theme="orbit"], [data-theme="sundown"], [data-theme="rosewater"]) :is(.room-header, .chat-workspace, .login-panel) { backdrop-filter: blur(18px); }
+:root:is([data-theme="aurora"], [data-theme="orbit"], [data-theme="sundown"], [data-theme="rosewater"]) :is(.settings-dialog, .room-settings-dialog, .people-dialog, .identity-dialog, .gif-picker, .emoji-picker, .call-panel, .direct-call, .active-calls, .call-options > div, .voice-dock) { background: var(--glass-heavy); color: var(--text); border-color: var(--border-strong); }
+:root:is([data-theme="aurora"], [data-theme="orbit"], [data-theme="sundown"], [data-theme="rosewater"]) :is(.room-search, .auth-form input, .join-room input, .people-search input, .auth-mode, .registration-verification, .dm-add-button) { background: var(--theme-field); color: var(--text); }
+:root:is([data-theme="aurora"], [data-theme="orbit"], [data-theme="sundown"], [data-theme="rosewater"]) :is(.room-row, .channel-row, .rail-button).is-selected,
+:root:is([data-theme="aurora"], [data-theme="orbit"], [data-theme="sundown"], [data-theme="rosewater"]) :is(.dm-tab.is-selected, .rail-button.is-active) { background: var(--accent-soft); border-color: var(--border-strong); }
+:root:is([data-theme="aurora"], [data-theme="orbit"], [data-theme="sundown"], [data-theme="rosewater"]) :is(.message-row:hover, .dm-tab:hover) { background: var(--surface-3); }
+:root:is([data-theme="aurora"], [data-theme="orbit"], [data-theme="sundown"], [data-theme="rosewater"]) :is(.message-row__content p, .message-row__content header strong) { color: var(--text); text-shadow: none; }
+:root:is([data-theme="aurora"], [data-theme="orbit"], [data-theme="sundown"], [data-theme="rosewater"]) :is(.empty-chat, .timeline__inner) { text-shadow: none; }
+:root:is([data-theme="aurora"], [data-theme="orbit"], [data-theme="sundown"], [data-theme="rosewater"]) .composer-region { background: linear-gradient(transparent, var(--theme-pane)); }
+:root:is([data-theme="aurora"], [data-theme="orbit"], [data-theme="sundown"], [data-theme="rosewater"]) :is(.button--primary, .composer__send, .direct-call__answer) { color: var(--theme-primary-ink); background: var(--accent); border-color: var(--accent); }
+:root:is([data-theme="aurora"], [data-theme="orbit"], [data-theme="sundown"], [data-theme="rosewater"]) .button--secondary { color: var(--text); background: var(--surface-2); border-color: var(--border-strong); }
+:root:is([data-theme="aurora"], [data-theme="orbit"], [data-theme="sundown"], [data-theme="rosewater"]) .avatar { background: linear-gradient(145deg, var(--surface-3), var(--bg-base)); color: var(--text); }
+:root:is([data-theme="aurora"], [data-theme="orbit"], [data-theme="sundown"], [data-theme="rosewater"]) .desktop-titlebar { background: var(--bg-deep); color: var(--text-muted); }
+:root:is([data-theme="aurora"], [data-theme="orbit"], [data-theme="sundown"], [data-theme="rosewater"]) :is(.conversation-call, .conversation-call--voice) { background: radial-gradient(ellipse at center, var(--accent-soft), transparent 70%); }
+:root[data-theme="rosewater"] :is(.themed-select__trigger, .settings-content .themed-select__trigger) { color-scheme: light; }
+:root[data-theme="rosewater"] :is(.call-panel small, .voice-dock__status small, .voice-dock__identity small) { color: var(--text-muted); }
+
+/* Theme cards show the actual wallpaper and an interface sample. */
+.settings-theme-options { grid-template-columns: repeat(auto-fit, minmax(min(100%, 175px), 1fr)); }
+.settings-theme { min-width: 0; }
+.settings-theme > .theme-preview { display: flex; position: relative; gap: 5px; height: 92px; padding: 10px; overflow: hidden; background-image: var(--theme-wallpaper); background-size: var(--theme-wallpaper-size, cover); background-position: center; border: 1px solid var(--border); }
+[data-theme-preview="forest"] { --theme-wallpaper: url("../assets/toad-forest.png"); --glass: #10273099; --accent: #b1dbce; }
+[data-theme-preview="dark"] { --theme-wallpaper: linear-gradient(135deg, #252c35, #10151c); --glass: #1b2536d9; --accent: #b1dbce; }
+[data-theme-preview="light"] { --theme-wallpaper: linear-gradient(135deg, #fff, #cfdcd8); --glass: #ffffffd9; --accent: #34745f; }
+.theme-preview__sidebar, .theme-preview__chat { display: flex; flex-direction: column; gap: 6px; padding: 8px; border-radius: 5px; background: var(--glass); border: 1px solid var(--border); }
+.theme-preview__sidebar { width: 28%; }
+.theme-preview__chat { flex: 1; padding-top: 14px; }
+.theme-preview i { display: block; flex-shrink: 0; width: 80%; height: 4px; border-radius: 3px; background: var(--accent); opacity: .65; }
+.theme-preview__sidebar i:first-child { width: 100%; opacity: 1; }
+.theme-preview__chat i:nth-child(2) { width: 55%; opacity: .35; }
+.theme-preview__chat i:nth-child(3) { width: 65%; opacity: .35; }
+.theme-preview__check { position: absolute; right: 6px; bottom: 6px; padding: 3px; width: 22px; height: 22px; border-radius: 50%; background: var(--accent); color: var(--bg-base); }
+.settings-theme strong { display: block; font-size: 12px; }
+.settings-theme small { display: block; min-height: 30px; margin-top: 5px; color: var(--text-muted); font-size: 10px; line-height: 1.5; }

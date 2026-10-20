@@ -1,4 +1,7 @@
 import { getUploadLimit } from "./MatrixUploadLimit";
+import { PendingMessageError } from "../../domain/messaging/PendingMessageError";
+import { searchMatrixMessages } from "./MatrixMessageSearch";
+import type { MessageSearchQuery, MessageSearchResults } from "../../domain/messaging/MessageSearch";
 import { sendAttachment, loadAttachment } from "./MatrixAttachments";
 import type { MessageAttachment } from "../../domain/messaging/Attachments";
 import { MatrixDirectCalls } from "./MatrixDirectCalls";
@@ -6,7 +9,7 @@ import { directInvitePeer } from "./MatrixDirectRooms";
 import { collectTimelineEvents, loadLatestRoomEvents, oldestLoadedTimeline } from "./MatrixTimelineLoader";
 import { createMentionContent } from "../../domain/messaging/Mentions";
 import { closedDirectRoomIds, closedDirectRoomsEvent } from "./MatrixClosedDirectRooms";
-import type { ICallProvider } from "../../domain/calls/ICallProvider";
+import type { ICallProvider, CallOptions } from "../../domain/calls/ICallProvider";
 import { observeRoomCalls, type RoomCall } from "./MatrixRoomCalls";
 import { mountMatrixCall } from "./MatrixCallDriver";
 import {
@@ -25,7 +28,7 @@ import {
   RoomMemberEvent,
   RoomStateEvent,
   SyncState,
-  type EventStatus,
+  EventStatus,
   type MatrixClient,
   type MatrixEvent,
   type Room,
@@ -78,7 +81,7 @@ export class MatrixJsSdkClient implements IMatrixClient, ICallProvider {
   });
   readonly directCalls = new MatrixDirectCalls();
   observeCalls = (listener: (calls: RoomCall[]) => void) => observeRoomCalls(this.requireClient(), listener);
-  mountCall = (iframe: HTMLIFrameElement, roomId: string, video: boolean, onClose: () => void, onReady?: () => void, onJoined?: () => void) => mountMatrixCall(this.requireClient(), iframe, roomId, video, onClose, onReady, onJoined);
+  mountCall = (iframe: HTMLIFrameElement, roomId: string, video: boolean, onClose: () => void, onReady?: () => void, onJoined?: () => void, options?: CallOptions) => mountMatrixCall(this.requireClient(), iframe, roomId, video, onClose, onReady, onJoined, options);
   private profileAvatars: MatrixProfileAvatars | null = null;
   private avatars: MatrixAvatarLoader | null = null;
   loadAvatar = (url: string): Promise<string> => this.avatars ? this.avatars.load(url) : Promise.reject(new Error("Not connected"));
@@ -441,6 +444,19 @@ export class MatrixJsSdkClient implements IMatrixClient, ICallProvider {
     this.emit("roomsChanged", this.getRooms());
   }
 
+  searchMessages(query: MessageSearchQuery, signal?: AbortSignal, onProgress?: (result: MessageSearchResults) => void) {
+    return searchMatrixMessages(this.requireClient(), query, (event, room) => this.mapMessage(event, room), signal, onProgress);
+  }
+  async getMessageContext(roomId: string, eventId: string): Promise<MatrixMessage[]> {
+    const client = this.requireClient(); const room = this.requireRoom(roomId);
+    if (room.getMyMembership() !== "join") throw new Error("Join this room before opening its history.");
+    const timeline = await client.getEventTimeline(room.getUnfilteredTimelineSet(), eventId);
+    this.assertCurrent(client);
+    if (!timeline) throw new Error("This message is no longer available.");
+    const events = timeline.getEvents();
+    await Promise.allSettled(events.map(event => client.decryptEventIfNeeded(event)));
+    return events.map(event => this.mapMessage(event, room)).filter((message): message is MatrixMessage => message !== null);
+  }
   getTimeline(roomId: string): MatrixMessage[] {
     const room = this.requireRoom(roomId);
     const events = collectTimelineEvents(room.getLiveTimeline());
@@ -512,18 +528,43 @@ export class MatrixJsSdkClient implements IMatrixClient, ICallProvider {
         "m.in_reply_to": { event_id: options.replyToEventId },
       };
     }
+    const pending = new Set(this.pendingEvents(roomId).map(event => event.getId()));
     const response = await this.requireClient().sendEvent(
       roomId,
       EventType.RoomMessage,
       content,
-    );
+    ).catch(error => { throw this.pendingSendError(roomId, pending, error, trimmed); });
     return response.event_id;
   }
 
   getUploadLimit = () => getUploadLimit(this.requireClient());
   sendAttachment(roomId: string, file: File, onProgress?: (percent: number) => void, options?: MatrixSendTextOptions) {
-    this.requireRoom(roomId);
-    return sendAttachment(this.requireClient(), roomId, file, onProgress, options);
+    const pending = new Set(this.pendingEvents(roomId).map(event => event.getId()));
+    return sendAttachment(this.requireClient(), roomId, file, onProgress, options).catch(error => { throw this.pendingSendError(roomId, pending, error, file.name); });
+  }
+  private pendingEvents(roomId: string): MatrixEvent[] {
+    const room = this.requireRoom(roomId);
+    try { if (room.getPendingEvents) return room.getPendingEvents(); } catch { /* Chronological local echoes live in the timeline. */ }
+    return collectTimelineEvents(room.getLiveTimeline()).filter(event => event.status != null);
+  }
+  private pendingSendError(roomId: string, previous: Set<string | undefined>, cause: unknown, body: string): Error {
+    const attached = cause && typeof cause === "object" && "event" in cause ? (cause as { event?: MatrixEvent }).event : undefined;
+    const event = attached?.getRoomId() === roomId && attached.status === EventStatus.NOT_SENT ? attached : this.pendingEvents(roomId).find(event => !previous.has(event.getId()) && event.status === EventStatus.NOT_SENT && event.getContent().body === body);
+    const message = cause instanceof Error ? cause.message : "Message could not be sent.";
+    return event?.getId() ? new PendingMessageError(message, event.getId()!) : cause instanceof Error ? cause : new Error(message);
+  }
+  async retryMessage(roomId: string, eventId: string): Promise<void> {
+    const room = this.requireRoom(roomId);
+    const event = this.pendingEvents(roomId).find(event => event.getId() === eventId);
+    if (!event || event.status !== EventStatus.NOT_SENT || event.getSender() !== this.requireClient().getUserId()) throw new Error("This message is already sent or cannot be retried.");
+    await this.requireClient().resendEvent(event, room);
+  }
+  async cancelSend(roomId: string, eventId: string): Promise<void> {
+    const room = this.requireRoom(roomId);
+    const event = this.pendingEvents(roomId).find(event => event.getId() === eventId);
+    if (!event || ![EventStatus.NOT_SENT, EventStatus.QUEUED].includes(event.status!) || event.getSender() !== this.requireClient().getUserId()) throw new Error("Only failed or queued messages can be cancelled.");
+    this.requireClient().cancelPendingEvent(event);
+    this.emit("messageRemoved", { roomId, eventId });
   }
   loadAttachment = (attachment: MessageAttachment, signal?: AbortSignal) => loadAttachment(this.requireClient(), attachment, signal);
 

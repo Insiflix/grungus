@@ -54,11 +54,11 @@ export function MessageContextMenu({ message, position, onClose, onReact, onEmoj
   }}>
     <div className="message-context-menu__reactions" role="group" aria-label="Suggested reactions">
       {["👍", "❤️", "😂", "🎉"].map(emoji => <button role="menuitem" type="button" key={emoji} aria-label={`React with ${emoji}`} disabled={busy} onClick={() => void run(() => onReact(emoji))}>{emoji}</button>)}
-      <button role="menuitem" type="button" aria-label="Choose reaction emoji" title="More reactions" disabled={busy} onClick={onEmoji}><SmilePlus size={20} /></button>
+      <button role="menuitem" type="button" aria-label="Choose reaction emoji" data-tooltip="More reactions" disabled={busy} onClick={onEmoji}><SmilePlus size={20} /></button>
     </div>
     <button role="menuitem" disabled={busy} onClick={() => void run(() => onAction("reply"))}>Reply <Reply /></button>
     <button role="menuitem" disabled={busy} onClick={() => void run(() => window.desktop?.clipboard ? window.desktop.clipboard.writeText(message.body) : navigator.clipboard.writeText(message.body))}>Copy text <Copy /></button>
-    <button role="menuitem" disabled={busy || message.canPin === false} title={message.canPin === false ? "You do not have permission to pin messages" : undefined} onClick={() => void run(() => onAction("pin"))}>{message.isPinned ? "Unpin message" : "Pin message"}<Pin /></button>
+    <button role="menuitem" disabled={busy || message.canPin === false} data-tooltip={message.canPin === false ? "You do not have permission to pin messages" : undefined} onClick={() => void run(() => onAction("pin"))}>{message.isPinned ? "Unpin message" : "Pin message"}<Pin /></button>
     {message.isOwn && <>
       {["text", "notice", "emote"].includes(message.type) && <button role="menuitem" disabled={busy} onClick={() => void run(() => onAction("edit"))}>Edit message <Pencil /></button>}
       <button role="menuitem" className="is-danger" disabled={busy} onClick={() => void run(() => onAction("delete"))}>Delete message <Trash2 /></button>

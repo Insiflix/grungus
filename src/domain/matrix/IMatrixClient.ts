@@ -1,5 +1,6 @@
 import type { MessageAttachment } from "../messaging/Attachments";
 import type { MatrixEventSource } from "./MatrixEvents";
+import type { MessageSearchQuery, MessageSearchResults } from "../messaging/MessageSearch";
 import type {
   MatrixMessage,
   MatrixRoom,
@@ -44,6 +45,8 @@ export interface IMatrixClient extends MatrixEventSource {
   setDirectMessageClosed(roomId: string, closed: boolean): Promise<void>;
 
   getTimeline(roomId: string): MatrixMessage[];
+  searchMessages(query: MessageSearchQuery, signal?: AbortSignal, onProgress?: (result: MessageSearchResults) => void): Promise<MessageSearchResults>;
+  getMessageContext(roomId: string, eventId: string): Promise<MatrixMessage[]>;
   refreshTimeline(roomId: string): Promise<MatrixMessage[]>;
   loadOlderMessages(roomId: string, limit?: number): Promise<MatrixTimelinePage>;
 
@@ -53,6 +56,8 @@ export interface IMatrixClient extends MatrixEventSource {
     options?: MatrixSendTextOptions,
   ): Promise<string>;
   getUploadLimit(): Promise<number | null>;
+  retryMessage(roomId: string, eventId: string): Promise<void>;
+  cancelSend(roomId: string, eventId: string): Promise<void>;
   sendAttachment(roomId: string, file: File, onProgress?: (percent: number) => void, options?: MatrixSendTextOptions): Promise<string>;
   loadAttachment(attachment: MessageAttachment, signal?: AbortSignal): Promise<Blob>;
   editMessage(roomId: string, eventId: string, body: string): Promise<string>;

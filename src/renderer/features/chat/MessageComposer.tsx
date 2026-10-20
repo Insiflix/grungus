@@ -1,5 +1,5 @@
 import { AttachmentDraft, AttachmentDropOverlay, useAttachmentDraft } from "./AttachmentDraft";
-import { useEffect, useId, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
+import { useEffect, useLayoutEffect, useId, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
 import { Plus as PlusIcon, SendHorizontal as SendIcon, Smile } from "lucide-react";
 import { createGifMessage } from "../../../domain/messaging/GifMessage";
 import { GifPicker } from "./GifPicker";
@@ -10,8 +10,12 @@ import type { MatrixMessage, MatrixRoomMember } from "../../../domain/matrix/Mat
 import { mentionQueryAt, searchMentionMembers } from "../../../domain/messaging/Mentions";
 import { TypingNotifications } from "./TypingNotifications";
 import { Avatar } from "../../components/common/Avatar";
+import { roomDrafts, useRoomDraft } from "./RoomDrafts";
+import { PendingMessageError } from "../../../domain/messaging/PendingMessageError";
 
 interface MessageComposerProps {
+  draftKey?: string;
+  onSendComplete?: () => void;
   roomName: string;
   onSend(body: string): Promise<void>;
   onTyping(typing: boolean): void;
@@ -23,13 +27,16 @@ interface MessageComposerProps {
   members?: MatrixRoomMember[];
 }
 
-export function MessageComposer({ roomName, onSend, onTyping, onSendAttachment, getUploadLimit, editing, replying, onCancelAction, members = [] }: MessageComposerProps) {
+export function MessageComposer({ roomName, draftKey, onSendComplete, onSend, onTyping, onSendAttachment, getUploadLimit, editing, replying, onCancelAction, members = [] }: MessageComposerProps) {
+  const savedDraft = useRoomDraft(draftKey);
   const prefs = usePreferences();
-  const [body, setBody] = useState("");
-  const [sending, setSending] = useState(false);
+  const [body, setBody] = useState(() => savedDraft.body);
+  const [sending, setSending] = useState(() => Boolean(savedDraft.sending));
+  useEffect(() => { if (draftKey) setSending(Boolean(savedDraft.sending)); }, [draftKey, savedDraft.sending]);
   const form = useRef<HTMLFormElement>(null);
   const fileInput = useRef<HTMLInputElement>(null);
-  const attachments = useAttachmentDraft(form, Boolean(onSendAttachment) && !sending && !editing);
+  const attachments = useAttachmentDraft(form, Boolean(onSendAttachment) && !sending && !editing, draftKey);
+  useEffect(() => { if (draftKey && !editing && !sending) setBody(savedDraft.body); }, [draftKey, savedDraft.body, editing, sending]);
   const [uploadLimit, setUploadLimit] = useState<number | null | undefined>(undefined);
   const [limitError, setLimitError] = useState(false);
   const [limitRetry, setLimitRetry] = useState(0);
@@ -43,6 +50,7 @@ export function MessageComposer({ roomName, onSend, onTyping, onSendAttachment, 
   const attachmentsBlocked = !editing && attachments.files.length > 0 && (oversized.length > 0 || Boolean(getUploadLimit && (uploadLimit === undefined || limitError)));
   const [uploadProgress, setUploadProgress] = useState<{ id: string; percent: number } | null>(null);
   const [sendError, setSendError] = useState("");
+  const [retryable, setRetryable] = useState(false);
   const [gifOpen, setGifOpen] = useState(false);
   const [emojiOpen, setEmojiOpen] = useState(false);
   const [caret, setCaret] = useState(0);
@@ -50,6 +58,30 @@ export function MessageComposer({ roomName, onSend, onTyping, onSendAttachment, 
   const [dismissed, setDismissed] = useState<string | null>(null);
   const textarea = useRef<HTMLTextAreaElement>(null);
   const selection = useRef({ start: 0, end: 0 });
+  const restoredDraft = useRef<{ key: string; body: string } | null>(null);
+  const locallyEdited = useRef(false);
+  const restoringSelection = useRef(false);
+  useLayoutEffect(() => {
+    if (editing) { restoredDraft.current = null; return; }
+    if (!draftKey || sending || !savedDraft.hydrated || body !== savedDraft.body || !textarea.current) return;
+    if (restoredDraft.current?.key === draftKey && restoredDraft.current.body === body) return;
+    const start = Math.max(0, Math.min(savedDraft.selection?.start ?? body.length, body.length));
+    const end = Math.max(start, Math.min(savedDraft.selection?.end ?? body.length, body.length));
+    const direction = savedDraft.selection?.direction ?? "none";
+    restoredDraft.current = { key: draftKey, body };
+    selection.current = { start, end }; setCaret(direction === "backward" ? start : end);
+    restoringSelection.current = true;
+    textarea.current.focus({ preventScroll: true });
+    textarea.current.setSelectionRange(start, end, direction);
+    restoringSelection.current = false;
+  }, [draftKey, savedDraft.hydrated, savedDraft.body, savedDraft.selection, body, editing, sending]);
+  const rememberSelection = (node: HTMLTextAreaElement) => {
+    if (restoringSelection.current) return;
+    const start = node.selectionStart, end = node.selectionEnd;
+    const direction = node.selectionDirection;
+    selection.current = { start, end }; setCaret(direction === "backward" ? start : end);
+    if (!editing && !sending && (savedDraft.hydrated || locallyEdited.current)) roomDrafts.patch(draftKey, { selection: { start, end, direction } });
+  };
   const suggestionList = useRef<HTMLDivElement>(null);
   const suggestionId = useId();
   const token = emojiQueryAt(body, caret);
@@ -92,7 +124,10 @@ export function MessageComposer({ roomName, onSend, onTyping, onSendAttachment, 
   }, [roomName]);
 
   const updateBody = (value: string) => {
+    locallyEdited.current = true;
+    if (draftKey) restoredDraft.current = { key: draftKey, body: value };
     setBody(value);
+    if (!editing) roomDrafts.patch(draftKey, { body: value });
     typingNotifications.current?.update(Boolean(value));
   };
 
@@ -116,39 +151,55 @@ export function MessageComposer({ roomName, onSend, onTyping, onSendAttachment, 
     event?.preventDefault();
     const message = prefs.convertEmoji ? replaceEmojiShortcodes(body.trim()) : body.trim();
     const pendingFiles = editing ? [] : attachments.files;
-    if ((!message && !pendingFiles.length) || sendLock.current) return;
+    if ((!message && !pendingFiles.length) || sendLock.current || savedDraft.sending) return;
     if (attachmentsBlocked) return;
     let messageSent = !message;
+    let activeAttachment: string | undefined;
     sendLock.current = true;
     setSendError("");
+    setRetryable(false);
     setBody("");
     setCaret(0); selection.current = { start: 0, end: 0 };
     setSending(true);
+    roomDrafts.patch(draftKey, { sending: true });
     typingNotifications.current?.stop();
     try {
       if (message) { await onSend(message); messageSent = true; }
+      if (!editing && messageSent) roomDrafts.patch(draftKey, { body: "" });
       for (const item of pendingFiles) {
+        activeAttachment = item.id;
         if (!onSendAttachment) throw new Error("File uploads are unavailable.");
         await onSendAttachment(item.file, percent => setUploadProgress({ id: item.id, percent }));
         attachments.remove(item.id);
       }
+      onSendComplete?.();
     } catch (error) {
-      setSendError(error instanceof Error ? error.message : "Message could not be saved. Please try again.");
+      const pending = error instanceof PendingMessageError;
+      if (pending && activeAttachment) attachments.remove(activeAttachment);
+      if (pending && !messageSent) { messageSent = true; roomDrafts.patch(draftKey, { body: "" }); }
+      setRetryable(!pending);
+      setSendError(pending ? `${error.message} Use Retry or Cancel on the failed message.` : error instanceof Error ? error.message : "Message could not be saved. Please try again.");
       if (!messageSent) { setBody(message);
       setCaret(message.length); selection.current = { start: message.length, end: message.length }; }
     } finally {
       sendLock.current = false;
       setUploadProgress(null);
       setSending(false);
+      roomDrafts.patch(draftKey, { sending: false });
     }
   };
 
   const sendGif = async (url: string) => {
-    if (sendLock.current) throw new Error("Eine Nachricht wird bereits gesendet.");
+    if (sendLock.current || savedDraft.sending) throw new Error("Eine Nachricht wird bereits gesendet.");
     const message = createGifMessage(url);
     sendLock.current = true; setSending(true); typingNotifications.current?.stop();
-    try { await onSend(message); }
-    finally { sendLock.current = false; setSending(false); }
+    roomDrafts.patch(draftKey, { sending: true });
+    try { await onSend(message); onSendComplete?.(); }
+    catch (cause) {
+      if (!(cause instanceof PendingMessageError)) throw cause;
+      setGifOpen(false); setRetryable(false); setSendError(`${cause.message} Use Retry or Cancel on the failed message.`);
+    }
+    finally { sendLock.current = false; setSending(false); roomDrafts.patch(draftKey, { sending: false }); }
   };
 
   const handleKeyDown = (event: KeyboardEvent<HTMLTextAreaElement>) => {
@@ -178,11 +229,12 @@ export function MessageComposer({ roomName, onSend, onTyping, onSendAttachment, 
     {attachments.files.length > 0 && !editing && <AttachmentDraft files={attachments.files} remove={attachments.remove} sending={sending} progress={uploadProgress} maxSize={uploadLimit} />}
     {attachments.files.length > 0 && getUploadLimit && uploadLimit === undefined && !limitError && <p className="attachment-limit-status" role="status">Checking the server?s upload limit?</p>}
     {attachments.files.length > 0 && limitError && <p className="composer-send-error" role="alert">Could not check the server?s upload limit. <button type="button" onClick={() => setLimitRetry(value => value + 1)}>Retry</button></p>}
-    {sendError && <p className="composer-send-error" role="alert">{sendError}</p>}
+    {sendError && <div className="composer-send-error" role="alert">{sendError}{retryable && <><button type="button" disabled={sending || attachmentsBlocked} onClick={() => void submit()}>Retry send</button><button type="button" disabled={sending} onClick={() => { setSendError(""); setRetryable(false); }}>Cancel retry</button></>}</div>}
+    {savedDraft.storageError && <p className="attachment-limit-status" role="status">{savedDraft.storageError}</p>}
     {(editing || replying) && <div className="composer-message-context"><span>{editing ? "Editing message" : `Replying to ${replying?.sender.displayName}`}<small>{(editing ?? replying)?.body}</small></span><button type="button" className="icon-button" aria-label="Cancel message action" disabled={sending} onClick={onCancelAction}>×</button></div>}
     <form ref={form} className="composer composer--gifs composer--emojis" onSubmit={(event) => void submit(event)}>
       <input ref={fileInput} type="file" multiple hidden aria-label="Choose files to attach" disabled={sending || Boolean(editing) || !onSendAttachment} onChange={event => { attachments.add(Array.from(event.currentTarget.files ?? [])); event.currentTarget.value = ""; }} />
-      <button type="button" className="composer__add" aria-label="Attach files" title="Attach files" disabled={sending || Boolean(editing) || !onSendAttachment} onClick={() => fileInput.current?.click()}>
+      <button type="button" className="composer__add" aria-label="Attach files" data-tooltip="Attach files" disabled={sending || Boolean(editing) || !onSendAttachment} onClick={() => fileInput.current?.click()}>
         <PlusIcon />
       </button>
       <div className="composer__input">
@@ -199,8 +251,9 @@ export function MessageComposer({ roomName, onSend, onTyping, onSendAttachment, 
       <textarea
         ref={textarea}
         value={body}
-        onChange={(event) => { updateBody(event.target.value); setCaret(event.target.selectionStart); selection.current = { start: event.target.selectionStart, end: event.target.selectionEnd }; setActiveEmoji(0); setDismissed(null); }}
-        onSelect={(event) => { setCaret(event.currentTarget.selectionStart); selection.current = { start: event.currentTarget.selectionStart, end: event.currentTarget.selectionEnd }; }}
+        onChange={(event) => { updateBody(event.target.value); rememberSelection(event.currentTarget); setActiveEmoji(0); setDismissed(null); }}
+        onSelect={event => rememberSelection(event.currentTarget)}
+        onBlur={event => rememberSelection(event.currentTarget)}
         onKeyDown={handleKeyDown}
         placeholder={`Message ${roomName}`}
         aria-label={`Message ${roomName}`}
@@ -214,8 +267,8 @@ export function MessageComposer({ roomName, onSend, onTyping, onSendAttachment, 
       />
       </div>
       <span className="composer__hint">{prefs.sendWithEnter ? "Shift + Enter for a new line" : "Ctrl + Enter to send"}</span>
-      <button type="button" className="composer__emoji icon-button" aria-label="Emoji auswählen" title="Emojis" aria-haspopup="dialog" aria-expanded={emojiOpen} disabled={sending} onClick={() => setEmojiOpen(true)}><Smile /></button>
-      <button type="button" className="composer__gif" aria-label="GIF suchen und senden" title="GIF suchen" aria-haspopup="dialog" aria-expanded={gifOpen} disabled={sending || Boolean(editing)} onClick={() => setGifOpen(true)}>GIF</button>
+      <button type="button" className="composer__emoji icon-button" aria-label="Emoji auswählen" data-tooltip="Emojis" aria-haspopup="dialog" aria-expanded={emojiOpen} disabled={sending} onClick={() => setEmojiOpen(true)}><Smile /></button>
+      <button type="button" className="composer__gif" aria-label="GIF suchen und senden" data-tooltip="GIF suchen" aria-haspopup="dialog" aria-expanded={gifOpen} disabled={sending || Boolean(editing)} onClick={() => setGifOpen(true)}>GIF</button>
       <button className="composer__send" type="submit" disabled={(!body.trim() && (Boolean(editing) || !attachments.files.length)) || sending || attachmentsBlocked} aria-label="Send message">
         <SendIcon />
       </button>

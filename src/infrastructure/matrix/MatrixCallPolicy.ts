@@ -21,13 +21,14 @@ export function allowedCallCapabilities(requested: Set<Capability>, userId: stri
   }
   return result;
 }
-export function elementCallUrl(parentUrl: string, roomId: string, userId: string, deviceId: string, baseUrl: string, video: boolean, widgetId: string, direct = false, joining = false): string {
+export function elementCallUrl(parentUrl: string, roomId: string, userId: string, deviceId: string, baseUrl: string, video: boolean, widgetId: string, direct = false, joining = false, skipLobby = false): string {
   const url = new URL("/element-call/index.html", parentUrl);
   if (url.protocol === "grungus-app:" && url.hostname === "client") url.hostname = "call";
   else if (url.protocol === "http:" && url.hostname === "127.0.0.1") url.hostname = "localhost";
   else if (url.protocol === "http:" && url.hostname === "localhost") url.hostname = "127.0.0.1";
   else throw new Error("Call widgets require a supported isolated application origin");
   url.hash = "?" + new URLSearchParams({ widgetId, parentUrl, roomId, userId, deviceId, baseUrl, intent: `${joining ? "join_existing" : "start_call"}${direct ? "_dm" : ""}${video ? "" : "_voice"}`, theme: "dark", background: "solid", lang: "de", header: "none", confineToRoom: "true", hideScreensharing: "false", grungusCameraQuality: loadCameraQuality(), e2eEnabled: "true" });
+  if (skipLobby) url.hash += "&skipLobby=true";
   return url.href;
 }
 

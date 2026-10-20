@@ -1,5 +1,5 @@
 import { CallPanel } from "../../src/renderer/features/chat/CallPanel";
-import { createElement } from "react";
+import { createElement, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { ScreenShareDialogHost } from "../../src/renderer/features/chat/ScreenShareDialog";
 import "../../src/renderer/styles/index.css";
@@ -15,12 +15,34 @@ room.currentState.setStateEvents([
 ]);
 room.updateMyMembership("join");
 client.store.storeRoom(room);
-client.getOpenIdToken = async () => { throw new Error("Smoke test forbids authorization"); };
+client.getOpenIdToken = async () => { window.__smokeAutoJoinAttempted = true; throw new Error("Smoke test forbids authorization"); };
 client._unstable_getRTCTransports = async () => [{ type: "livekit", livekit_service_url: "https://rtc.invalid" }];
 client.sendStateEvent = async () => { throw new Error("Smoke test forbids state writes"); };
 client.sendEvent = async () => { throw new Error("Smoke test forbids messages"); };
-const mount = (frame, roomId, video, onClose, onReady, onJoined) => { window.__smokeNotifyJoined = onJoined; return mountMatrixCall(client, frame, roomId, video, onClose, onReady, onJoined); };
-createRoot(document.getElementById("call-preview-root")!).render(createElement(CallPanel, { roomId: room.roomId, name: "Testanruf", video: false, onClose: () => {}, mount }));
+const mount = (frame, roomId, video, onClose, onReady, onJoined, options) => { window.__smokeNotifyJoined = onJoined; return mountMatrixCall(client, frame, roomId, video, onClose, onReady, onJoined, options); };
+const close = () => {};
+function VoiceWorkspace() {
+  const [dock, setDock] = useState<HTMLDivElement | null>(null);
+  const [visible, setVisible] = useState(true);
+  const [chatEnabled, setChatEnabled] = useState(false);
+  const [chatVisible, setChatVisible] = useState(true);
+  const [unread, setUnread] = useState(0);
+  window.__smokeBrowseAway = () => setVisible(false);
+  window.__smokeEnableChat = () => setChatEnabled(true);
+  window.__smokeVoiceUnread = setUnread;
+  return createElement("main", { className: "app-shell" },
+    createElement("aside", { className: "room-sidebar" },
+      createElement("header", { className: "sidebar-header" }, "Test server"),
+      createElement("div", { className: "room-list" }, "Voice channels"),
+      createElement("div", { className: "voice-dock-slot", ref: setDock }),
+      createElement("footer", { className: "account-strip" }, "Smoke")),
+    createElement("section", { className: "chat-workspace" }, "Another conversation"),
+    createElement(CallPanel, { roomId: room.roomId, name: "Testanruf", video: false, mode: "voice", autoJoin: new URLSearchParams(location.search).has("autojoin"), dock, visible, onOpen: () => setVisible(true), onClose: close, mount,
+      chat: chatEnabled ? createElement("aside", {className:"voice-channel-chat"}, createElement("textarea", {"aria-label":"Voice draft", defaultValue:"Unsent draft"})) : undefined,
+      chatVisible, chatUnreadCount:unread, onToggleChat:() => { setChatVisible(!chatVisible); if (!chatVisible) setUnread(0); },
+    }));
+}
+createRoot(document.getElementById("call-preview-root")!).render(createElement(VoiceWorkspace));
 
 Object.defineProperty(window, "desktop", { value: { platform: "win32", capture: {
  onRequest: callback => { window.__smokeShareRequest = callback; return () => {}; },

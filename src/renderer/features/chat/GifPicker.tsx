@@ -110,7 +110,7 @@ export function GifPicker({ onSend, onClose }: { onSend: (url: string) => Promis
     {tab === "favorites" ? <div id="gif-favorites-panel" role="tabpanel" aria-labelledby="gif-favorites-tab" className="gif-picker__scroll">
       {error && <p className="gif-picker__state" role="alert">{error}</p>}
       <div className="gif-picker__grid">{favorites.map(gif => <GifFavoriteFrame key={gif.url} gif={gif} className="gif-picker__tile">
-        <button type="button" className="gif-picker__result" title={`${gif.title} senden`} aria-label={`${gif.title} senden`} disabled={sending} onClick={() => void choose(gif)} style={{ aspectRatio: `${gif.width} / ${gif.height}` }}>
+        <button type="button" className="gif-picker__result" data-tooltip={`${gif.title} senden`} aria-label={`${gif.title} senden`} disabled={sending} onClick={() => void choose(gif)} style={{ aspectRatio: `${gif.width} / ${gif.height}` }}>
           <img src={gif.previewUrl} alt={gif.title} loading="lazy" decoding="async" referrerPolicy="no-referrer" /><span>{gif.title}</span>
         </button>
       </GifFavoriteFrame>)}</div>
@@ -129,7 +129,7 @@ export function GifPicker({ onSend, onClose }: { onSend: (url: string) => Promis
       <div className="gif-picker__scroll" aria-busy={loading || sending}>
         <div className="gif-picker__section">{query.trim() ? "SUCHERGEBNISSE" : "GERADE BELIEBT"}</div>
         {error && <div className="gif-picker__state" role="alert"><p>{error}</p><button type="button" className="button button--compact" disabled={loading || sending} onClick={() => setRetry((value) => value + 1)}>Erneut versuchen</button></div>}
-        <div className="gif-picker__grid">{results.map((gif, index) => <GifFavoriteFrame key={gif.id} gif={gif} className="gif-picker__tile"><button type="button" className="gif-picker__result" title={`${gif.title} senden`} aria-label={`${gif.title} senden`} disabled={sending || loading} onClick={() => void choose(gif)} style={{ aspectRatio: `${gif.width} / ${gif.height}` }}>
+        <div className="gif-picker__grid">{results.map((gif, index) => <GifFavoriteFrame key={gif.id} gif={gif} className="gif-picker__tile"><button type="button" className="gif-picker__result" data-tooltip={`${gif.title} senden`} aria-label={`${gif.title} senden`} disabled={sending || loading} onClick={() => void choose(gif)} style={{ aspectRatio: `${gif.width} / ${gif.height}` }}>
           <img src={gif.previewUrl} alt={gif.title} loading={index < 6 ? "eager" : "lazy"} decoding="async" referrerPolicy="no-referrer" /><span>{gif.title}</span>
         </button></GifFavoriteFrame>)}</div>
         {loading && <div className="gif-picker__state" role="status">GIFs werden geladen…</div>}

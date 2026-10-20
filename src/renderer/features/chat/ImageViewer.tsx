@@ -40,11 +40,11 @@ export function ImageViewer({ src, name, sender, timestamp, onClose, onDownload,
       <div className="image-viewer__sender">{sender && <Avatar name={sender.displayName} url={sender.avatarUrl} />}<span><strong>{sender?.displayName ?? "Image"}</strong>{timestamp !== undefined && <time dateTime={new Date(timestamp).toISOString()}>{new Date(timestamp).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })}</time>}</span></div>
       <div className="image-viewer__controls">
         <div className="image-viewer__toolbar">
-          <button type="button" aria-label={zoomed ? "Fit image to window" : "Zoom image"} aria-pressed={zoomed} title={zoomed ? "Zoom out" : "Zoom in (250%)"} onClick={toggleZoom}>{zoomed ? <ZoomOut size={19} /> : <ZoomIn size={19} />}</button>
-          <button type="button" aria-label="Download image" title="Download" disabled={downloading} onClick={onDownload}><Download size={19} /></button>
+          <button type="button" aria-label={zoomed ? "Fit image to window" : "Zoom image"} aria-pressed={zoomed} data-tooltip={zoomed ? "Zoom out" : "Zoom in (250%)"} onClick={toggleZoom}>{zoomed ? <ZoomOut size={19} /> : <ZoomIn size={19} />}</button>
+          <button type="button" aria-label="Download image" data-tooltip="Download" disabled={downloading} onClick={onDownload}><Download size={19} /></button>
           <button type="button" aria-label="More image options" aria-haspopup="menu" aria-expanded={Boolean(menu)} onClick={event => { const rect = event.currentTarget.getBoundingClientRect(); setMenu({ x: rect.right - 220, y: rect.bottom + 8 }); }}><MoreHorizontal size={21} /></button>
         </div>
-        <button type="button" className="image-viewer__close" aria-label="Close image viewer" title="Close (Esc)" onClick={onClose}><X size={22} /></button>
+        <button type="button" className="image-viewer__close" aria-label="Close image viewer" data-tooltip="Close (Esc)" onClick={onClose}><X size={22} /></button>
       </div>
     </header>
     <div ref={stage} className={`image-viewer__stage ${zoomed ? "is-zoomed" : ""}`} onPointerMove={event => { if (zoomed && event.pointerType !== "touch") panTo(event.clientX, event.clientY); }} onClick={event => { if (event.target === event.currentTarget) onClose(); }}>

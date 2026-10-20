@@ -63,7 +63,7 @@ export function SettingsDialog({ onClose, onOpenIdentity, onManageRoom }: { onCl
   const panelProps = { execute, busy, onOpenIdentity };
   const active = tabs.find((item) => item.id === tab)!;
   return <dialog ref={dialog} className="settings-dialog" aria-labelledby="settings-title" onCancel={(event) => { event.preventDefault(); close(); }}>
-    <header className="settings-header"><div><span className="eyebrow">MAKE YOURSELF AT HOME</span><h2 id="settings-title">Settings</h2></div><span className="settings-save-status" role="status" title={notice ?? undefined}>{busy ? "Saving…" : notice ?? ""}</span><button className="icon-button" aria-label="Close settings" disabled={busy} onClick={close}><X /></button></header>
+    <header className="settings-header"><div><span className="eyebrow">MAKE YOURSELF AT HOME</span><h2 id="settings-title">Settings</h2></div><span className="settings-save-status" role="status" data-tooltip={notice ?? undefined}>{busy ? "Saving…" : notice ?? ""}</span><button className="icon-button" aria-label="Close settings" disabled={busy} onClick={close}><X /></button></header>
     <div className="settings-layout">
       <nav className="settings-nav" aria-label="Settings categories">
         <label className="settings-search"><Search size={16} /><input aria-label="Search settings" placeholder="Search settings" value={query} onChange={(event) => setQuery(event.target.value)} /></label>

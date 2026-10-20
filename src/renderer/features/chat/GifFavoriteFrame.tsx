@@ -15,7 +15,7 @@ export function GifFavoriteFrame({ gif, className, children }: { gif: GifResult;
     event.preventDefault(); event.stopPropagation(); setPosition({ x: event.clientX, y: event.clientY });
   }}>
     {children}
-    <button type="button" className={`gif-favorite-star${favorite ? " is-favorite" : ""}`} aria-label={label} title={label} aria-pressed={favorite} onClick={event => { event.stopPropagation(); toggle(gif); }}><Star size={17} fill={favorite ? "currentColor" : "none"} /></button>
+    <button type="button" className={`gif-favorite-star${favorite ? " is-favorite" : ""}`} aria-label={label} data-tooltip={label} aria-pressed={favorite} onClick={event => { event.stopPropagation(); toggle(gif); }}><Star size={17} fill={favorite ? "currentColor" : "none"} /></button>
     {position && <GifActionsMenu position={position} onClose={close} portalTarget={frame.current?.closest("dialog") ?? undefined} label={label} favorite={favorite} onToggle={() => toggle(gif)} url={gif.url} />}
   </div>;
 }

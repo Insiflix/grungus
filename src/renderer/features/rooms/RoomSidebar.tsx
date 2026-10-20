@@ -1,4 +1,4 @@
-import { useState, type FormEvent } from "react";
+import { useState, type FormEvent, type RefCallback } from "react";
 import { Avatar } from "../../components/common/Avatar";
 import { Hash as HashIcon, LockKeyhole as LockIcon, Plus as PlusIcon, Search as SearchIcon, UserPlus, ShieldCheck } from "lucide-react";
 import { useMatrixRooms } from "../../hooks/matrix/useMatrixRooms";
@@ -11,8 +11,9 @@ import type { RoomCall } from "../../../domain/calls/ICallProvider";
 import { spaceRoomIds } from "../../../domain/matrix/RoomNavigation";
 import { SpaceChannels } from "./SpaceChannels";
 import { CreateChannelDialog } from "./CreateChannelDialog";
+import { BlockedUserBadge } from "../../components/common/BlockedUserBadge";
 
-export function RoomSidebar({ space, onOpenIdentity, onOpenSettings, onManageSpace, calls = [], onJoinVoice, callActive = false, discoveryPending = false, discoveryError, onRetryDiscovery }: { space: MatrixRoom | null; onOpenIdentity: () => void; onOpenSettings: () => void; onManageSpace: () => void; calls?: RoomCall[]; onJoinVoice?: (room: MatrixRoom) => void; callActive?: boolean; discoveryPending?: boolean; discoveryError?: string; onRetryDiscovery?: () => void }) {
+export function RoomSidebar({ space, onOpenIdentity, onOpenSettings, onManageSpace, calls = [], onJoinVoice, callActive = false, discoveryPending = false, discoveryError, onRetryDiscovery, voiceDockRef }: { space: MatrixRoom | null; onOpenIdentity: () => void; onOpenSettings: () => void; onManageSpace: () => void; calls?: RoomCall[]; onJoinVoice?: (room: MatrixRoom) => void; callActive?: boolean; discoveryPending?: boolean; discoveryError?: string; onRetryDiscovery?: () => void; voiceDockRef?: RefCallback<HTMLDivElement> }) {
   const [filter, setFilter] = useState("");
   const [joining, setJoining] = useState(false);
   const [roomAddress, setRoomAddress] = useState("");
@@ -44,9 +45,9 @@ export function RoomSidebar({ space, onOpenIdentity, onOpenSettings, onManageSpa
           <span className="sidebar-kicker">{space ? "SERVER" : "YOUR CONVERSATIONS"}</span>
           <strong>{space?.name ?? "Messages"}</strong>
         </div>
-        {space && <button type="button" className="icon-button" aria-label="Invite people to this server" title="Invite people to this server" onClick={() => setInviting(true)}><UserPlus /></button>}
-        {space && <button type="button" className="icon-button" aria-label="Space settings" title="Space settings" onClick={onManageSpace}><Settings /></button>}
-        <button type="button" className="icon-button" aria-label={space ? "Create channel" : "Join room"} title={space ? "Create channel" : "Join room"} onClick={() => space ? setCreatingChannel(true) : setJoining((value) => !value)}>
+        {space && <button type="button" className="icon-button" aria-label="Invite people to this server" data-tooltip="Invite people to this server" onClick={() => setInviting(true)}><UserPlus /></button>}
+        {space && <button type="button" className="icon-button" aria-label="Space settings" data-tooltip="Space settings" onClick={onManageSpace}><Settings /></button>}
+        <button type="button" className="icon-button" aria-label={space ? "Create channel" : "Join room"} data-tooltip={space ? "Create channel" : "Join room"} onClick={() => space ? setCreatingChannel(true) : setJoining((value) => !value)}>
           <PlusIcon />
         </button>
       </header>
@@ -100,7 +101,7 @@ export function RoomSidebar({ space, onOpenIdentity, onOpenSettings, onManageSpa
           >
             <Avatar name={room.name} url={room.avatarUrl} />
             <span className="room-row__copy">
-              <strong>{room.name}</strong>
+              <strong><span className="user-name-label">{room.name}</span>{room.isDirect && room.memberCount <= 2 && <BlockedUserBadge userId={room.directUserId} />}</strong>
               <span>{room.isDirect && room.memberCount <= 2 ? "Direct message" : `${room.memberCount} members`}</span>
             </span>
             <span className="room-row__meta">
@@ -123,14 +124,15 @@ export function RoomSidebar({ space, onOpenIdentity, onOpenSettings, onManageSpa
         </>}
       </div>
 
+      <div className="voice-dock-slot" ref={voiceDockRef} />
       <footer className="account-strip account-strip--security">
         <Avatar name={profile?.displayName ?? session?.userId ?? "You"} url={profile?.avatarUrl} status />
         <span>
           <strong>{profile?.displayName ?? session?.userId.split(":")[0].replace("@", "")}</strong>
           <small>{sync.state === "ready" ? "Online" : sync.state}</small>
         </span>
-        <button type="button" className="icon-button" aria-label="Identität und Verschlüsselung" title="Identität & Verschlüsselung" onClick={onOpenIdentity}><ShieldCheck /></button>
-        <button type="button" className="icon-button" aria-label="Settings" title="Settings (Ctrl+,)" onClick={onOpenSettings}>
+        <button type="button" className="icon-button" aria-label="Identität und Verschlüsselung" data-tooltip="Identität & Verschlüsselung" onClick={onOpenIdentity}><ShieldCheck /></button>
+        <button type="button" className="icon-button" aria-label="Settings" data-tooltip="Settings (Ctrl+,)" onClick={onOpenSettings}>
           <Settings />
         </button>
       </footer>

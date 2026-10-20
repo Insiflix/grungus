@@ -43,6 +43,33 @@
   }
   window.addEventListener("message", async (event) => {
     const data = event.data;
+    const fromHost = event.source === parent && event.origin === parentOrigin && data?.widgetId === params.get("widgetId");
+    if (fromHost && data.type === "grungus:host-controls" && typeof data.enabled === "boolean") {
+      document.documentElement.toggleAttribute("data-grungus-host-controls", data.enabled);
+      for (const key of ["background", "surface", "text", "muted", "accent", "border"]) {
+        if (typeof data.colors?.[key] === "string") document.documentElement.style.setProperty(`--grungus-${key}`, data.colors[key]);
+      }
+      return;
+    }
+    if (fromHost && data.type === "grungus:toggle-screenshare") {
+      // Element Call publishes/unpublishes the capture itself; do not create an orphan stream here.
+      const button = document.querySelector('button[data-testid="incall_screenshare"]');
+      if (!button || button.disabled) sendStatus({ shareError: "Screen sharing is not available yet. Wait for the call to connect and try again." });
+      else {
+        button.click();
+        sendStatus({ shareAction: true });
+      }
+      return;
+    }
+    if (event.source === parent && event.origin === parentOrigin && data?.type === "grungus:deafen" && data.widgetId === params.get("widgetId") && typeof data.deafened === "boolean") {
+      try {
+        window.controls.setAudioEnabled(!data.deafened);
+        sendStatus({ deafened: data.deafened });
+      } catch {
+        sendStatus({ deafenError: "Audio output could not be changed. Please try again." });
+      }
+      return;
+    }
     if (event.source !== parent || event.origin !== parentOrigin || data?.type !== "grungus:camera-quality" || data.widgetId !== params.get("widgetId") || !Object.hasOwn(presets, data.quality)) return;
     const next = data.quality;
     const active = [...cameraTracks].filter(track => track.readyState === "live");

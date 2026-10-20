@@ -50,8 +50,9 @@ describe("emoji tab interactions", () => {
     const close = vi.fn();
     const view = render(<EmojiPicker onPick={pick} onClose={close} />);
     fireEvent.change(screen.getByRole("textbox"), { target: { value: "wave" } });
-    fireEvent.change(screen.getByRole("combobox"), { target: { value: "5" } });
-    const button = view.container.querySelector<HTMLButtonElement>('button[title=":wave:"]')!;
+    fireEvent.click(screen.getByRole("combobox"));
+    fireEvent.click(screen.getAllByRole("option").at(-1)!);
+    const button = view.container.querySelector<HTMLButtonElement>('button[data-tooltip=":wave:"]')!;
     expect(button.getAttribute("aria-label")).toContain(":wave:");
     expect(button.querySelector(".emoji-glyph")).toBeTruthy();
     fireEvent.click(button);
