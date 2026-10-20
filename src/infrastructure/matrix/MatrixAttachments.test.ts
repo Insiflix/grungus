@@ -17,6 +17,11 @@ function setup(encrypted = false) {
   return { sdk, client: sdk as unknown as MatrixClient };
 }
 describe("Matrix file attachments", () => {
+  it.each([["clip.webm", "video/webm", "m.video"], ["clip.mp4", "video/mp4", "m.video"], ["clip.mpg", "", "m.video"], ["song.mp3", "audio/mpeg", "m.audio"], ["song.wav", "", "m.audio"]])("sends %s as a native video/audio message", async (name, type, msgtype) => {
+    const { sdk, client } = setup();
+    await sendAttachment(client, "!room", new File(["media"], name, { type }));
+    expect(sdk.sendEvent).toHaveBeenCalledWith("!room", "m.room.message", expect.objectContaining({ msgtype, body: name, info: expect.objectContaining({ mimetype: expect.stringMatching(/^(video|audio)\//) }) }));
+  });
   it("uploads ordinary files and sends a native Matrix attachment event with reply metadata", async () => {
     const { sdk, client } = setup();
     const progress = vi.fn();

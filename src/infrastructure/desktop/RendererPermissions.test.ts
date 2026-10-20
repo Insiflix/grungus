@@ -19,7 +19,10 @@ describe("desktop notification permissions", () => {
   });
   it("keeps microphone, screen capture, audio-output selection and fullscreen available to the call frame", () => {
     for (const permission of ["media", "display-capture", "speaker-selection", "fullscreen"]) {
-      expect(allowsAppPermission(permission, "grungus-app://client/element-call/index.html", true, false)).toBe(true);
+      expect(allowsAppPermission(permission, "grungus-app://call/element-call/index.html", true, false)).toBe(true);
+      expect(allowsAppPermission(permission, "http://localhost:5173/element-call/index.html", false, false)).toBe(true);
+      expect(allowsAppPermission(permission, "grungus-app://call/index.html", true, false)).toBe(false);
+      expect(allowsAppPermission(permission, "grungus-app://client/element-call/index.html", true, false)).toBe(false);
     }
   });
   it("handles both requests and Chromium’s origin-only notification checks", () => {

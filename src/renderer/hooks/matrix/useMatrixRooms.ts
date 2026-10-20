@@ -18,10 +18,12 @@ export function useMatrixRooms(filter = "") {
   }, [filter, snapshot.rooms, prefs.roomSort]);
   return {
     rooms,
+    spaceRooms: snapshot.spaceRooms,
+    discoverSpaceRooms: (spaceId: string) => runtime.discoverSpaceRooms(spaceId),
     selectedRoomId: snapshot.selectedRoomId,
     selectRoom: (roomId: string) => runtime.selectRoom(roomId),
     closeDirectMessage: (roomId: string) => runtime.closeDirectMessage(roomId),
-    joinRoom: (roomIdOrAlias: string) => runtime.joinRoom(roomIdOrAlias),
+    joinRoom: (roomIdOrAlias: string, viaServers?: string[]) => runtime.joinRoom(roomIdOrAlias, viaServers),
     declineInvite: (roomId: string) => runtime.declineInvite(roomId),
   };
 }

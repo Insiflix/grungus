@@ -36,6 +36,8 @@ function messageType(msgtype: unknown): MatrixMessageType {
   if (msgtype === MsgType.Notice) return "notice";
   if (msgtype === MsgType.Emote) return "emote";
   if (msgtype === MsgType.Image) return "image";
+  if (msgtype === MsgType.Video) return "video";
+  if (msgtype === MsgType.Audio) return "audio";
   if (msgtype === MsgType.File) return "file";
   return "unsupported";
 }
@@ -107,7 +109,7 @@ export class MatrixMessageMapper {
       timestamp: Number.isFinite(rawTimestamp) ? rawTimestamp : Date.now(),
       type: mappedType,
       body: mappedBody,
-      ...(mappedType === "image" || mappedType === "file" ? (() => {
+      ...(["image", "video", "audio", "file"].includes(mappedType) ? (() => {
         const encrypted = contentRecord(content.file);
         const url = typeof encrypted.url === "string" ? encrypted.url : content.url;
         const info = contentRecord(content.info);

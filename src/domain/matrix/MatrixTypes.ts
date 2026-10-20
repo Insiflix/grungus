@@ -1,5 +1,10 @@
 import type { MessageAttachment } from "../messaging/Attachments";
 export type MatrixMembership = "join" | "invite" | "leave" | "ban" | "knock";
+export type MatrixPresence = "online" | "unavailable" | "offline" | "unknown";
+
+export function matrixPresence(value: unknown): MatrixPresence {
+  return value === "online" || value === "unavailable" || value === "offline" ? value : "unknown";
+}
 
 export interface MatrixIdentityState {
   available: boolean;
@@ -40,9 +45,13 @@ export interface MatrixRoom {
   membership: MatrixMembership;
   memberCount: number;
   isDirect?: boolean;
+  directUserId?: string;
   isDirectClosed?: boolean;
   isSpace?: boolean;
   childRoomIds?: string[];
+  roomType?: string;
+  joinRule?: string;
+  viaServers?: string[];
 }
 
 export type MatrixMessageType =
@@ -50,6 +59,8 @@ export type MatrixMessageType =
   | "notice"
   | "emote"
   | "image"
+  | "video"
+  | "audio"
   | "file"
   | "unsupported"
   | "encrypted";
@@ -88,6 +99,7 @@ export interface MatrixMessage {
 }
 
 export interface MatrixRoomMember extends MatrixUser {
+  presence?: MatrixPresence;
   membership: MatrixMembership;
   isTyping: boolean;
 }

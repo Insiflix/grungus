@@ -60,6 +60,24 @@ function verification(incoming = false) {
 }
 
 describe("identity recovery and reset", () => {
+  it("invalidates secret callbacks from an ended account", async () => {
+    const { manager, client } = setup();
+    const stale = manager.callbacks;
+    manager.dispose(); manager.attach(client as unknown as MatrixClient);
+    stale.cacheSecretStorageKey!("old-key", keyInfo, new Uint8Array(32));
+    await expect(stale.getSecretStorageKey!({ keys: { "old-key": keyInfo } }, "secret")).rejects.toThrow("ended");
+    await expect(manager.callbacks.getSecretStorageKey!({ keys: { "old-key": keyInfo } }, "secret")).rejects.toThrow("Wiederherstellung");
+  });
+  it("discards and zeroes a recovery key generated after logout", async () => {
+    const { manager, crypto, generated } = setup();
+    let finish!: (value: typeof generated) => void;
+    crypto.createRecoveryKeyFromPassphrase.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    const preparing = manager.prepareReset();
+    manager.dispose(); finish(generated);
+    await expect(preparing).rejects.toThrow("changed");
+    expect(manager.getSnapshot().newRecoveryKey).toBeNull();
+    expect([...generated.privateKey].every(byte => byte === 0)).toBe(true);
+  });
   it("checks a recovery key before restoring cross-signing and message keys", async () => {
     const { manager, crypto, storage } = setup();
     await manager.recover(recoveryKey());

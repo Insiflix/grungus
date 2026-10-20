@@ -9,9 +9,7 @@ export class MatrixMediaResolver {
     height = 96,
   ): string | null {
     if (!mxcUrl) return null;
-    if (mxcUrl.startsWith("http://") || mxcUrl.startsWith("https://")) {
-      return mxcUrl;
-    }
+    if (!mxcUrl.startsWith("mxc://")) return null;
     return (
       getHttpUriForMxc(this.client.getHomeserverUrl(), mxcUrl, width, height, "scale", false, true, true) || null
     );

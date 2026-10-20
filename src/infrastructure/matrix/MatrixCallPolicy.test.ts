@@ -1,8 +1,18 @@
 ﻿import { describe, expect, it } from "vitest";
 import { EventDirection, MatrixCapabilities, WidgetEventCapability } from "matrix-widget-api";
-import { allowedCallCapabilities, elementCallUrl, ownCallStateKeys } from "./MatrixCallPolicy";
+import { allowedCallCapabilities, elementCallUrl, ownCallStateKeys, isConversationCall } from "./MatrixCallPolicy";
+import type { Room } from "matrix-js-sdk";
 const user = "@alice:example.org", device = "DEVICE", room = "!call:example.org";
 describe("Element Call isolation", () => {
+  it("uses ringing for standalone group chats and never for server channels, regardless of size", () => {
+    const room = { roomId: "!chat", getJoinedMemberCount: () => 4, getType: () => undefined, currentState: { getStateEvents: () => [] } } as unknown as Room;
+    expect(isConversationCall(room, [])).toBe(true);
+    expect(isConversationCall({ ...room, getType: () => "org.matrix.msc3417.call", getJoinedMemberCount: () => 2 } as Room, [])).toBe(false);
+    const server = { isSpaceRoom: () => true, currentState: { getStateEvents: () => ({ getContent: () => ({ via: ["example"] }) }) } } as unknown as Room;
+    expect(isConversationCall(room, [server])).toBe(false);
+    const linked = { ...room, currentState: { getStateEvents: () => [{ getContent: () => ({ via: ["example"] }) }] } } as unknown as Room;
+    expect(isConversationCall(linked, [])).toBe(false);
+  });
   it("grants only call events and the call room timeline", () => {
     const allowed = WidgetEventCapability.forRoomEvent(EventDirection.Send, "io.element.call.encryption_keys").raw;
     const forbidden = WidgetEventCapability.forRoomEvent(EventDirection.Send, "m.room.message").raw;
@@ -21,6 +31,7 @@ describe("Element Call isolation", () => {
     const url = new URL(elementCallUrl(parent, room, user, device, "https://matrix.example.org", false, "widget"));
     const params = new URLSearchParams(url.hash.slice(2));
     expect(url.pathname).toBe("/element-call/index.html");
+    expect(url.hostname).not.toBe(new URL(parent).hostname);
     expect(url.search).toBe("");
     expect(params.get("roomId")).toBe(room);
     expect(params.get("intent")).toBe("start_call_voice");

@@ -35,8 +35,8 @@ describe("authenticated Matrix avatars", () => {
   });
   it("never sends Matrix credentials to external avatars or unrelated server paths", async () => {
     const { loader, request } = setup();
-    expect(await loader.load("https://avatars.example.org/photo.png")).toBe("https://avatars.example.org/photo.png");
-    expect(await loader.load("https://matrix.example.org/unrelated.png")).toBe("https://matrix.example.org/unrelated.png");
+    await expect(loader.load("https://avatars.example.org/photo.png")).rejects.toThrow("Matrix media endpoint");
+    await expect(loader.load("https://matrix.example.org/unrelated.png")).rejects.toThrow("Matrix media endpoint");
     expect(request).not.toHaveBeenCalled();
   });
   it("falls back to an authenticated original when thumbnails are unsupported", async () => {
@@ -51,7 +51,7 @@ describe("authenticated Matrix avatars", () => {
     await expect(loader.load(url)).rejects.toThrow("Invalid");
     expect(await loader.load(url)).toBe("blob:test-avatar");
     expect(request).toHaveBeenCalledTimes(2);
-    await expect(loader.load("javascript:alert(1)")).rejects.toThrow("Invalid");
+    await expect(loader.load("javascript:alert(1)")).rejects.toThrow("Matrix media endpoint");
   });
   it("does not create or retain object URLs when a session ends during a request", async () => {
     const { loader, request } = setup();

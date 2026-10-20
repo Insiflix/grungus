@@ -35,7 +35,8 @@ export interface IMatrixClient extends MatrixEventSource {
 
   getRooms(): MatrixRoom[];
   getRoom(roomId: string): MatrixRoom | null;
-  joinRoom(roomIdOrAlias: string): Promise<MatrixRoom>;
+  discoverSpaceRooms(spaceId: string): Promise<MatrixRoom[]>;
+  joinRoom(roomIdOrAlias: string, viaServers?: string[]): Promise<MatrixRoom>;
   leaveRoom(roomId: string): Promise<void>;
   inviteUser(roomId: string, userId: string): Promise<void>;
   searchUsers(term: string): Promise<MatrixUser[]>;

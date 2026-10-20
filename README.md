@@ -83,6 +83,8 @@ Matrix avatars are fetched with the session's Authorization header and displayed
 
 ## Encryption and security
 
+See [SECURITY_REVIEW.md](SECURITY_REVIEW.md) for the repository security findings, fixes, verification, and feature suggestions from 2026-10-20.
+
 Open **Identität & Verschlüsselung** with the shield next to your account, the encrypted-room badge, or the unverified-device banner. You can request verification from an existing device, accept incoming SAS requests, and explicitly compare the emoji/number sequence before confirming a match. Incoming requests identify the other user and device. Only SAS is advertised; QR verification is not implemented.
 
 You can also unlock the existing identity with its Matrix recovery key. The adapter checks the key against secret storage before importing cross-signing keys, then restores the message-key backup when available. Recovery never silently replaces missing identity keys. Late SDK decryption events update existing timeline messages.
@@ -92,10 +94,13 @@ You can also unlock the existing identity with its Matrix recovery key. The adap
 Recovery keys and authentication passwords stay in memory; the application does not persist them to localStorage or the session file. New recovery keys remain visible until the user dismisses the saved-key step.
 
 - `nodeIntegration: false`, `contextIsolation: true`, and Electron renderer sandboxing are enabled.
-- The preload exposes only session load/save/remove, HTTPS system-browser launch, and auth callback subscription.
-- Remote navigations, popups, and renderer permission requests are denied.
-- The page has a restrictive CSP; remote images are allowed for resolved Matrix media while scripts remain local.
-- Session secrets are encrypted in the main process with Electron `safeStorage`.
+- Sensitive session and browser-launch IPC requires the main application frame and URL. The preload also provides window controls, clipboard, and an explicit screen-capture consent bridge.
+- External pages cannot navigate the main application. Permission requests are restricted to the application and bundled call page; screen capture requires source selection.
+- Application and call pages have a CSP with local scripts. The call widget runs on a separate origin and communicates through a source- and origin-checked, call-scoped API.
+- Session credentials are encrypted in the main process with Electron `safeStorage`; Linux's `basic_text` fallback is refused. Session file operations are serialized so logout follows pending saves.
+- Remote homeservers require HTTPS; explicit loopback HTTP URLs are accepted for development. Browser login uses an expiring, single-use state nonce.
+- Media downloads have streamed size limits and timeouts. Unsupported audio/video conversion runs in a local WebAssembly worker with bounded input/output, concurrency, and lifetime; received files are never passed to a native FFmpeg process.
+- Arbitrary external avatars are rejected. External chat GIFs require a click unless hosted by a configured GIF provider's media CDN.
 - Rust crypto is initialized once per session with a device-specific persistent IndexedDB prefix before sync begins.
 - Matrix text is rendered as React text. No Matrix-provided HTML is passed to `dangerouslySetInnerHTML`.
 

@@ -33,6 +33,8 @@ describe("GIF favourites", () => {
   it("offers keyboard accessible right-click actions without opening the parent message menu", () => {
     const parent = vi.fn();
     render(<div onContextMenu={parent}><GifMessage url={gif.url} /></div>);
+    expect(screen.queryByRole("img")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Load external GIF from example.com" }));
     fireEvent.contextMenu(screen.getByAltText("Geteiltes GIF"), { clientX: 100, clientY: 100 });
     expect(parent).not.toHaveBeenCalled();
     const add = screen.getByRole("menuitem", { name: "Add GIF to favourites" });

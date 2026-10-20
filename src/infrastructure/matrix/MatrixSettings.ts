@@ -13,6 +13,7 @@ export class SettingsAuthRequired extends Error {
 
 export class MatrixSettings {
   constructor(private readonly client: () => MatrixClient, private readonly profileChanged: () => Promise<void>) {}
+  private assertCurrent(client: MatrixClient) { if (this.client() !== client) throw new Error("The Matrix session changed."); }
 
   async profile(name: string) {
     await this.client().setDisplayName(name.trim());
@@ -79,17 +80,22 @@ export class MatrixSettings {
   }
   async removeAddress(medium: string, address: string) { await this.client().deleteThreePid(medium, address); }
   async ignoredUsers() {
-    const content = await this.client().getAccountDataFromServer(EventType.IgnoredUserList);
+    const client = this.client();
+    const content = await client.getAccountDataFromServer(EventType.IgnoredUserList);
+    this.assertCurrent(client);
     const users = Object.keys(content?.ignored_users ?? {});
     blockedUsers.update(users);
     return users;
   }
   async setIgnored(userId: string, ignored: boolean) {
+    const client = this.client();
     if (!/^@[^:\s]+:\S+$/.test(userId)) throw new Error("Enter a full Matrix ID, for example @user:example.org.");
     if (userId === this.client().getUserId()) throw new Error("You cannot block yourself.");
     const users = await this.ignoredUsers();
+    this.assertCurrent(client);
     const next = ignored ? [...new Set([...users, userId])] : users.filter((id) => id !== userId);
-    await this.client().setIgnoredUsers(next);
+    await client.setIgnoredUsers(next);
+    this.assertCurrent(client);
     blockedUsers.update(next);
   }
   async pushRules() { return this.client().getPushRules(); }
@@ -160,13 +166,34 @@ export class MatrixSettings {
   retrySync() { return this.client().retryImmediately(); }
 
   async createRoom(name: string, space: boolean, encrypted: boolean, isPublic: boolean) {
-    const response = await this.client().createRoom({
+    const client = this.client();
+    const response = await client.createRoom({
       name: name.trim(), preset: isPublic ? Preset.PublicChat : Preset.PrivateChat,
       visibility: Visibility.Private, creation_content: space ? { type: "m.space" } : {},
       initial_state: !space && encrypted ? [{ type: EventType.RoomEncryption, state_key: "", content: { algorithm: "m.megolm.v1.aes-sha2" } }] : [],
     });
+    this.assertCurrent(client);
     return response.room_id;
   }
+  async createSpaceChannel(spaceId: string, name: string, voice: boolean) {
+    const client = this.client();
+    const space = client.getRoom(spaceId);
+    if (!space?.currentState.maySendStateEvent(EventType.SpaceChild, client.getUserId() ?? "")) throw new Error("Your role cannot create channels in this server.");
+    const response = await client.createRoom({
+      name: name.trim(), preset: Preset.PrivateChat, visibility: Visibility.Private,
+      room_version: "10", creation_content: voice ? { type: "org.matrix.msc3417.call" } : {},
+      initial_state: [
+        { type: EventType.RoomJoinRules, state_key: "", content: { join_rule: "restricted", allow: [{ type: "m.room_membership", room_id: spaceId }] } },
+        { type: EventType.SpaceParent, state_key: spaceId, content: { via: [client.getDomain()!], canonical: true } },
+        { type: EventType.RoomEncryption, state_key: "", content: { algorithm: "m.megolm.v1.aes-sha2" } },
+      ],
+    });
+    this.assertCurrent(client);
+    try { await this.spaceChild(spaceId, response.room_id); }
+    catch { throw new Error(`Channel created (${response.room_id}), but linking it to the server failed. Add this room ID in Server settings → Rooms instead of creating it again.`); }
+    return response.room_id;
+  }
+
   async room(id: string) {
     const client = this.client();
     const room = client.getRoom(id);
@@ -206,12 +233,16 @@ export class MatrixSettings {
     await this.client().sendStateEvent(id, type as never, content as never, key);
   }
   async roomDetails(id: string, name: string, topic: string) {
+    const client = this.client();
     await this.roomState(id, EventType.RoomName, { name: name.trim() });
+    this.assertCurrent(client);
     await this.roomState(id, EventType.RoomTopic, { topic });
   }
   async roomAvatar(id: string, file: File | null) {
+    const client = this.client();
     if (file && (!file.type.startsWith("image/") || file.size > 10 * 1024 * 1024)) throw new Error("Choose an image smaller than 10 MB.");
-    const url = file ? (await this.client().uploadContent(file)).content_uri : "";
+    const url = file ? (await client.uploadContent(file)).content_uri : "";
+    this.assertCurrent(client);
     await this.roomState(id, EventType.RoomAvatar, { url });
   }
   async roomAccess(id: string, joinRule: string, allowedSpaces: string[]) {
@@ -234,6 +265,7 @@ export class MatrixSettings {
     const client = this.client();
     // Read server state immediately before writing to preserve unrelated roles.
     const power = await client.getStateEvent(id, EventType.RoomPowerLevels, "");
+    this.assertCurrent(client);
     const next = { ...power };
     if (user) {
       if (!/^@[^:\s]+:\S+$/.test(user)) throw new Error("Enter a full Matrix ID.");
@@ -255,14 +287,18 @@ export class MatrixSettings {
     if (action === "create") await client.createAlias(alias, id);
     else if (action === "remove") {
       const content = await this.canonicalAliasContent(id);
+      this.assertCurrent(client);
       if (content.alias === alias || content.alt_aliases?.includes(alias)) {
         await this.roomState(id, EventType.RoomCanonicalAlias, { ...content, ...(content.alias === alias ? { alias: "" } : {}), alt_aliases: (content.alt_aliases ?? []).filter((value: string) => value !== alias) });
       }
+      this.assertCurrent(client);
       await client.deleteAlias(alias);
     } else {
       const resolved = await client.getRoomIdForAlias(alias);
+      this.assertCurrent(client);
       if (resolved.room_id !== id) throw new Error("This address does not point to this room.");
       const content = await this.canonicalAliasContent(id);
+      this.assertCurrent(client);
       await this.roomState(id, EventType.RoomCanonicalAlias, { ...content, alias });
     }
   }

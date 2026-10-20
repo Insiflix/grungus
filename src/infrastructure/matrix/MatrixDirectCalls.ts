@@ -29,6 +29,8 @@ export class MatrixDirectCalls {
     const state = this.snapshot(); for (const listener of this.listeners) listener(state); };
   private incoming = (call: MatrixCall) => {
     if (call.groupCallId) return;
+    const opponent = call.getOpponentMember()?.userId;
+    if (opponent && this.client?.isUserIgnored(opponent)) { call.reject(); return; }
     if (this.call && this.call.state !== CallState.Ended) { call.reject(); return; }
     this.track(call);
   };
@@ -42,11 +44,13 @@ export class MatrixDirectCalls {
   }
   start = async (roomId: string, video: boolean) => {
     if (!this.client) throw new Error("Nicht verbunden");
+    const client = this.client;
     if (this.call && this.call.state !== CallState.Ended) throw new Error("Es läuft bereits ein Anruf");
     const room = this.client.getRoom(roomId);
     if (room?.getMyMembership() !== "join" || room.getJoinedMemberCount() !== 2) throw new Error("Klassische Anrufe benötigen einen Raum mit genau zwei Mitgliedern");
     await this.applyMediaPreferences();
-    const call = createNewMatrixCall(this.client, roomId);
+    if (this.client !== client) throw new Error("The call session ended.");
+    const call = createNewMatrixCall(client, roomId);
     if (!call) throw new Error("WebRTC ist auf diesem Gerät nicht verfügbar");
     this.track(call);
     try { await (video ? call.placeVideoCall() : call.placeVoiceCall()); }
@@ -55,7 +59,7 @@ export class MatrixDirectCalls {
   answer = async () => {
     const call = this.call;
     if (!call || call.state !== CallState.Ringing) return;
-    try { await this.applyMediaPreferences(); await call.answer(true, call.type === CallType.Video); }
+    try { await this.applyMediaPreferences(); if (this.call !== call || !this.client || call.state !== CallState.Ringing) return; await call.answer(true, call.type === CallType.Video); }
     catch (error) { this.error = error instanceof Error ? error.message : "Anruf konnte nicht angenommen werden"; this.publish(); }
   };
   reject = () => { this.call?.reject(); this.publish(); };

@@ -26,4 +26,9 @@ describe("call widget driver", () => {
     await expect(driver.sendToDevice("io.element.call.encryption_keys", true, { "@outsider:test": { OTHER: {} } })).rejects.toThrow("outside");
     await expect(driver.cancelScheduledDelayedEvent("unrelated-delay")).rejects.toThrow("Unknown");
   });
+  it("refuses to send call encryption keys as plaintext", async () => {
+    const { driver } = fixture();
+    await expect(driver.sendToDevice("io.element.call.encryption_keys", false, { "@joined:test": { DEVICE: { keys: [] } } })).rejects.toThrow("must be sent encrypted");
+    await expect(driver.sendToDevice("m.call.encryption_keys", false, { "@joined:test": { DEVICE: { keys: [] } } })).rejects.toThrow("must be sent encrypted");
+  });
 });

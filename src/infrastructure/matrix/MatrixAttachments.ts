@@ -3,15 +3,19 @@ import type { MessageAttachment } from "../../domain/messaging/Attachments";
 import type { MatrixSendTextOptions } from "../../domain/matrix/MatrixTypes";
 import { encryptAttachment, decryptAttachment } from "./MatrixAttachmentCrypto";
 import { checkAttachmentSize } from "./MatrixUploadLimit";
+import { attachmentMediaKind, attachmentMimeType } from "../../domain/messaging/Attachments";
+import { boundedBlob } from "../http/BoundedResponse";
 
 export async function sendAttachment(client: MatrixClient, roomId: string, file: File, onProgress?: (percent: number) => void, options: MatrixSendTextOptions = {}): Promise<string> {
   await checkAttachmentSize(client, file);
   const encrypted = client.isRoomEncrypted(roomId);
+  const mimeType = attachmentMimeType(file.name, file.type);
+  const kind = attachmentMediaKind({ name: file.name, mimeType });
   onProgress?.(0);
   const cipher = encrypted ? await encryptAttachment(await file.arrayBuffer()) : null;
   const { content_uri } = await client.uploadContent(cipher ? new Blob([cipher.ciphertext], { type: "application/octet-stream" }) : file, {
     name: encrypted ? "attachment" : file.name,
-    type: encrypted ? "application/octet-stream" : file.type || "application/octet-stream",
+    type: encrypted ? "application/octet-stream" : mimeType,
     includeFilename: !encrypted,
     progressHandler: progress => onProgress?.(Math.min(99, Math.round(progress.loaded / (progress.total || file.size || 1) * 100))),
   }).catch(error => {
@@ -19,9 +23,9 @@ export async function sendAttachment(client: MatrixClient, roomId: string, file:
     throw error;
   });
   const response = await client.sendEvent(roomId, EventType.RoomMessage, {
-    msgtype: file.type.startsWith("image/") ? MsgType.Image : MsgType.File,
+    msgtype: kind === "image" ? MsgType.Image : kind === "video" ? MsgType.Video : kind === "audio" ? MsgType.Audio : MsgType.File,
     body: file.name, filename: file.name,
-    info: { mimetype: file.type || "application/octet-stream", size: file.size },
+    info: { mimetype: mimeType, size: file.size },
     ...(cipher ? { file: { ...cipher.metadata, url: content_uri } } : { url: content_uri }),
     ...(options.replyToEventId ? { "m.relates_to": { "m.in_reply_to": { event_id: options.replyToEventId } } } : {}),
   });
@@ -34,8 +38,9 @@ export async function loadAttachment(client: MatrixClient, attachment: MessageAt
   if (!url) throw new Error("Invalid Matrix attachment URL.");
   const token = client.getAccessToken();
   if (!token) throw new Error("No Matrix session.");
-  const response = await fetch(url, { headers: { Authorization: `Bearer ${token}` }, credentials: "omit", referrerPolicy: "no-referrer", redirect: "follow", signal: signal ?? AbortSignal.timeout(60_000) });
+  const response = await fetch(url, { headers: { Authorization: `Bearer ${token}` }, credentials: "omit", referrerPolicy: "no-referrer", redirect: "follow", signal: signal ? AbortSignal.any([signal, AbortSignal.timeout(60_000)]) : AbortSignal.timeout(60_000) });
   if (!response.ok) throw new Error("Attachment could not be downloaded.");
-  const data = await response.arrayBuffer();
+  const limit = attachment.mimeType.startsWith("image/") ? 32 * 1024 * 1024 : 256 * 1024 * 1024;
+  const data = await (await boundedBlob(response, limit)).arrayBuffer();
   return new Blob([attachment.encrypted ? await decryptAttachment(data, attachment.encrypted) : data], { type: attachment.mimeType || "application/octet-stream" });
 }

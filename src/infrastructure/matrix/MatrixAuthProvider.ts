@@ -20,9 +20,12 @@ import type {
 
 const CALLBACK_URL = "grungus-matrix://auth/callback";
 const DEVICE_NAME = "Grungus Matrix Desktop";
+import { secureHomeserverUrl } from "../../../electron/shared/urls";
 
 interface PendingBrowserLogin {
   capabilities: MatrixAuthCapabilities;
+  state: string;
+  expiresAt: number;
 }
 
 function normalizeServerName(input: string): string {
@@ -37,11 +40,7 @@ function normalizeServerName(input: string): string {
 }
 
 function normalizeDirectUrl(input: string): string {
-  const url = new URL(input.includes("://") ? input : `https://${input}`);
-  if (url.protocol !== "https:" && url.protocol !== "http:") {
-    throw new Error("Homeserver URLs must use HTTP or HTTPS.");
-  }
-  return url.origin + url.pathname.replace(/\/$/, "");
+  return secureHomeserverUrl(input.includes("://") ? input : `https://${input}`);
 }
 
 function sessionFromLogin(
@@ -52,9 +51,7 @@ function sessionFromLogin(
     throw new Error("The homeserver returned an incomplete login session.");
   }
   return {
-    homeserverUrl:
-      login.well_known?.["m.homeserver"]?.base_url ??
-      capabilities.homeserverUrl,
+    homeserverUrl: secureHomeserverUrl(capabilities.homeserverUrl),
     serverName: capabilities.serverName,
     accessToken: login.access_token,
     refreshToken: login.refresh_token,
@@ -72,7 +69,7 @@ export class MatrixAuthProvider implements IMatrixAuthProvider {
       throw new Error("Enter a username without the @ or homeserver suffix.");
     }
     if (!password) throw new Error("Enter a password.");
-    const client = createClient({ baseUrl: capabilities.homeserverUrl });
+    const client = createClient({ baseUrl: secureHomeserverUrl(capabilities.homeserverUrl) });
     try {
       const response = await client.registerRequest({
         username: localpart, password, auth,
@@ -104,6 +101,7 @@ export class MatrixAuthProvider implements IMatrixAuthProvider {
   }
 
   async discover(serverNameOrUrl: string): Promise<MatrixAuthCapabilities> {
+    normalizeDirectUrl(serverNameOrUrl.trim());
     const serverName = normalizeServerName(serverNameOrUrl);
     let discovered = await AutoDiscovery.findClientConfig(serverName);
 
@@ -125,7 +123,8 @@ export class MatrixAuthProvider implements IMatrixAuthProvider {
       );
     }
 
-    const client = createClient({ baseUrl: homeserver.base_url });
+    const baseUrl = secureHomeserverUrl(homeserver.base_url);
+    const client = createClient({ baseUrl });
     const response = await client.loginFlows();
     const ssoFlow = response.flows.find(
       (flow) => flow.type === "m.login.sso" || flow.type === "m.login.cas",
@@ -152,7 +151,7 @@ export class MatrixAuthProvider implements IMatrixAuthProvider {
 
     return {
       serverName,
-      homeserverUrl: homeserver.base_url,
+      homeserverUrl: baseUrl,
       password: response.flows.some((flow) => flow.type === "m.login.password"),
       browser: Boolean(ssoFlow),
       delegatedOAuth,
@@ -168,7 +167,7 @@ export class MatrixAuthProvider implements IMatrixAuthProvider {
     if (!capabilities.password) {
       throw new Error("This homeserver does not advertise password login.");
     }
-    const client = createClient({ baseUrl: capabilities.homeserverUrl });
+    const client = createClient({ baseUrl: secureHomeserverUrl(capabilities.homeserverUrl) });
     const login = await client.loginRequest({
       type: "m.login.password",
       identifier: { type: "m.id.user", user: user.trim() },
@@ -190,20 +189,28 @@ export class MatrixAuthProvider implements IMatrixAuthProvider {
       throw new Error("Browser login requires the Electron desktop application.");
     }
 
-    const client = createClient({ baseUrl: capabilities.homeserverUrl });
+    const client = createClient({ baseUrl: secureHomeserverUrl(capabilities.homeserverUrl) });
+    const state = crypto.randomUUID();
+    const callback = new URL(CALLBACK_URL);
+    callback.searchParams.set("state", state);
     const url = client.getSsoLoginUrl(
-      CALLBACK_URL,
+      callback.href,
       "sso",
       request.identityProviderId,
       request.register ? SSOAction.REGISTER : SSOAction.LOGIN,
     );
-    this.pendingBrowserLogin = { capabilities };
-    await window.desktop.auth.openExternal(url);
+    const pending = { capabilities, state, expiresAt: Date.now() + 10 * 60_000 };
+    this.pendingBrowserLogin = pending;
+    try { await window.desktop.auth.openExternal(url); }
+    catch (error) { if (this.pendingBrowserLogin === pending) this.pendingBrowserLogin = null; throw error; }
   }
 
   async completeBrowserLogin(callbackUrl: string): Promise<MatrixSession> {
     const pending = this.pendingBrowserLogin;
     if (!pending) throw new Error("No browser login is currently in progress.");
+    if (!this.matchesBrowserCallback(callbackUrl)) throw new Error("The sign-in callback is invalid, expired, or belongs to a different login attempt.");
+    // Consume the attempt before exchanging its one-time token.
+    this.pendingBrowserLogin = null;
 
     const parsed = new URL(callbackUrl);
     if (parsed.protocol !== "grungus-matrix:" || parsed.hostname !== "auth") {
@@ -249,11 +256,19 @@ export class MatrixAuthProvider implements IMatrixAuthProvider {
   }
 
   clearSession(): Promise<void> {
+    this.pendingBrowserLogin = null;
     return window.desktop?.session.remove() ?? Promise.resolve();
   }
 
   subscribeToBrowserCallback(listener: (url: string) => void): () => void {
-    return window.desktop?.auth.onCallback(listener) ?? (() => undefined);
+    return window.desktop?.auth.onCallback(url => { if (this.matchesBrowserCallback(url)) listener(url); }) ?? (() => undefined);
+  }
+  private matchesBrowserCallback(value: string): boolean {
+    try {
+      const url = new URL(value);
+      const pending = this.pendingBrowserLogin;
+      return !!pending && Date.now() <= pending.expiresAt && url.protocol === "grungus-matrix:" && url.hostname === "auth" && url.pathname === "/callback" && !url.username && !url.password && url.searchParams.getAll("state").length === 1 && url.searchParams.get("state") === pending.state;
+    } catch { return false; }
   }
 }
 

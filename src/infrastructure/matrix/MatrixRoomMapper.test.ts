@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import type { MatrixClient, Room } from "matrix-js-sdk";
+import type { MatrixClient, Room, RoomMember } from "matrix-js-sdk";
 import { MatrixRoomMapper } from "./MatrixRoomMapper";
 
 describe("MatrixRoomMapper", () => {
@@ -58,8 +58,15 @@ describe("MatrixRoomMapper", () => {
     const client = {
       getAccountData: () => ({ getContent: () => ({ "@friend:example.org": [room.roomId] }) }),
     } as unknown as MatrixClient;
-    expect(new MatrixRoomMapper(client).map(room).isDirect).toBe(true);
+    expect(new MatrixRoomMapper(client).map(room)).toMatchObject({ isDirect: true, directUserId: "@friend:example.org" });
     expect(new MatrixRoomMapper({ getAccountData: () => undefined } as unknown as MatrixClient).map(room).isDirect).toBe(false);
+  });
+
+  it("maps reported member presence and leaves missing presence unknown", () => {
+    const member = { userId: "@alice:example", name: "Alice", getMxcAvatarUrl: () => null, membership: "join", typing: false } as unknown as RoomMember;
+    const client = { getUser: () => ({ events: { presence: { getContent: () => ({ presence: "unavailable" }) } } }) } as unknown as MatrixClient;
+    expect(new MatrixRoomMapper(client).mapMember(member).presence).toBe("unavailable");
+    expect(new MatrixRoomMapper({ getUser: () => null } as unknown as MatrixClient).mapMember(member).presence).toBe("unknown");
   });
 
   it("maps only active space children for server navigation", () => {

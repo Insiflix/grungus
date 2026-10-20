@@ -1,6 +1,7 @@
 import { ClientEvent, RoomEvent, RoomStateEvent, MatrixEventEvent, MatrixError, UpdateDelayedEventAction, type MatrixClient, type MatrixEvent, type Room } from "matrix-js-sdk";
 import { ClientWidgetApi, Widget, WidgetDriver, OpenIDRequestState, type SimpleObservable, type IOpenIDUpdate, type IRoomEvent, type Capability } from "matrix-widget-api";
-import { allowedCallCapabilities, callEvents, callState, callToDevice, ownCallStateKeys, readableCallState, elementCallUrl } from "./MatrixCallPolicy";
+import { allowedCallCapabilities, callEvents, callState, callToDevice, ownCallStateKeys, readableCallState, elementCallUrl, isConversationCall } from "./MatrixCallPolicy";
+import { guardWidgetMessages } from "./WidgetMessageGuard";
 
 const raw = (event: MatrixEvent) => event.getEffectiveEvent() as IRoomEvent;
 export class MatrixCallDriver extends WidgetDriver {
@@ -48,6 +49,7 @@ export class MatrixCallDriver extends WidgetDriver {
   override sendScheduledDelayedEvent(id: string) { return this.updateDelay(id, UpdateDelayedEventAction.Send); }
   override async sendToDevice(type: string, encrypted: boolean, contentMap: { [userId: string]: { [deviceId: string]: object } }) {
     if (!callToDevice.has(type)) throw new Error("Unsupported call to-device event");
+    if (type.endsWith(".encryption_keys") && !encrypted) throw new Error("Call encryption keys must be sent encrypted");
     const room = this.room();
     for (const [userId, devices] of Object.entries(contentMap)) {
       if (room.getMember(userId)?.membership !== "join") throw new Error("Call recipient is outside this room");
@@ -83,13 +85,17 @@ export class MatrixCallDriver extends WidgetDriver {
 export function mountMatrixCall(client: MatrixClient, iframe: HTMLIFrameElement, roomId: string, video: boolean, onClose: () => void, onReady?: () => void, onJoined?: () => void) {
   const widgetId = `grungus-call-${crypto.randomUUID()}`;
   const room = client.getRoom(roomId);
-  const direct = room?.getJoinedMemberCount() === 2;
+  const direct = isConversationCall(room, client.getRooms());
   const joining = Boolean(room && client.matrixRTC.getActiveRoomSession(room)?.memberships.length);
   const url = elementCallUrl(window.location.href, roomId, client.getUserId()!, client.getDeviceId()!, client.getHomeserverUrl(), video, widgetId, direct, joining);
   const driver = new MatrixCallDriver(client, roomId);
-  const api = new ClientWidgetApi(new Widget({ id: widgetId, creatorUserId: client.getUserId()!, type: "m.custom", url, waitForIframeLoad: false }), iframe, driver);
+  const releaseGuard = guardWidgetMessages(iframe, widgetId, url);
+  let api: ClientWidgetApi;
+  try { api = new ClientWidgetApi(new Widget({ id: widgetId, creatorUserId: client.getUserId()!, type: "m.custom", url, waitForIframeLoad: false }), iframe, driver); }
+  catch (error) { releaseGuard(); throw error; }
   api.setViewedRoomId(roomId);
-  api.transport.strictOriginCheck = true;
+  // Source + widget origin are enforced by the capture-phase guard above.
+  api.transport.strictOriginCheck = false;
   api.on("ready", () => onReady?.());
   const safe = (promise: Promise<unknown>) => { void promise.catch(error => console.warn("Call widget event delivery failed", error)); };
   const timeline = (event: MatrixEvent, room?: Room) => { if (room?.roomId === roomId && callEvents.has(event.getType())) safe(api.feedEvent(raw(event))); };
@@ -102,7 +108,7 @@ export function mountMatrixCall(client: MatrixClient, iframe: HTMLIFrameElement,
   api.on("action:io.element.join", event => { event.preventDefault(); api.transport.reply(event.detail, {}); onJoined?.(); });
   for (const action of ["io.element.device_mute", "set_always_on_screen"]) api.on(`action:${action}`, event => { event.preventDefault(); api.transport.reply(event.detail, {}); });
   iframe.src = url;
-  const dispose = () => { api.stop(); void driver.cleanup(); client.off(RoomEvent.Timeline, timeline); client.off(RoomStateEvent.Events, state); client.off(ClientEvent.ToDeviceEvent, device); client.off(MatrixEventEvent.Decrypted, decrypted); };
+  const dispose = () => { api.stop(); releaseGuard(); void driver.cleanup(); client.off(RoomEvent.Timeline, timeline); client.off(RoomStateEvent.Events, state); client.off(ClientEvent.ToDeviceEvent, device); client.off(MatrixEventEvent.Decrypted, decrypted); };
   const hangup = async () => {
     let timer: ReturnType<typeof setTimeout> | undefined;
     try { await Promise.race([api.transport.send("im.vector.hangup", {}), new Promise(resolve => { timer = setTimeout(resolve, 2500); })]); } catch {} finally { clearTimeout(timer); onClose(); }

@@ -26,6 +26,12 @@ function messageEvent(msgtype: string, body: string): MatrixEvent {
 }
 
 describe("MatrixMessageMapper", () => {
+  it.each([["m.video", "video", "video/mp4"], ["m.audio", "audio", "audio/ogg"]])("maps native %s messages and encrypted media descriptors", (msgtype, type, mimeType) => {
+    const event = messageEvent(msgtype, "media");
+    const encrypted = { url: "mxc://example/encrypted", v: "v2", key: {}, iv: "iv", hashes: {} };
+    Object.assign(event.event.content!, { file: encrypted, info: { mimetype: mimeType } });
+    expect(mapper.map(event, room)).toMatchObject({ type, attachment: { mimeType, encrypted, url: encrypted.url } });
+  });
   it("maps uploaded images and encrypted file descriptors into downloadable attachments", () => {
     const image = messageEvent("m.image", "photo.png");
     Object.assign(image.event.content!, { url: "mxc://example.org/photo", info: { mimetype: "image/png", size: 42, w: 800, h: 600 } });

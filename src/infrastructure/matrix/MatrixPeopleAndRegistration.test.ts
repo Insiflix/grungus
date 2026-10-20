@@ -40,6 +40,7 @@ function setup() {
   let closed = { rooms: [] as string[] };
   const sdk = {
     on: vi.fn(), off: vi.fn(), initRustCrypto: vi.fn(), startClient: vi.fn(),
+    stopClient: vi.fn(), logout: vi.fn(), loginRequest: vi.fn(async () => login),
     getRooms: () => rooms, getRoom: (id: string) => rooms.find((room) => room.roomId === id),
     getJoinedRooms: vi.fn(async () => ({ joined_rooms: rooms.filter(room => room.getMyMembership() === "join").map(room => room.roomId) })),
     getUserId: () => session.userId,
@@ -58,13 +59,66 @@ function setup() {
     registerRequest: vi.fn(),
     sendStateEvent: vi.fn(async () => ({ event_id: "$pin" })),
     sendEvent: vi.fn(async () => ({ event_id: "$message" })),
-    getSsoLoginUrl: vi.fn(() => "https://matrix.example.org/sso"),
+    getSsoLoginUrl: vi.fn((_callback?: string) => "https://matrix.example.org/sso"),
   };
   vi.mocked(createClient).mockReturnValue(sdk as unknown as MatrixClient);
   return { sdk, rooms };
 }
 
 beforeEach(() => vi.clearAllMocks());
+
+describe("authentication security", () => {
+  it("rejects forged, mismatched and replayed browser callbacks before exchanging tokens", async () => {
+    const { sdk } = setup();
+    vi.stubGlobal("window", { desktop: { auth: { openExternal: vi.fn() } } });
+    try {
+      const provider = new MatrixAuthProvider();
+      await provider.startBrowserLogin({ ...capabilities, browser: true });
+      const callback = new URL(sdk.getSsoLoginUrl.mock.calls[0][0]!);
+      const state = callback.searchParams.get("state")!;
+      await expect(provider.completeBrowserLogin("grungus-matrix://auth/callback?loginToken=attacker")).rejects.toThrow("invalid");
+      await expect(provider.completeBrowserLogin(`grungus-matrix://auth/wrong?state=${state}&loginToken=attacker`)).rejects.toThrow("invalid");
+      await expect(provider.completeBrowserLogin(`${callback.href}&state=${state}&loginToken=attacker`)).rejects.toThrow("invalid");
+      expect(sdk.loginRequest).not.toHaveBeenCalled();
+      const valid = `${callback.href}&loginToken=one-time-token`;
+      expect(await provider.completeBrowserLogin(valid)).toEqual(session);
+      await expect(provider.completeBrowserLogin(valid)).rejects.toThrow("No browser login");
+      expect(sdk.loginRequest).toHaveBeenCalledOnce();
+    } finally { vi.unstubAllGlobals(); }
+  });
+  it("expires browser login attempts", async () => {
+    const { sdk } = setup();
+    const now = vi.spyOn(Date, "now").mockReturnValue(0);
+    vi.stubGlobal("window", { desktop: { auth: { openExternal: vi.fn() } } });
+    try {
+      const provider = new MatrixAuthProvider();
+      await provider.startBrowserLogin({ ...capabilities, browser: true });
+      now.mockReturnValue(10 * 60_000 + 1);
+      await expect(provider.completeBrowserLogin(`${sdk.getSsoLoginUrl.mock.calls[0][0]}&loginToken=test`)).rejects.toThrow("expired");
+      expect(sdk.loginRequest).not.toHaveBeenCalled();
+    } finally { now.mockRestore(); vi.unstubAllGlobals(); }
+  });
+  it("refuses plaintext credential transport and pins tokens to the login homeserver", async () => {
+    const { sdk } = setup();
+    const provider = new MatrixAuthProvider();
+    await expect(provider.loginWithPassword({ ...capabilities, homeserverUrl: "http://remote.example.org" }, "me", "password")).rejects.toThrow();
+    expect(sdk.loginRequest).not.toHaveBeenCalled();
+    sdk.loginRequest.mockResolvedValueOnce({ ...login, well_known: { "m.homeserver": { base_url: "https://unrelated.example.org" } } } as typeof login);
+    expect((await provider.loginWithPassword(capabilities, "me", "password")).homeserverUrl).toBe(capabilities.homeserverUrl);
+  });
+  it("does not restart an SDK client when logout happens during crypto initialization", async () => {
+    const { sdk } = setup();
+    let ready!: () => void;
+    sdk.initRustCrypto.mockImplementationOnce(() => new Promise<void>(resolve => { ready = resolve; }));
+    const client = new MatrixJsSdkClient();
+    const starting = client.start(session);
+    await client.stop();
+    ready();
+    await expect(starting).rejects.toThrow("ended");
+    expect(sdk.startClient).not.toHaveBeenCalled();
+    expect(client.currentSession).toBeNull();
+  });
+});
 
 describe("registration", () => {
   it("requests browser registration rather than login for SSO signup", async () => {
@@ -73,7 +127,7 @@ describe("registration", () => {
     vi.stubGlobal("window", { desktop: { auth: { openExternal } } });
     try {
       await new MatrixAuthProvider().startBrowserLogin({ ...capabilities, browser: true }, { register: true });
-      expect(sdk.getSsoLoginUrl).toHaveBeenCalledWith("grungus-matrix://auth/callback", "sso", undefined, SSOAction.REGISTER);
+      expect(sdk.getSsoLoginUrl).toHaveBeenCalledWith(expect.stringMatching(/^grungus-matrix:\/\/auth\/callback\?state=[\da-f-]+$/), "sso", undefined, SSOAction.REGISTER);
       expect(openExternal).toHaveBeenCalledWith("https://matrix.example.org/sso");
     } finally { vi.unstubAllGlobals(); }
   });
