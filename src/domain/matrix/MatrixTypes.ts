@@ -1,3 +1,4 @@
+import type { MessageAttachment } from "../messaging/Attachments";
 export type MatrixMembership = "join" | "invite" | "leave" | "ban" | "knock";
 
 export interface MatrixIdentityState {
@@ -73,6 +74,7 @@ export interface MatrixMessage {
   timestamp: number;
   type: MatrixMessageType;
   body: string;
+  attachment?: MessageAttachment;
   edited: boolean;
   replyTo: string | null;
   reactions: MatrixReaction[];

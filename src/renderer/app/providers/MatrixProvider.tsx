@@ -1,3 +1,4 @@
+import { AttachmentMediaContext } from "../../components/common/AttachmentMediaContext";
 import { ScreenShareDialogHost } from "../../features/chat/ScreenShareDialog";
 import { createContext, useContext, useEffect, type PropsWithChildren } from "react";
 import { MatrixAuthProvider } from "../../../infrastructure/matrix/MatrixAuthProvider";
@@ -22,7 +23,7 @@ export function MatrixProvider({ children }: PropsWithChildren) {
 
   return (
     <MatrixRuntimeContext.Provider value={runtime}>
-      <AvatarMediaProvider load={runtime.loadAvatar}>{children}<ScreenShareDialogHost /></AvatarMediaProvider>
+      <AttachmentMediaContext.Provider value={runtime.loadAttachment}><AvatarMediaProvider load={runtime.loadAvatar}>{children}<ScreenShareDialogHost /></AvatarMediaProvider></AttachmentMediaContext.Provider>
     </MatrixRuntimeContext.Provider>
   );
 }

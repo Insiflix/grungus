@@ -1,3 +1,4 @@
+import { AttachmentMessage } from "./AttachmentMessage";
 import type { MatrixMessage } from "../../../domain/matrix/MatrixTypes";
 import { parseGifMessage } from "../../../domain/messaging/GifMessage";
 import { GifMessage } from "./GifMessage";
@@ -49,11 +50,11 @@ export function MessageRow({ message, grouped, onReact, onMediaLoad, onAction }:
           </header>
         )}
         {message.replyTo && <div className="reply-context">↳ Reply to {message.replyTo.slice(0, 10)}…</div>}
-        {gif ? <GifMessage key={gif} url={gif} onLoad={onMediaLoad} /> : <p className={special ? "message-special" : message.type === "notice" ? "message-notice" : ""}>
+        {message.attachment && !message.isRedacted ? <AttachmentMessage sender={message.sender} timestamp={timestamp} attachment={message.attachment} inline={prefs.showInlineMedia && message.type === "image"} onLoad={onMediaLoad} /> : gif ? <GifMessage key={gif} url={gif} onLoad={onMediaLoad} /> : <div className={special ? "message-special" : message.type === "notice" ? "message-notice" : ""}>
           {message.type === "encrypted" && <LockIcon />}
           {message.type === "emote" && <em>* {message.sender.displayName} </em>}
           <MessageText message={message} convertEmoji={prefs.convertEmoji && (message.type === "text" || message.type === "notice" || message.type === "emote")} />
-        </p>}
+        </div>}
         {message.reactions.length > 0 && (
           <div className="reactions">
             {message.reactions.map((reaction) => (

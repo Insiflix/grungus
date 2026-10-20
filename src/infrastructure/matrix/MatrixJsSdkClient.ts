@@ -1,3 +1,6 @@
+import { getUploadLimit } from "./MatrixUploadLimit";
+import { sendAttachment, loadAttachment } from "./MatrixAttachments";
+import type { MessageAttachment } from "../../domain/messaging/Attachments";
 import { MatrixDirectCalls } from "./MatrixDirectCalls";
 import { directInvitePeer } from "./MatrixDirectRooms";
 import { collectTimelineEvents, loadLatestRoomEvents, oldestLoadedTimeline } from "./MatrixTimelineLoader";
@@ -478,6 +481,13 @@ export class MatrixJsSdkClient implements IMatrixClient, ICallProvider {
     );
     return response.event_id;
   }
+
+  getUploadLimit = () => getUploadLimit(this.requireClient());
+  sendAttachment(roomId: string, file: File, onProgress?: (percent: number) => void, options?: MatrixSendTextOptions) {
+    this.requireRoom(roomId);
+    return sendAttachment(this.requireClient(), roomId, file, onProgress, options);
+  }
+  loadAttachment = (attachment: MessageAttachment, signal?: AbortSignal) => loadAttachment(this.requireClient(), attachment, signal);
 
   async editMessage(roomId: string, eventId: string, body: string): Promise<string> {
     const trimmed = body.trim();

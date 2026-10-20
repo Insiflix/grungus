@@ -1,3 +1,4 @@
+import { DesktopFrame } from "../components/common/DesktopFrame";
 import { LoginScreen } from "../features/auth/LoginScreen";
 import { ChatShell } from "../features/chat/ChatShell";
 import { useMatrixSession } from "../hooks/matrix/useMatrixSession";
@@ -9,15 +10,15 @@ export function App() {
 
   if (phase === "restoring") {
     return (
-      <><PreferenceEffects /><main className="splash-screen" role="status" aria-label="Loading Grungus" aria-busy="true">
+      <DesktopFrame><PreferenceEffects /><main className="splash-screen" role="status" aria-label="Loading Grungus" aria-busy="true">
         <div className="splash-screen__icon" aria-hidden="true">
           <BrandLogo className="splash-screen__logo" />
         </div>
         <strong className="splash-screen__name">GRUNGUS</strong>
         <p className="splash-screen__message">Getting things ready…</p>
-      </main></>
+      </main></DesktopFrame>
     );
   }
 
-  return <><PreferenceEffects />{phase === "connected" ? <ChatShell /> : <LoginScreen />}</>;
+  return <DesktopFrame><PreferenceEffects />{phase === "connected" ? <ChatShell /> : <LoginScreen />}</DesktopFrame>;
 }

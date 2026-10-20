@@ -61,6 +61,9 @@ class FakeClient implements IMatrixClient {
   getTimeline = (id: string) => this.timelines[id] ?? [];
   refreshTimeline = vi.fn(async (id: string) => this.getTimeline(id));
   loadOlderMessages = vi.fn(async (id: string) => ({ messages: this.getTimeline(id), hasMore: false }));
+  getUploadLimit = vi.fn(async () => null);
+  sendAttachment = vi.fn(async () => "$attachment");
+  loadAttachment = vi.fn(async () => new Blob());
   sendTextMessage = vi.fn(async () => "$sent");
   editMessage = vi.fn(async () => "$edit");
   redactMessage = vi.fn(async () => undefined);

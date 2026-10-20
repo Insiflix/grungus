@@ -26,6 +26,17 @@ function messageEvent(msgtype: string, body: string): MatrixEvent {
 }
 
 describe("MatrixMessageMapper", () => {
+  it("maps uploaded images and encrypted file descriptors into downloadable attachments", () => {
+    const image = messageEvent("m.image", "photo.png");
+    Object.assign(image.event.content!, { url: "mxc://example.org/photo", info: { mimetype: "image/png", size: 42, w: 800, h: 600 } });
+    expect(mapper.map(image, room)?.attachment).toMatchObject({ url: "mxc://example.org/photo", name: "photo.png", mimeType: "image/png", size: 42, width: 800, height: 600 });
+    const file = messageEvent("m.file", "notes.txt");
+    const descriptor = { url: "mxc://example.org/encrypted", v: "v2", iv: "iv", key: {}, hashes: {} };
+    Object.assign(file.event.content!, { file: descriptor, info: { mimetype: "text/plain" } });
+    expect(mapper.map(file, room)?.attachment).toMatchObject({ url: descriptor.url, encrypted: descriptor });
+    file.event.content!.file = { url: "https://untrusted.example/file" };
+    expect(mapper.map(file, room)?.attachment).toBeUndefined();
+  });
   it("recognizes intentional incoming mentions of the signed-in user", () => {
     const event = messageEvent("m.text", "Hello Me");
     event.event.content!["m.mentions"] = { user_ids: ["@me:example"] };

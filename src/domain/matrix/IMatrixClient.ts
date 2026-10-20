@@ -1,3 +1,4 @@
+import type { MessageAttachment } from "../messaging/Attachments";
 import type { MatrixEventSource } from "./MatrixEvents";
 import type {
   MatrixMessage,
@@ -50,6 +51,9 @@ export interface IMatrixClient extends MatrixEventSource {
     body: string,
     options?: MatrixSendTextOptions,
   ): Promise<string>;
+  getUploadLimit(): Promise<number | null>;
+  sendAttachment(roomId: string, file: File, onProgress?: (percent: number) => void, options?: MatrixSendTextOptions): Promise<string>;
+  loadAttachment(attachment: MessageAttachment, signal?: AbortSignal): Promise<Blob>;
   editMessage(roomId: string, eventId: string, body: string): Promise<string>;
   redactMessage(roomId: string, eventId: string, reason?: string): Promise<void>;
   setMessagePinned(roomId: string, eventId: string, pinned: boolean): Promise<void>;

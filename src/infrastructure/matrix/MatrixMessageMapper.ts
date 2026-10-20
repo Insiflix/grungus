@@ -1,3 +1,4 @@
+import type { EncryptedAttachment } from "../../domain/messaging/Attachments";
 import { isHiddenTimelineEvent } from "./MatrixTimelinePolicy";
 import {
   EventStatus,
@@ -106,6 +107,18 @@ export class MatrixMessageMapper {
       timestamp: Number.isFinite(rawTimestamp) ? rawTimestamp : Date.now(),
       type: mappedType,
       body: mappedBody,
+      ...(mappedType === "image" || mappedType === "file" ? (() => {
+        const encrypted = contentRecord(content.file);
+        const url = typeof encrypted.url === "string" ? encrypted.url : content.url;
+        const info = contentRecord(content.info);
+        return typeof url === "string" && url.startsWith("mxc://") ? { attachment: {
+          url, name: typeof content.filename === "string" ? content.filename : mappedBody,
+          mimeType: typeof info.mimetype === "string" ? info.mimetype : "application/octet-stream",
+          size: typeof info.size === "number" ? info.size : undefined,
+          width: typeof info.w === "number" ? info.w : undefined, height: typeof info.h === "number" ? info.h : undefined,
+          ...(typeof encrypted.url === "string" ? { encrypted: encrypted as unknown as EncryptedAttachment } : {}),
+        } } : {};
+      })() : {}),
       edited: Boolean(event.replacingEvent()),
       replyTo:
         typeof inReplyTo.event_id === "string" ? inReplyTo.event_id : null,

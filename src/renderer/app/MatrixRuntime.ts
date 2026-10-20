@@ -1,3 +1,4 @@
+import type { MessageAttachment } from "../../domain/messaging/Attachments";
 import type { IMatrixAuthProvider } from "../../domain/matrix/IMatrixAuthProvider";
 import type { IMatrixClient } from "../../domain/matrix/IMatrixClient";
 import { preferences } from "../../domain/settings/Preferences";
@@ -365,6 +366,13 @@ export class MatrixRuntime {
       throw error;
     }
   }
+
+  getUploadLimit = () => this.client.getUploadLimit();
+  async sendAttachment(roomId: string, file: File, onProgress?: (percent: number) => void, replyToEventId?: string): Promise<void> {
+    try { await this.client.sendAttachment(roomId, file, onProgress, replyToEventId ? { replyToEventId } : undefined); }
+    catch (error) { this.update({ error: messageOf(error) }); throw error; }
+  }
+  loadAttachment = (attachment: MessageAttachment, signal?: AbortSignal) => this.client.loadAttachment(attachment, signal);
 
   setTyping(roomId: string, typing: boolean): void {
     void this.client.setTyping(roomId, typing).catch(() => undefined);
