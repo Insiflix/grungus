@@ -9,7 +9,7 @@ function fixture() {
   const getDisplayMedia = vi.fn().mockResolvedValue({ getVideoTracks: () => [screen], getAudioTracks: () => [{}] });
   const postMessage = vi.fn(); let listener: (event: object) => Promise<void> = async () => {};
   const parent = { postMessage };
-  const context = { navigator: { mediaDevices: { getUserMedia, getDisplayMedia } }, parent, location: { origin: "http://localhost", hash: "#?widgetId=test&grungusCameraQuality=720p" }, URLSearchParams, window: { addEventListener: (_event: string, callback: typeof listener) => { listener = callback; } } };
+  const context = { navigator: { mediaDevices: { getUserMedia, getDisplayMedia } }, parent, location: { origin: "http://localhost", hash: "#?widgetId=test&grungusCameraQuality=720p&parentUrl=http%3A%2F%2Flocalhost%2F" }, URL, URLSearchParams, window: { addEventListener: (_event: string, callback: typeof listener) => { listener = callback; } } };
   const source = readFileSync("scripts/element-call-media.js", "utf8").replace("__GRUNGUS_CAMERA_PRESETS__", JSON.stringify(cameraQualityPresets));
   runInNewContext(source, context);
   return { media: context.navigator.mediaDevices, camera, screen, getUserMedia, getDisplayMedia, postMessage, parent, listener };

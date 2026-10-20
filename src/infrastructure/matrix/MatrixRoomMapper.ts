@@ -15,6 +15,7 @@ import type { MatrixProfileAvatars } from "./MatrixProfileAvatars";
 import { MatrixMediaResolver } from "./MatrixMediaResolver";
 import { directInvitePeer } from "./MatrixDirectRooms";
 import { closedDirectRoomIds, closedDirectRoomsEvent } from "./MatrixClosedDirectRooms";
+import { matrixPresence } from "../../domain/matrix/MatrixTypes";
 
 function membership(value: string | undefined): MatrixMembership {
   if (
@@ -65,10 +66,13 @@ export class MatrixRoomMapper {
       isEncrypted: room.hasEncryptionStateEvent(),
       membership: membership(room.getMyMembership()),
       memberCount: room.getJoinedMemberCount(),
+      directUserId: directPeer || undefined,
       isDirect: Object.values(this.client.getAccountData?.(EventType.Direct)?.getContent() ?? {})
         .some((ids) => Array.isArray(ids) && ids.includes(room.roomId)) || Boolean(directPeer),
       isDirectClosed: this.isDirectClosed?.(room.roomId) ?? closedDirectRoomIds(this.client.getAccountData?.(closedDirectRoomsEvent)?.getContent()).includes(room.roomId),
       isSpace: room.isSpaceRoom?.() ?? false,
+      roomType: state?.getStateEvents(EventType.RoomCreate, "")?.getContent().type,
+      joinRule: state?.getStateEvents(EventType.RoomJoinRules, "")?.getContent().join_rule,
       childRoomIds: room.isSpaceRoom?.()
         ? (state?.getStateEvents(EventType.SpaceChild) ?? [])
             .filter((event) => Array.isArray(event.getContent().via) && event.getContent().via.length > 0)
@@ -84,6 +88,7 @@ export class MatrixRoomMapper {
       avatarUrl: this.media.resolve((this.profiles ? this.profiles.resolve(member, member.userId) : member.getMxcAvatarUrl()), 80, 80),
       membership: membership(member.membership),
       isTyping: member.typing,
+      presence: matrixPresence(this.client.getUser?.(member.userId)?.events.presence?.getContent().presence),
     };
   }
 }

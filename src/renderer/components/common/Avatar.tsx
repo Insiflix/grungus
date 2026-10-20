@@ -1,11 +1,13 @@
 import { useContext, useEffect, useState } from "react";
 import { AvatarMediaContext } from "./AvatarMediaContext";
+import type { MatrixPresence } from "../../../domain/matrix/MatrixTypes";
 
 interface AvatarProps {
   name: string;
   url?: string | null;
   size?: "small" | "medium" | "large";
   status?: boolean;
+  presence?: MatrixPresence;
 }
 
 function initials(name: string): string {
@@ -18,7 +20,7 @@ function initials(name: string): string {
     .join("") || "?";
 }
 
-export function Avatar({ name, url, size = "medium", status = false }: AvatarProps) {
+export function Avatar({ name, url, size = "medium", status = false, presence }: AvatarProps) {
   const load = useContext(AvatarMediaContext);
   const [image, setImage] = useState<{ url: string; src: string } | null>(null);
   const [failed, setFailed] = useState<string | null>(null);
@@ -31,7 +33,7 @@ export function Avatar({ name, url, size = "medium", status = false }: AvatarPro
   return (
     <span className={`avatar avatar--${size}`} data-avatar-state={!url ? "missing" : failed === url ? "failed" : src ? "loaded" : "loading"} aria-hidden="true">
       {src ? <img src={src} alt="" referrerPolicy="no-referrer" onError={() => setFailed(url ?? null)} /> : initials(name)}
-      {status && <span className="avatar__status" />}
+      {(status || presence) && <span className={`avatar__status avatar__status--${presence ?? "online"}`} />}
     </span>
   );
 }

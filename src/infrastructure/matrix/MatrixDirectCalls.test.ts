@@ -11,7 +11,7 @@ function fixture() {
   const controller = new MatrixDirectCalls();
   controller.attach(client as unknown as MatrixClient);
   const observer = vi.fn(); controller.subscribe(observer);
-  return { client, controller, observer };
+  return { client, controller, observer, media };
 }
 function makeCall() {
   const call = Object.assign(new EventEmitter(), { callId: "call", roomId: "!room:test", state: CallState.Ringing, direction: CallDirection.Inbound, type: CallType.Video,
@@ -21,6 +21,16 @@ function makeCall() {
   return call;
 }
 describe("classic Matrix call compatibility", () => {
+  it("does not open capture after logout while call device settings were pending", async () => {
+    const { controller, media } = fixture();
+    let ready!: () => void;
+    media.setMediaInputs.mockImplementationOnce(() => new Promise<void>(resolve => { ready = resolve; }));
+    vi.mocked(createNewMatrixCall).mockClear();
+    const starting = controller.start("!room:test", false);
+    controller.dispose(); ready();
+    await expect(starting).rejects.toThrow("ended");
+    expect(createNewMatrixCall).not.toHaveBeenCalled();
+  });
   it("surfaces incoming calls without opening camera or answering automatically", async () => {
     const { client, controller, observer } = fixture(); const call = makeCall();
     client.emit(CallEventHandlerEvent.Incoming, call);

@@ -48,6 +48,7 @@ class FakeClient implements IMatrixClient {
   stop = vi.fn(async () => undefined);
   logout = vi.fn(async () => undefined);
   getRooms = () => this.rooms;
+  discoverSpaceRooms = vi.fn(async (): Promise<MatrixRoom[]> => []);
   getRoom = (id: string) => this.rooms.find((room) => room.id === id) ?? null;
   joinRoom = vi.fn(async () => this.rooms[0]!);
   leaveRoom = vi.fn(async () => undefined);
@@ -89,6 +90,54 @@ const auth: IMatrixAuthProvider = {
 };
 
 describe("MatrixRuntime event bridge", () => {
+  it("discards old account history when pagination completes after logout", async () => {
+    const client = new FakeClient();
+    const runtime = new MatrixRuntime(client, auth);
+    Object.assign(runtime.getSnapshot(), { session: { userId: "@old:example" } });
+    let finish!: (page: { messages: MatrixMessage[]; hasMore: boolean }) => void;
+    client.loadOlderMessages.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    const loading = runtime.loadOlder("!old:example");
+    await runtime.logout();
+    Object.assign(runtime.getSnapshot(), { session: { userId: "@new:example" } });
+    finish({ messages: [], hasMore: true });
+    expect(await loading).toBe(false);
+    expect(runtime.getSnapshot().timelines).toEqual({});
+  });
+  it("clears private UI state even when removing the saved session fails", async () => {
+    const runtime = new MatrixRuntime(new FakeClient(), auth);
+    Object.assign(runtime.getSnapshot(), { session: { userId: "@old:example" }, selectedRoomId: "!private:example" });
+    vi.mocked(auth.clearSession).mockRejectedValueOnce(new Error("disk unavailable"));
+    await expect(runtime.logout()).rejects.toThrow("disk unavailable");
+    expect(runtime.getSnapshot()).toMatchObject({ session: null, phase: "signed-out", selectedRoomId: null, timelines: {} });
+  });
+  it("deduplicates channel discovery and discards results after logout", async () => {
+    const client = new FakeClient();
+    const runtime = new MatrixRuntime(client, auth);
+    let finish!: (rooms: MatrixRoom[]) => void;
+    Object.assign(runtime.getSnapshot(), { session: { userId: "@me:example" } });
+    client.discoverSpaceRooms.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    const first = runtime.discoverSpaceRooms("!server");
+    const second = runtime.discoverSpaceRooms("!server");
+    expect(client.discoverSpaceRooms).toHaveBeenCalledOnce();
+    await runtime.logout();
+    finish([]);
+    await Promise.all([first, second]);
+    expect(runtime.getSnapshot().spaceRooms).toEqual({});
+  });
+  it("publishes live presence updates without duplicating unchanged snapshots and clears them at logout", async () => {
+    const client = new FakeClient();
+    const runtime = new MatrixRuntime(client, auth);
+    const listener = vi.fn();
+    runtime.subscribe(listener);
+    client.emit("presenceChanged", { userId: "@alice:example", presence: "online" });
+    expect(runtime.getSnapshot().presences["@alice:example"]).toBe("online");
+    client.emit("presenceChanged", { userId: "@alice:example", presence: "online" });
+    expect(listener).toHaveBeenCalledTimes(1);
+    client.emit("presenceChanged", { userId: "@alice:example", presence: "offline" });
+    expect(runtime.getSnapshot().presences["@alice:example"]).toBe("offline");
+    await runtime.logout();
+    expect(runtime.getSnapshot().presences).toEqual({});
+  });
   it("limits placeholder cleanup to encrypted rows and preserves actual chat messages", () => {
     const client = new FakeClient();
     const runtime = new MatrixRuntime(client, auth);

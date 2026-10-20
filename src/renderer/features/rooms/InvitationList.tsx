@@ -23,9 +23,9 @@ function Invitation({ room }: { room: MatrixRoom }) {
   );
 }
 
-export function InvitationList() {
+export function InvitationList({ roomIds, excludedRoomIds }: { roomIds?: ReadonlySet<string>; excludedRoomIds?: ReadonlySet<string> }) {
   const { rooms } = useMatrixRooms();
-  const invitations = rooms.filter((room) => room.membership === "invite");
+  const invitations = rooms.filter(room => room.membership === "invite" && (!roomIds || roomIds.has(room.id)) && !excludedRoomIds?.has(room.id));
   if (!invitations.length) return null;
   return <section className="invitation-list" aria-label="Pending invitations">
     <div className="room-section-label"><span>Invitations</span><span>{invitations.length}</span></div>

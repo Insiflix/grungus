@@ -5,9 +5,11 @@ import type {
   MatrixSyncStatus,
   MatrixIdentityState,
   MatrixUser,
+  MatrixPresence,
 } from "./MatrixTypes";
 
 export interface MatrixApplicationEvents {
+  presenceChanged: { userId: string; presence: MatrixPresence };
   profileUpdated: MatrixUser;
   identityChanged: MatrixIdentityState;
   syncStateChanged: MatrixSyncStatus;

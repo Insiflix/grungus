@@ -1,6 +1,9 @@
 import { registerWindowControls } from "./windowControls.js";
 import { DesktopCaptureBroker } from "./desktopCapture.js";
-import { configureAppPermissions } from "./permissions.js";
+import { configureAppPermissions, allowsAppPermission } from "./permissions.js";
+import { assertTrustedAppSender } from "./ipcSecurity.js";
+import { secureStorageAvailable, isPersistedSession, SessionOperationQueue } from "./sessionSecurity.js";
+import { secureExternalUrl } from "./shared/urls.js";
 import { app, BrowserWindow, clipboard, ipcMain, safeStorage, shell, session, protocol, net, desktopCapturer } from "electron";
 import { promises as fs } from "node:fs";
 import path from "node:path";
@@ -20,6 +23,7 @@ const SESSION_FILE = "matrix-session.bin";
 let desktopCapture: DesktopCaptureBroker | null = null;
 let mainWindow: BrowserWindow | null = null;
 let pendingAuthCallback: string | null = null;
+const sessionOperations = new SessionOperationQueue();
 
 function isAuthCallback(value: string): boolean {
   try {
@@ -47,27 +51,13 @@ function sessionFilePath(): string {
   return path.join(app.getPath("userData"), SESSION_FILE);
 }
 
-function isPersistedSession(value: unknown): value is PersistedMatrixSession {
-  if (!value || typeof value !== "object") return false;
-  const candidate = value as Record<string, unknown>;
-  return (
-    typeof candidate.homeserverUrl === "string" &&
-    typeof candidate.serverName === "string" &&
-    typeof candidate.accessToken === "string" &&
-    typeof candidate.userId === "string" &&
-    typeof candidate.deviceId === "string" &&
-    (candidate.refreshToken === undefined ||
-      typeof candidate.refreshToken === "string")
-  );
-}
-
 async function saveSession(
   value: PersistedMatrixSession,
 ): Promise<SessionStoreResult> {
   if (!isPersistedSession(value)) {
     throw new Error("Invalid Matrix session payload");
   }
-  if (!safeStorage.isEncryptionAvailable()) {
+  if (!secureStorageAvailable(safeStorage, process.platform)) {
     return {
       persisted: false,
       reason: "OS credential encryption is unavailable; the session was not written to disk.",
@@ -84,7 +74,7 @@ async function saveSession(
 }
 
 async function loadSession(): Promise<PersistedMatrixSession | null> {
-  if (!safeStorage.isEncryptionAvailable()) return null;
+  if (!secureStorageAvailable(safeStorage, process.platform)) return null;
 
   try {
     const encrypted = await fs.readFile(sessionFilePath());
@@ -137,12 +127,15 @@ function createWindow(): void {
   mainWindow.on("unmaximize", publishWindowState);
 
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    if (url.startsWith("https://")) void shell.openExternal(url);
+    try { void shell.openExternal(secureExternalUrl(url)).catch(() => undefined); } catch { /* Unsupported external scheme. */ }
     return { action: "deny" };
   });
   mainWindow.webContents.on("will-navigate", (event, url) => {
     desktopCapture?.cancel();
-    if (!isTrustedRendererUrl(url)) event.preventDefault();
+    if (!isTrustedRendererUrl(url) || !["/", "/index.html"].includes(new URL(url).pathname)) event.preventDefault();
+  });
+  mainWindow.webContents.on("will-frame-navigate", event => {
+    if (!event.isMainFrame && !allowsAppPermission("media", event.url, app.isPackaged, false)) event.preventDefault();
   });
   mainWindow.webContents.on("did-finish-load", () => {
     if (pendingAuthCallback) {
@@ -173,19 +166,16 @@ function registerIpc(): void {
     if (typeof requestId !== "string" || (sourceId !== null && typeof sourceId !== "string") || typeof audio !== "boolean") throw new Error("Invalid capture response");
     desktopCapture?.respond(requestId, sourceId, audio);
   });
-  ipcMain.handle("matrix-session:load", () => loadSession());
+  ipcMain.handle("matrix-session:load", event => { assertTrustedAppSender(event, mainWindow, isTrustedRendererUrl); return sessionOperations.run(loadSession); });
   ipcMain.handle(
     "matrix-session:save",
-    (_event, value: PersistedMatrixSession) => saveSession(value),
+    (event, value: PersistedMatrixSession) => { assertTrustedAppSender(event, mainWindow, isTrustedRendererUrl); return sessionOperations.run(() => saveSession(value)); },
   );
-  ipcMain.handle("matrix-session:remove", () => removeSession());
-  ipcMain.handle("matrix-auth:open-external", async (_event, value: unknown) => {
+  ipcMain.handle("matrix-session:remove", event => { assertTrustedAppSender(event, mainWindow, isTrustedRendererUrl); return sessionOperations.run(removeSession); });
+  ipcMain.handle("matrix-auth:open-external", async (event, value: unknown) => {
+    assertTrustedAppSender(event, mainWindow, isTrustedRendererUrl);
     if (typeof value !== "string") throw new Error("Invalid URL");
-    const url = new URL(value);
-    if (url.protocol !== "https:") {
-      throw new Error("Only HTTPS authentication URLs may be opened");
-    }
-    await shell.openExternal(url.toString());
+    await shell.openExternal(secureExternalUrl(value));
   });
 }
 
@@ -212,18 +202,20 @@ if (!app.requestSingleInstanceLock()) {
       const url = new URL(request.url);
       const root = path.resolve(__dirname, "../dist");
       const destination = path.resolve(root, "." + decodeURIComponent(url.pathname));
-      if (url.hostname !== "client" || !destination.startsWith(root + path.sep)) return new Response("Forbidden", { status: 403 });
+      if (!["client", "call"].includes(url.hostname) || (url.hostname === "call" && !url.pathname.startsWith("/element-call/")) || !destination.startsWith(root + path.sep)) return new Response("Forbidden", { status: 403 });
       return net.fetch(pathToFileURL(destination).href);
     });
     desktopCapture = new DesktopCaptureBroker({
       platform: process.platform,
       getSources: () => desktopCapturer.getSources({ types: ["screen", "window"], thumbnailSize: { width: 320, height: 180 }, fetchWindowIcons: true }),
-      isTrusted: request => Boolean(mainWindow && request.frame && request.frame.top === mainWindow.webContents.mainFrame && isTrustedRendererUrl(request.frame.url) && ["/", "/index.html", "/element-call/index.html"].includes(new URL(request.frame.url).pathname)),
+      isTrusted: request => Boolean(mainWindow && request.frame && request.frame.top === mainWindow.webContents.mainFrame && allowsAppPermission("display-capture", request.frame.url, app.isPackaged, request.frame === mainWindow.webContents.mainFrame)),
       notify: request => mainWindow?.webContents.send("desktop-capture:request", request),
       dismiss: id => mainWindow?.webContents.send("desktop-capture:dismiss", id),
     });
     session.defaultSession.setDisplayMediaRequestHandler((request, callback) => { void desktopCapture!.request(request, callback); });
-    app.on("before-quit", () => desktopCapture?.cancel());
+    app.on("before-quit", event => {
+      desktopCapture?.cancel();
+    });
     configureAppPermissions(session.defaultSession, () => mainWindow, app.isPackaged);
     if (process.platform === "win32") app.setAppUserModelId("dev.grungus.matrix");
     if (process.platform === "darwin" && !app.isPackaged) {

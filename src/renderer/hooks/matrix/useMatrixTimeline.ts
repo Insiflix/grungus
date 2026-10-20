@@ -29,7 +29,8 @@ export function useMatrixTimeline(roomId: string | null) {
       roomId ? runtime.toggleReaction(roomId, message, key) : Promise.resolve(),
   }), [runtime, roomId, prefs.sendTyping]);
   return {
-    members: roomId ? runtime.getRoomMembers(roomId).filter(member => member.membership === "join" && !ignored.has(member.id)) : [],
+    members: roomId ? runtime.getRoomMembers(roomId).filter(member => member.membership === "join" && !ignored.has(member.id))
+      .map(member => ({ ...member, presence: snapshot.presences[member.id] ?? member.presence ?? "unknown" })) : [],
     messages: roomId ? (snapshot.timelines[roomId] ?? []).filter((message) => !ignored.has(message.sender.id)) : [],
     typingMembers: roomId ? (snapshot.typing[roomId] ?? []).filter((member) => !ignored.has(member.id)) : [],
     ...actions,

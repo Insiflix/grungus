@@ -1,4 +1,4 @@
-import { Hash } from "lucide-react";
+import { MessageCircle, Plus } from "lucide-react";
 import { Avatar } from "../../components/common/Avatar";
 import type { MatrixRoom } from "../../../domain/matrix/MatrixTypes";
 import { BrandLogo } from "../../components/common/BrandLogo";
@@ -7,14 +7,15 @@ interface WorkspaceRailProps {
   spaces: MatrixRoom[];
   selectedSpaceId: string | null;
   onSelectSpace: (id: string | null) => void;
+  onCreateServer: () => void;
 }
 
-export function WorkspaceRail({ spaces, selectedSpaceId, onSelectSpace }: WorkspaceRailProps) {
+export function WorkspaceRail({ spaces, selectedSpaceId, onSelectSpace, onCreateServer }: WorkspaceRailProps) {
   return (
     <nav className="workspace-rail" aria-label="Servers">
       <button type="button" className="rail-button rail-button--brand" aria-label="Grungus home" title="Grungus home" onClick={() => onSelectSpace(null)}><BrandLogo /></button>
       <div className="rail-divider" />
-      <button type="button" className={`rail-button ${selectedSpaceId === null ? "is-active" : ""}`} aria-label="All rooms" title="All rooms" aria-pressed={selectedSpaceId === null} onClick={() => onSelectSpace(null)}><Hash /></button>
+      <button type="button" className={`rail-button ${selectedSpaceId === null ? "is-active" : ""}`} aria-label="Messages and group chats" title="Messages and group chats" aria-pressed={selectedSpaceId === null} onClick={() => onSelectSpace(null)}><MessageCircle /></button>
       <div className="rail-servers">
         {spaces.map((space) => (
           <button type="button" key={space.id} className={`rail-button ${selectedSpaceId === space.id ? "is-active" : ""}`} aria-label={space.name} title={space.name} aria-pressed={selectedSpaceId === space.id} onClick={() => onSelectSpace(space.id)}>
@@ -22,6 +23,7 @@ export function WorkspaceRail({ spaces, selectedSpaceId, onSelectSpace }: Worksp
           </button>
         ))}
       </div>
+      <button type="button" className="rail-button rail-button--create" aria-label="Create server" title="Create server" onClick={onCreateServer}><Plus /></button>
       <div className="rail-spacer" />
       <span className="rail-caption">GRUNGUS</span>
     </nav>

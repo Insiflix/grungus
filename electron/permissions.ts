@@ -4,12 +4,12 @@ import type { BrowserWindow, Session } from "electron";
 export function allowsAppPermission(permission: string, requestingUrl: string, packaged: boolean, mainFrame: boolean): boolean {
   try {
     const url = new URL(requestingUrl);
-    const trusted = packaged
+    const trustedApp = packaged
       ? url.protocol === "grungus-app:" && url.host === "client"
       : url.origin === "http://127.0.0.1:5173";
-    if (!trusted) return false;
-    const appPage = url.pathname === "" || url.pathname === "/" || url.pathname === "/index.html";
-    const callPage = url.pathname === "/element-call/index.html";
+    const trustedCall = packaged ? url.protocol === "grungus-app:" && url.host === "call" : url.origin === "http://localhost:5173";
+    const appPage = trustedApp && mainFrame && ["", "/", "/index.html"].includes(url.pathname);
+    const callPage = trustedCall && !mainFrame && url.pathname === "/element-call/index.html";
     if (permission === "notifications" || permission === "clipboard-sanitized-write") return appPage && mainFrame;
     return (appPage || callPage) && ["media", "display-capture", "speaker-selection", "fullscreen"].includes(permission);
   } catch { return false; }

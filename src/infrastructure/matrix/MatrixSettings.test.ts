@@ -28,6 +28,41 @@ function fixture() {
 }
 
 describe("Matrix account settings", () => {
+  it("does not apply an old account's blocked-user request to a newly connected account", async () => {
+    const first = fixture().sdk, second = fixture().sdk;
+    let current = first;
+    const settings = new MatrixSettings(() => current as unknown as MatrixClient, async () => undefined);
+    let finish!: (value: { ignored_users: Record<string, object> }) => void;
+    first.getAccountDataFromServer.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    const blocking = settings.setIgnored("@blocked:example.org", true);
+    current = second;
+    finish({ ignored_users: {} });
+    await expect(blocking).rejects.toThrow("changed");
+    expect(first.setIgnoredUsers).not.toHaveBeenCalled();
+    expect(second.setIgnoredUsers).not.toHaveBeenCalled();
+  });
+  it("creates server channels that members can join and links them to the space", async () => {
+    const { sdk, settings } = fixture();
+    Object.assign(sdk, { getDomain: () => "example.org", getRoom: () => ({ currentState: { maySendStateEvent: () => true } }) });
+    await settings.createSpaceChannel("!server:example.org", " Lounge ", true);
+    expect(sdk.createRoom).toHaveBeenCalledWith(expect.objectContaining({ name: "Lounge", creation_content: { type: "org.matrix.msc3417.call" }, initial_state: expect.arrayContaining([
+      { type: "m.room.join_rules", state_key: "", content: { join_rule: "restricted", allow: [{ type: "m.room_membership", room_id: "!server:example.org" }] } },
+      { type: "m.space.parent", state_key: "!server:example.org", content: { via: ["example.org"], canonical: true } },
+      { type: "m.room.encryption", state_key: "", content: { algorithm: "m.megolm.v1.aes-sha2" } },
+    ]) }));
+    expect(sdk.sendStateEvent).toHaveBeenCalledWith("!server:example.org", "m.space.child", { via: ["example.org"], suggested: true }, "!new:example.org");
+  });
+  it("checks server permissions before creating a room and preserves recovery details if linking fails", async () => {
+    const { sdk, settings } = fixture();
+    const maySendStateEvent = vi.fn(() => false);
+    Object.assign(sdk, { getDomain: () => "example.org", getRoom: () => ({ currentState: { maySendStateEvent } }) });
+    await expect(settings.createSpaceChannel("!server:example.org", "General", false)).rejects.toThrow("Your role");
+    expect(sdk.createRoom).not.toHaveBeenCalled();
+    maySendStateEvent.mockReturnValue(true);
+    sdk.sendStateEvent.mockRejectedValueOnce(new Error("Forbidden"));
+    await expect(settings.createSpaceChannel("!server:example.org", "General", false)).rejects.toThrow("!new:example.org");
+    expect(sdk.createRoom).toHaveBeenCalledWith(expect.objectContaining({ initial_state: expect.arrayContaining([{ type: "m.room.encryption", state_key: "", content: { algorithm: "m.megolm.v1.aes-sha2" } }]) }));
+  });
   it("publishes profile changes only after the homeserver accepts them", async () => {
     const { sdk, settings, profileChanged } = fixture();
     await settings.profile("  Alice  ");

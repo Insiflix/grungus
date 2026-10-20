@@ -2,6 +2,7 @@
   roomId: string;
   name: string;
   participants: number;
+  members?: import("../matrix/MatrixTypes").MatrixUser[];
 }
 export interface CallHandle {
   dispose(): void;

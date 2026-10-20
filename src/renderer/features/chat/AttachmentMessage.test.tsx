@@ -3,15 +3,46 @@ import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/re
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AttachmentMessage } from "./AttachmentMessage";
 import { AttachmentMediaContext } from "../../components/common/AttachmentMediaContext";
+const codec = vi.hoisted(() => ({ load: vi.fn(), writeFile: vi.fn(), exec: vi.fn(async () => 0), readFile: vi.fn(async () => new Uint8Array([1, 2, 3])), terminate: vi.fn() }));
+vi.mock("@ffmpeg/ffmpeg", () => ({ FFmpeg: class { load = codec.load; writeFile = codec.writeFile; exec = codec.exec; readFile = codec.readFile; terminate = codec.terminate; } }));
 
 const attachment = { name: "photo.png", url: "mxc://example/photo", mimeType: "image/png", size: 2048 };
 beforeEach(() => {
   HTMLDialogElement.prototype.showModal = function () { this.setAttribute("open", ""); };
   HTMLDialogElement.prototype.close = function () { this.removeAttribute("open"); };
   URL.createObjectURL = vi.fn(() => "blob:media"); URL.revokeObjectURL = vi.fn(); });
-afterEach(() => { cleanup(); vi.restoreAllMocks(); });
+afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); Reflect.deleteProperty(window, "desktop"); });
 
 describe("received attachments", () => {
+  it.each([["clip.webm", "video/webm", "video"], ["clip.mp4", "video/mp4", "video"], ["song.mp3", "audio/mpeg", "audio"], ["song.wav", "audio/wav", "audio"]])("loads %s on demand with native controls and cleans up media URLs", async (name, mimeType, tag) => {
+    const load = vi.fn().mockResolvedValue(new Blob(["media"], { type: mimeType }));
+    const view = render(<AttachmentMediaContext.Provider value={load}><AttachmentMessage attachment={{ name, mimeType, url: "mxc://example/media" }} inline /></AttachmentMediaContext.Provider>);
+    expect(load).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: `Play ${tag}` }));
+    await waitFor(() => expect(view.container.querySelector(tag)?.getAttribute("src")).toBe("blob:media"));
+    expect(view.container.querySelector(tag)?.hasAttribute("controls")).toBe(true);
+    expect(screen.getByRole("button", { name: `Download ${name}` })).toBeTruthy();
+    view.unmount();
+    expect(URL.revokeObjectURL).toHaveBeenCalledWith("blob:media");
+  });
+  it("converts unsupported codecs locally while downloading the original encrypted attachment", async () => {
+    vi.spyOn(HTMLMediaElement.prototype, "canPlayType").mockReturnValue("");
+    const bytes = new Uint8Array([1, 2, 3]);
+    const blob = { type: "video/mpeg", size: 3, arrayBuffer: async () => bytes.buffer } as Blob;
+    vi.stubGlobal("Worker", class {});
+    const load = vi.fn().mockResolvedValue(blob);
+    vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
+    const file = { name: "private.mpg", mimeType: "video/mpeg", url: "mxc://example/private", encrypted: { url: "mxc://example/private", key: { alg: "A256CTR", key_ops: ["decrypt"], kty: "oct", k: "secret", ext: true }, iv: "iv", hashes: {}, v: "v2" } };
+    const view = render(<AttachmentMediaContext.Provider value={load}><AttachmentMessage attachment={file} inline /></AttachmentMediaContext.Provider>);
+    fireEvent.click(screen.getByRole("button", { name: "Play video" }));
+    await waitFor(() => expect(view.container.querySelector("video")).toBeTruthy());
+    expect(codec.writeFile).toHaveBeenCalledWith("input.media", bytes, expect.objectContaining({ signal: expect.any(AbortSignal) }));
+    expect(codec.terminate).toHaveBeenCalled();
+    expect(load).toHaveBeenCalledWith(file, expect.any(AbortSignal));
+    fireEvent.click(screen.getByRole("button", { name: "Download private.mpg" }));
+    await waitFor(() => expect(URL.createObjectURL).toHaveBeenLastCalledWith(blob));
+    expect(load).toHaveBeenCalledOnce();
+  });
   it("shows image-only thumbnails, opens the viewer on click, and restores focus after closing", async () => {
     const load = vi.fn().mockResolvedValue(new Blob(["image"], { type: "image/png" }));
     render(<AttachmentMediaContext.Provider value={load}><AttachmentMessage attachment={attachment} inline /></AttachmentMediaContext.Provider>);

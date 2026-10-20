@@ -7,16 +7,25 @@ import type { MatrixRoom } from "../../../domain/matrix/MatrixTypes";
 import { InvitationList } from "./InvitationList";
 import { PeopleDialog } from "./PeopleDialog";
 import { Settings } from "lucide-react";
+import type { RoomCall } from "../../../domain/calls/ICallProvider";
+import { spaceRoomIds } from "../../../domain/matrix/RoomNavigation";
+import { SpaceChannels } from "./SpaceChannels";
+import { CreateChannelDialog } from "./CreateChannelDialog";
 
-export function RoomSidebar({ space, onOpenIdentity, onOpenSettings, onManageSpace }: { space: MatrixRoom | null; onOpenIdentity: () => void; onOpenSettings: () => void; onManageSpace: () => void }) {
+export function RoomSidebar({ space, onOpenIdentity, onOpenSettings, onManageSpace, calls = [], onJoinVoice, callActive = false, discoveryPending = false, discoveryError, onRetryDiscovery }: { space: MatrixRoom | null; onOpenIdentity: () => void; onOpenSettings: () => void; onManageSpace: () => void; calls?: RoomCall[]; onJoinVoice?: (room: MatrixRoom) => void; callActive?: boolean; discoveryPending?: boolean; discoveryError?: string; onRetryDiscovery?: () => void }) {
   const [filter, setFilter] = useState("");
   const [joining, setJoining] = useState(false);
   const [roomAddress, setRoomAddress] = useState("");
   const [joinPending, setJoinPending] = useState(false);
   const [inviting, setInviting] = useState(false);
-  const { rooms: allRooms, selectedRoomId, selectRoom, joinRoom } = useMatrixRooms(filter);
+  const [creatingChannel, setCreatingChannel] = useState(false);
+  const { rooms: allRooms, spaceRooms = {}, selectedRoomId, selectRoom, joinRoom } = useMatrixRooms(filter);
   const searching = Boolean(filter.trim());
-  const rooms = allRooms.filter((room) => room.membership === "join" && !room.isSpace && (searching || (!room.isDirect && (!space || space.childRoomIds?.includes(room.id)))));
+  const serverRoomIds = spaceRoomIds(allRooms.filter(room => room.isSpace), spaceRooms);
+  const discovered = space ? spaceRooms[space.id] ?? [] : [];
+  const channelIds = new Set([...(space?.childRoomIds ?? []), ...discovered.map(room => room.id)]);
+  const channels = [...new Map([...discovered, ...allRooms.filter(room => channelIds.has(room.id))].map(room => [room.id, room])).values()].filter(room => !room.isSpace);
+  const rooms = allRooms.filter(room => room.membership === "join" && !room.isSpace && (searching || (!room.isDirectClosed && !serverRoomIds.has(room.id))));
   const { session, profile, sync } = useMatrixSession();
 
   const handleJoin = async (event: FormEvent) => {
@@ -32,12 +41,12 @@ export function RoomSidebar({ space, onOpenIdentity, onOpenSettings, onManageSpa
     <aside className="room-sidebar">
       <header className="sidebar-header">
         <div>
-          <span className="sidebar-kicker">YOUR CORNER OF THE FOREST</span>
-          <strong>{space?.name ?? "All rooms"}</strong>
+          <span className="sidebar-kicker">{space ? "SERVER" : "YOUR CONVERSATIONS"}</span>
+          <strong>{space?.name ?? "Messages"}</strong>
         </div>
         {space && <button type="button" className="icon-button" aria-label="Invite people to this server" title="Invite people to this server" onClick={() => setInviting(true)}><UserPlus /></button>}
         {space && <button type="button" className="icon-button" aria-label="Space settings" title="Space settings" onClick={onManageSpace}><Settings /></button>}
-        <button type="button" className="icon-button" aria-label="Join room" onClick={() => setJoining((value) => !value)}>
+        <button type="button" className="icon-button" aria-label={space ? "Create channel" : "Join room"} title={space ? "Create channel" : "Join room"} onClick={() => space ? setCreatingChannel(true) : setJoining((value) => !value)}>
           <PlusIcon />
         </button>
       </header>
@@ -68,13 +77,20 @@ export function RoomSidebar({ space, onOpenIdentity, onOpenSettings, onManageSpa
         <kbd>⌘ K</kbd>
       </div>
 
-      <div className="room-section-label">
-        <span>{searching ? "Matching chats · all spaces" : "Rooms"}</span>
-        <span>{rooms.length}</span>
-      </div>
       <div className="room-list" role="list">
-        <InvitationList />
-        {rooms.map((room) => (
+        <InvitationList roomIds={space && !searching ? channelIds : undefined} excludedRoomIds={!space && !searching ? serverRoomIds : undefined} />
+        {space && !searching ? <>
+          {discoveryPending && <p className="channel-notice" role="status">Discovering channels…</p>}
+          {discoveryError && <p className="channel-notice" role="alert">{discoveryError} <button type="button" onClick={onRetryDiscovery}>Retry</button></p>}
+          <SpaceChannels rooms={channels} selectedRoomId={selectedRoomId} calls={calls} callActive={callActive} onOpen={async (channel, voice) => {
+            if (channel.membership !== "join") { if (!await joinRoom(channel.id, channel.viaServers)) return; }
+            else selectRoom(channel.id);
+            if (voice) onJoinVoice?.(channel);
+          }} />
+        </> : <>
+        {(!searching ? [false, true] : [false]).map(group => <div key={String(group)}>
+        <div className="room-section-label"><span>{searching ? "Matching chats · all spaces" : group ? "Group chats" : "Direct messages"}</span></div>
+        {rooms.filter(room => searching || ((!room.isDirect || room.memberCount > 2) === group)).map((room) => (
           <button
             type="button"
             className={`room-row ${selectedRoomId === room.id ? "is-selected" : ""}`}
@@ -85,7 +101,7 @@ export function RoomSidebar({ space, onOpenIdentity, onOpenSettings, onManageSpa
             <Avatar name={room.name} url={room.avatarUrl} />
             <span className="room-row__copy">
               <strong>{room.name}</strong>
-              <span>{room.isDirect ? "Direct message" : room.topic || `${room.memberCount} members`}</span>
+              <span>{room.isDirect && room.memberCount <= 2 ? "Direct message" : `${room.memberCount} members`}</span>
             </span>
             <span className="room-row__meta">
               {room.isEncrypted ? <LockIcon /> : <HashIcon />}
@@ -97,12 +113,14 @@ export function RoomSidebar({ space, onOpenIdentity, onOpenSettings, onManageSpa
             </span>
           </button>
         ))}
+        </div>)}
         {rooms.length === 0 && (
           <div className="empty-rooms">
             <HashIcon />
             <p>{searching ? "No matching chats" : sync.state === "ready" ? "No joined rooms" : "Rooms will appear after sync"}</p>
           </div>
         )}
+        </>}
       </div>
 
       <footer className="account-strip account-strip--security">
@@ -117,6 +135,7 @@ export function RoomSidebar({ space, onOpenIdentity, onOpenSettings, onManageSpa
         </button>
       </footer>
       {inviting && space && <PeopleDialog key={space.id} room={space} onClose={() => setInviting(false)} />}
+      {creatingChannel && space && <CreateChannelDialog space={space} onClose={() => setCreatingChannel(false)} onCreated={() => onRetryDiscovery?.()} />}
     </aside>
   );
 }

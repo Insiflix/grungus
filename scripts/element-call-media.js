@@ -2,6 +2,7 @@
 (() => {
   const presets = __GRUNGUS_CAMERA_PRESETS__;
   const params = new URLSearchParams(location.hash.replace(/^#\??/, ""));
+  const parentOrigin = new URL(params.get("parentUrl")).origin;
   let quality = params.get("grungusCameraQuality") || "720p";
   if (!Object.hasOwn(presets, quality)) quality = "720p";
   const cameraTracks = new Set();
@@ -11,7 +12,7 @@
     const preset = presets[value];
     return { width: { ideal: preset.width, max: preset.width }, height: { ideal: preset.height, max: preset.height }, frameRate: { ideal: preset.frameRate, max: preset.frameRate } };
   };
-  const sendStatus = (data) => parent.postMessage({ type: "grungus:media-status", widgetId: params.get("widgetId"), ...data }, location.origin);
+  const sendStatus = (data) => parent.postMessage({ type: "grungus:media-status", widgetId: params.get("widgetId"), ...data }, parentOrigin);
   media.getUserMedia = async (constraints) => {
     const video = constraints?.video;
     const isCamera = video && !(typeof video === "object" && (video.mandatory?.chromeMediaSource || video.mediaSource));
@@ -42,7 +43,7 @@
   }
   window.addEventListener("message", async (event) => {
     const data = event.data;
-    if (event.source !== parent || event.origin !== location.origin || data?.type !== "grungus:camera-quality" || data.widgetId !== params.get("widgetId") || !Object.hasOwn(presets, data.quality)) return;
+    if (event.source !== parent || event.origin !== parentOrigin || data?.type !== "grungus:camera-quality" || data.widgetId !== params.get("widgetId") || !Object.hasOwn(presets, data.quality)) return;
     const next = data.quality;
     const active = [...cameraTracks].filter(track => track.readyState === "live");
     const results = await Promise.allSettled(active.map(track => track.applyConstraints(constraintsFor(next))));

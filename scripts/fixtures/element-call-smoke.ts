@@ -10,7 +10,7 @@ const userId = "@smoke:invalid.test";
 const client = createClient({ baseUrl: "https://matrix.invalid", userId, deviceId: "SMOKE" });
 const room = new Room("!smoke:invalid.test", client, userId);
 room.currentState.setStateEvents([
-  new MatrixEvent({ type: "m.room.create", state_key: "", room_id: room.roomId, event_id: "$create", sender: userId, content: { creator: userId, room_version: "10" } }),
+  new MatrixEvent({ type: "m.room.create", state_key: "", room_id: room.roomId, event_id: "$create", sender: userId, content: { creator: userId, room_version: "10", type: "org.matrix.msc3417.call" } }),
   ...[userId].map(member => new MatrixEvent({ type: "m.room.member", state_key: member, room_id: room.roomId, event_id: `$${member}`, sender: member, content: { membership: "join", displayname: "Smoke" } })),
 ]);
 room.updateMyMembership("join");

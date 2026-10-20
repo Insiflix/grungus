@@ -1,4 +1,5 @@
 import type { MatrixClient } from "matrix-js-sdk";
+import { boundedBlob } from "../http/BoundedResponse";
 
 /** Authenticated Matrix media becomes a blob URL; access tokens never enter image URLs. */
 export class MatrixAvatarLoader {
@@ -13,11 +14,7 @@ export class MatrixAvatarLoader {
     const home = new URL(this.client.getHomeserverUrl());
     const prefix = `${home.pathname.replace(/\/$/, "")}/_matrix/client/v1/media/`;
     const isMedia = target.origin === home.origin && target.pathname.startsWith(prefix) && /\/(thumbnail|download)\//.test(target.pathname);
-    // External avatars are displayed without receiving Matrix credentials.
-    if (!isMedia) {
-      if (!["https:", "http:", "blob:"].includes(target.protocol)) return Promise.reject(new Error("Invalid avatar URL"));
-      return Promise.resolve(url);
-    }
+    if (!isMedia || target.username || target.password) throw new Error("Avatars must use the connected homeserver's Matrix media endpoint.");
     const cached = this.cache.get(url); if (cached) return cached;
     const pending = this.fetchImage(target).catch((error) => { this.cache.delete(url); throw error; });
     this.cache.set(url, pending); return pending;
@@ -36,7 +33,7 @@ export class MatrixAvatarLoader {
         response = await this.request(original.href, options);
       }
       if (!response.ok) throw new Error("Avatar could not be loaded");
-      const image = await response.blob();
+      const image = await boundedBlob(response, 10 * 1024 * 1024);
       if (!image.type.startsWith("image/") || generation !== this.generation) throw new Error("Invalid or expired avatar");
       const blobUrl = URL.createObjectURL(image); this.urls.add(blobUrl); return blobUrl;
     } finally { this.controllers.delete(controller); }

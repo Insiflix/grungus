@@ -7,6 +7,7 @@ import { preferences } from "../../../domain/settings/Preferences";
 import { SettingsDialog } from "./SettingsDialog";
 import { PreferenceEffects } from "./PreferenceEffects";
 import { RoomSettingsDialog } from "./RoomSettingsDialog";
+import { VoiceSettings } from "./SettingsPanels";
 
 const mocks = vi.hoisted(() => ({
   settings: {
@@ -36,6 +37,19 @@ afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 const showSettings = () => render(<><PreferenceEffects /><SettingsDialog onClose={vi.fn()} onOpenIdentity={vi.fn()} onManageRoom={vi.fn()} /></>);
 
 describe("account settings interactions", () => {
+  it("stops capture if camera permission resolves after closing the settings preview", async () => {
+    const user = userEvent.setup();
+    let grant!: (stream: MediaStream) => void;
+    Object.defineProperty(navigator, "mediaDevices", { configurable: true, value: { getUserMedia: vi.fn(() => new Promise<MediaStream>(resolve => { grant = resolve; })), enumerateDevices: vi.fn(async () => []), addEventListener: vi.fn(), removeEventListener: vi.fn() } });
+    let pending: Promise<unknown> | undefined;
+    const view = render(<VoiceSettings busy={false} onOpenIdentity={vi.fn()} execute={async action => { pending = action(); await pending; return true; }} />);
+    await user.click(screen.getByRole("button", { name: "Preview camera & microphone" }));
+    view.unmount();
+    const stop = vi.fn();
+    await act(async () => { grant({ getTracks: () => [{ stop }] } as unknown as MediaStream); await pending; });
+    expect(stop).toHaveBeenCalledOnce();
+    Reflect.deleteProperty(navigator, "mediaDevices");
+  });
   it("keeps local switches, focus, scroll position and navigation stable while toggling", async () => {
     const user = userEvent.setup(); showSettings();
     await user.click(screen.getByRole("button", { name: "Preferences" }));

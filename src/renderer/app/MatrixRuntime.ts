@@ -13,6 +13,7 @@ import type {
   MatrixRegistrationChallenge,
   MatrixIdentityState,
   MatrixUser,
+  MatrixPresence,
 } from "../../domain/matrix/MatrixTypes";
 
 export type MatrixSessionPhase =
@@ -26,6 +27,7 @@ export interface MatrixRuntimeSnapshot {
   session: MatrixSession | null;
   sync: MatrixSyncStatus;
   rooms: MatrixRoom[];
+  spaceRooms: Readonly<Record<string, MatrixRoom[]>>;
   selectedRoomId: string | null;
   timelines: Readonly<Record<string, MatrixMessage[]>>;
   typing: Readonly<Record<string, MatrixRoomMember[]>>;
@@ -36,6 +38,7 @@ export interface MatrixRuntimeSnapshot {
   registrationChallenge: MatrixRegistrationChallenge | null;
   identity: MatrixIdentityState | null;
   profile: MatrixUser | null;
+  presences: Readonly<Record<string, MatrixPresence>>;
 }
 
 function messageOf(error: unknown): string {
@@ -48,6 +51,7 @@ export class MatrixRuntime {
     session: null,
     sync: { state: "stopped", error: null },
     rooms: [],
+    spaceRooms: {},
     selectedRoomId: null,
     timelines: {},
     typing: {},
@@ -58,15 +62,20 @@ export class MatrixRuntime {
     registrationChallenge: null,
     identity: null,
     profile: null,
+    presences: {},
   };
   private listeners = new Set<() => void>();
   private bootstrapPromise: Promise<void> | null = null;
   private authCallbackCleanup: (() => void) | null = null;
+  private readonly spaceDiscoveries = new Map<string, Promise<void>>();
 
   constructor(
     private readonly client: IMatrixClient,
     private readonly auth: IMatrixAuthProvider,
   ) {
+    client.subscribe("presenceChanged", ({ userId, presence }) => {
+      if (this.snapshot.presences[userId] !== presence) this.update({ presences: { ...this.snapshot.presences, [userId]: presence } });
+    });
     client.subscribe("identityChanged", (identity) => this.update({ identity }));
     client.subscribe("profileUpdated", (profile) => {
       if (profile.id === this.snapshot.session?.userId) this.update({ profile });
@@ -234,29 +243,38 @@ export class MatrixRuntime {
   }
 
   async logout(): Promise<void> {
+    this.spaceDiscoveries.clear();
+    this.reactionQueues.clear();
+    this.update({ phase: "restoring", session: null });
     try {
       await this.client.logout();
     } finally {
-      await this.auth.clearSession();
-      this.snapshot = {
-        ...this.snapshot,
-        phase: "signed-out",
-        session: null,
-        rooms: [],
-        selectedRoomId: null,
-        timelines: {},
-        typing: {},
-        discovery: null,
-        sync: { state: "stopped", error: null },
-        error: null,
-        persistenceWarning: null,
-        registrationChallenge: null,
-        identity: null,
-        profile: null,
-      };
-      this.notify();
+      try { await this.auth.clearSession(); }
+      finally {
+        this.snapshot = {
+          ...this.snapshot,
+          phase: "signed-out",
+          session: null,
+          rooms: [],
+          spaceRooms: {},
+          selectedRoomId: null,
+          timelines: {},
+          typing: {},
+          discovery: null,
+          sync: { state: "stopped", error: null },
+          error: null,
+          persistenceWarning: null,
+          registrationChallenge: null,
+          identity: null,
+          profile: null,
+          presences: {},
+        };
+        this.notify();
+      }
     }
   }
+
+  clearSelectedRoom(): void { this.update({ selectedRoomId: null }); }
 
   selectRoom(roomId: string): void {
     const room = this.snapshot.rooms.find((candidate) => candidate.id === roomId);
@@ -285,33 +303,50 @@ export class MatrixRuntime {
     }
   }
 
-  async joinRoom(roomIdOrAlias: string): Promise<boolean> {
+  discoverSpaceRooms(spaceId: string): Promise<void> {
+    const existing = this.spaceDiscoveries.get(spaceId);
+    if (existing) return existing;
+    const session = this.snapshot.session;
+    const request = this.client.discoverSpaceRooms(spaceId).then(rooms => {
+      if (this.snapshot.session === session) this.update({ spaceRooms: { ...this.snapshot.spaceRooms, [spaceId]: rooms } });
+    }).finally(() => { if (this.spaceDiscoveries.get(spaceId) === request) this.spaceDiscoveries.delete(spaceId); });
+    this.spaceDiscoveries.set(spaceId, request);
+    return request;
+  }
+
+  async joinRoom(roomIdOrAlias: string, viaServers?: string[]): Promise<boolean> {
+    const session = this.snapshot.session;
     try {
-      const room = await this.client.joinRoom(roomIdOrAlias.trim());
+      const room = await this.client.joinRoom(roomIdOrAlias.trim(), viaServers);
+      if (this.snapshot.session !== session) return false;
       this.update({ rooms: this.client.getRooms() });
       this.selectRoom(room.id);
       return true;
     } catch (error) {
-      this.update({ error: messageOf(error) });
+      if (this.snapshot.session === session) this.update({ error: messageOf(error) });
       return false;
     }
   }
 
   async declineInvite(roomId: string): Promise<boolean> {
+    const session = this.snapshot.session;
     try {
       await this.client.leaveRoom(roomId);
+      if (this.snapshot.session !== session) return false;
       this.update({ rooms: this.client.getRooms().filter((room) => room.id !== roomId) });
       return true;
     } catch (error) {
-      this.update({ error: messageOf(error) });
+      if (this.snapshot.session === session) this.update({ error: messageOf(error) });
       return false;
     }
   }
 
   async closeDirectMessage(roomId: string): Promise<boolean> {
+    const session = this.snapshot.session;
     try {
       const closing = this.snapshot.rooms.find(room => room.id === roomId);
       await this.client.setDirectMessageClosed(roomId, true);
+      if (this.snapshot.session !== session) return false;
       const rooms = this.client.getRooms();
       this.update({ rooms });
       if (this.snapshot.selectedRoomId === roomId) {
@@ -322,7 +357,7 @@ export class MatrixRuntime {
       }
       return true;
     } catch (error) {
-      this.update({ error: messageOf(error) });
+      if (this.snapshot.session === session) this.update({ error: messageOf(error) });
       return false;
     }
   }
@@ -336,15 +371,19 @@ export class MatrixRuntime {
   }
 
   async startDirectMessage(userId: string): Promise<void> {
+    const session = this.snapshot.session;
     const room = await this.client.startDirectMessage(userId);
+    if (this.snapshot.session !== session) return;
     const rooms = [...this.snapshot.rooms.filter((candidate) => candidate.id !== room.id), room];
     this.update({ rooms });
     this.selectRoom(room.id);
   }
 
   async loadOlder(roomId: string): Promise<boolean> {
+    const session = this.snapshot.session;
     try {
       const page = await this.client.loadOlderMessages(roomId);
+      if (this.snapshot.session !== session) return false;
       const messages = [...new Map([...(this.snapshot.timelines[roomId] ?? []), ...page.messages].map(message => [message.id, message])).values()]
         .sort((left, right) => left.timestamp - right.timestamp);
       this.update({
@@ -352,25 +391,28 @@ export class MatrixRuntime {
       });
       return page.hasMore;
     } catch (error) {
-      this.update({ error: messageOf(error) });
+      if (this.snapshot.session === session) this.update({ error: messageOf(error) });
       return false;
     }
   }
 
   async sendMessage(roomId: string, body: string, replyToEventId?: string): Promise<void> {
+    const session = this.snapshot.session;
     try {
       await this.client.sendTextMessage(roomId, body, replyToEventId ? { replyToEventId } : undefined);
+      if (this.snapshot.session !== session) return;
       await this.client.setTyping(roomId, false);
     } catch (error) {
-      this.update({ error: messageOf(error) });
+      if (this.snapshot.session === session) this.update({ error: messageOf(error) });
       throw error;
     }
   }
 
   getUploadLimit = () => this.client.getUploadLimit();
   async sendAttachment(roomId: string, file: File, onProgress?: (percent: number) => void, replyToEventId?: string): Promise<void> {
+    const session = this.snapshot.session;
     try { await this.client.sendAttachment(roomId, file, onProgress, replyToEventId ? { replyToEventId } : undefined); }
-    catch (error) { this.update({ error: messageOf(error) }); throw error; }
+    catch (error) { if (this.snapshot.session === session) this.update({ error: messageOf(error) }); throw error; }
   }
   loadAttachment = (attachment: MessageAttachment, signal?: AbortSignal) => this.client.loadAttachment(attachment, signal);
 
@@ -399,9 +441,10 @@ export class MatrixRuntime {
   private readonly reactionQueues = new Map<string, Promise<void>>();
 
   toggleReaction(roomId: string, message: MatrixMessage, key: string): Promise<void> {
+    const session = this.snapshot.session;
     const id = JSON.stringify([roomId, message.id, key]);
     const previous = this.reactionQueues.get(id) ?? Promise.resolve();
-    const next = previous.catch(() => undefined).then(() => this.applyReaction(roomId, message, key));
+    const next = previous.catch(() => undefined).then(() => this.snapshot.session === session ? this.applyReaction(roomId, message, key) : undefined);
     this.reactionQueues.set(id, next);
     void next.finally(() => { if (this.reactionQueues.get(id) === next) this.reactionQueues.delete(id); }).catch(() => undefined);
     return next;

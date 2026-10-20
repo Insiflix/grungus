@@ -58,6 +58,10 @@ import { MatrixSettings } from "./MatrixSettings";
 import { preferences } from "../../domain/settings/Preferences";
 import { MatrixNotifications } from "./MatrixNotifications";
 import { blockedUsers } from "../../domain/settings/BlockedUsers";
+import { matrixPresence } from "../../domain/matrix/MatrixTypes";
+import { discoverSpaceRooms } from "./MatrixSpaceHierarchy";
+import { canJoinChannel, isVoiceRoom } from "../../domain/matrix/RoomNavigation";
+import { secureHomeserverUrl } from "../../../electron/shared/urls";
 
 export interface MatrixJsSdkClientOptions {
   onSessionUpdated?: (session: MatrixSession) => void | Promise<void>;
@@ -82,6 +86,7 @@ export class MatrixJsSdkClient implements IMatrixClient, ICallProvider {
     const client = this.requireClient();
     const id = client.getUserId()!;
     const profile = await client.getProfileInfo(id);
+    this.assertCurrent(client);
     this.profileAvatars?.remember(id, profile);
     return { id, displayName: profile.displayname || id, avatarUrl: this.resolveMediaUrl(profile.avatar_url ?? null, 96, 96) };
   }
@@ -141,11 +146,15 @@ export class MatrixJsSdkClient implements IMatrixClient, ICallProvider {
     if (
       this.client &&
       this.session?.userId === session.userId &&
+      this.session.homeserverUrl === session.homeserverUrl &&
       this.session.deviceId === session.deviceId
     ) {
       return this.startPromise ?? Promise.resolve();
     }
-    if (this.startPromise) return this.startPromise;
+    if (this.startPromise) {
+      await this.startPromise.catch(() => undefined);
+      return this.start(session);
+    }
 
     this.startPromise = this.startInternal(session).finally(() => {
       this.startPromise = null;
@@ -163,7 +172,7 @@ export class MatrixJsSdkClient implements IMatrixClient, ICallProvider {
 
     let clientRef: MatrixClient | null = null;
     const client = createClient({
-      baseUrl: session.homeserverUrl,
+      baseUrl: secureHomeserverUrl(session.homeserverUrl),
       accessToken: session.accessToken,
       refreshToken: session.refreshToken,
       userId: session.userId,
@@ -175,6 +184,7 @@ export class MatrixJsSdkClient implements IMatrixClient, ICallProvider {
         ? async (refreshToken) => {
             if (!clientRef) throw new Error("Matrix client is not ready to refresh");
             const refreshed = await clientRef.refreshToken(refreshToken);
+            if (this.client !== clientRef) throw new Error("The Matrix session changed during token refresh.");
             const updated: MatrixSession = {
               ...this.session!,
               accessToken: refreshed.access_token,
@@ -204,23 +214,22 @@ export class MatrixJsSdkClient implements IMatrixClient, ICallProvider {
         useIndexedDB: true,
         cryptoDatabasePrefix: `grungus_${encodeURIComponent(session.userId)}_${session.deviceId}`,
       });
+      if (this.client !== client) throw new Error("The Matrix session ended during initialization.");
       await client.startClient({ initialSyncLimit: 40 });
+      if (this.client !== client) throw new Error("The Matrix session ended during initialization.");
     } catch (error) {
-      this.updateStatus({ state: "error", error: errorMessage(error) });
       this.detachSdkListeners(client);
-      this.identity.dispose();
-    this.directCalls.dispose();
-      this.profileAvatars?.dispose(); this.profileAvatars = null;
-      this.avatars?.clear(); this.avatars = null;
       client.stopClient();
-      this.client = null;
-      this.roomMapper = null;
-      this.messageMapper = null;
+      if (this.client === client) {
+        await this.stop();
+        this.updateStatus({ state: "error", error: errorMessage(error) });
+      }
       throw error;
     }
   }
 
   async stop(): Promise<void> {
+    this.directCalls.dispose();
     this.closedDirectRooms.clear();
     this.timelineLoads.clear();
     this.notifications.clear();
@@ -234,6 +243,7 @@ export class MatrixJsSdkClient implements IMatrixClient, ICallProvider {
       client.stopClient();
     }
     this.client = null;
+    this.session = null;
     this.roomMapper = null;
     this.messageMapper = null;
     this.hasPrepared = false;
@@ -242,14 +252,8 @@ export class MatrixJsSdkClient implements IMatrixClient, ICallProvider {
 
   async logout(): Promise<void> {
     const client = this.client;
-    if (client) {
-      try {
-        await client.logout(false);
-      } finally {
-        await this.stop();
-      }
-    }
-    this.session = null;
+    await this.stop();
+    if (client) await client.logout(false);
   }
 
   getRooms(): MatrixRoom[] {
@@ -270,28 +274,50 @@ export class MatrixJsSdkClient implements IMatrixClient, ICallProvider {
     return room ? this.requireRoomMapper().map(room) : null;
   }
 
-  async joinRoom(roomIdOrAlias: string): Promise<MatrixRoom> {
+  discoverSpaceRooms = async (spaceId: string): Promise<MatrixRoom[]> => {
+    const client = this.requireClient();
+    const rooms = await discoverSpaceRooms(client, spaceId, url => this.resolveMediaUrl(url, 80, 80));
+    // Matrix room membership lets us observe who is in voice. It does not join
+    // the media call or request microphone/camera access.
+    void (async () => {
+      for (const room of rooms) {
+        if (this.client !== client || client.getRoom(spaceId)?.getMyMembership() !== "join") return;
+        if (!isVoiceRoom(room) || !canJoinChannel(room) || client.getRoom(room.id)?.getMyMembership() === "join") continue;
+        try { await this.joinRoom(room.id, room.viaServers); }
+        catch { /* The server remains authoritative; an explicit join shows the error. */ }
+      }
+    })();
+    return rooms;
+  };
+
+  async joinRoom(roomIdOrAlias: string, viaServers?: string[]): Promise<MatrixRoom> {
     const client = this.requireClient();
     const inviter = client.getRoom(roomIdOrAlias)?.getDMInviter();
-    const room = await client.joinRoom(roomIdOrAlias);
+    const room = await client.joinRoom(roomIdOrAlias, { viaServers });
+    this.assertCurrent(client);
     const joined = await this.waitForJoinedRoom(room.roomId);
+    this.assertCurrent(client);
     const peer = inviter ?? joined.getDMInviter();
     if (peer && peer !== client.getUserId()) {
       const direct = client.getAccountData(EventType.Direct)?.getContent() ?? {};
       try {
         await client.setAccountData(EventType.Direct, { ...direct, [peer]: [...new Set([...(direct[peer] ?? []), room.roomId])] });
       } catch {
+        this.assertCurrent(client);
         this.emit("roomsChanged", this.getRooms());
         throw new Error("Invitation accepted, but saving the direct message failed. Open the conversation from your room list.");
       }
     }
+    this.assertCurrent(client);
     const mapped = this.requireRoomMapper().map(joined);
     this.emit("roomsChanged", this.getRooms());
     return mapped;
   }
 
   async leaveRoom(roomId: string): Promise<void> {
-    await this.requireClient().leave(roomId);
+    const client = this.requireClient();
+    await client.leave(roomId);
+    this.assertCurrent(client);
     this.emit("roomsChanged", this.getRooms());
   }
 
@@ -329,6 +355,7 @@ export class MatrixJsSdkClient implements IMatrixClient, ICallProvider {
   async searchUsers(term: string): Promise<MatrixUser[]> {
     const client = this.requireClient();
     const response = await client.searchUserDirectory({ term: term.trim(), limit: 20 });
+    this.assertCurrent(client);
     return response.results.filter((user) => user.user_id !== client.getUserId()).map((user) => ({
       id: user.user_id, displayName: user.display_name || user.user_id,
       avatarUrl: this.resolveMediaUrl(user.avatar_url ?? null, 80, 80),
@@ -349,6 +376,7 @@ export class MatrixJsSdkClient implements IMatrixClient, ICallProvider {
       const existing = client.getRoom(id);
       if (existing?.getMyMembership() === "join") {
         if (this.closedDirectRooms.has(id)) await this.setDirectMessageClosed(id, false);
+        this.assertCurrent(client);
         return this.requireRoomMapper().map(existing);
       }
       if (existing?.getMyMembership() === "invite") return this.joinRoom(id);
@@ -356,6 +384,7 @@ export class MatrixJsSdkClient implements IMatrixClient, ICallProvider {
     const recovered = client.getRooms().find(room => room.getMyMembership() === "join" && !room.isSpaceRoom?.() && directInvitePeer(room, client.getUserId()) === peer);
     if (recovered) {
       await client.setAccountData(EventType.Direct, { ...direct, [peer]: [...new Set([...(direct[peer] ?? []), recovered.roomId])] });
+      this.assertCurrent(client);
       const mapped = this.requireRoomMapper().map(recovered);
       mapped.isDirect = true;
       this.emit("roomUpdated", mapped);
@@ -367,6 +396,7 @@ export class MatrixJsSdkClient implements IMatrixClient, ICallProvider {
         is_direct: true, invite: [peer], preset: Preset.TrustedPrivateChat,
         initial_state: [{ type: EventType.RoomEncryption, state_key: "", content: { algorithm: "m.megolm.v1.aes-sha2" } }],
       });
+      this.assertCurrent(client);
       roomId = created.room_id;
       this.pendingDirectRooms.set(peer, roomId);
     }
@@ -374,10 +404,13 @@ export class MatrixJsSdkClient implements IMatrixClient, ICallProvider {
       const latest = client.getAccountData(EventType.Direct)?.getContent() ?? {};
       await client.setAccountData(EventType.Direct, { ...latest, [peer]: [...new Set([...(latest[peer] ?? []), roomId])] });
     } catch {
+      this.assertCurrent(client);
       this.emit("roomsChanged", this.getRooms());
       throw new Error("Conversation created, but saving it to direct messages failed. Try Message again to finish setting it up.");
     }
+    this.assertCurrent(client);
     const room = await this.waitForJoinedRoom(roomId);
+    this.assertCurrent(client);
     const mapped = this.requireRoomMapper().map(room);
     mapped.isDirect = true;
     this.pendingDirectRooms.delete(peer);
@@ -386,7 +419,11 @@ export class MatrixJsSdkClient implements IMatrixClient, ICallProvider {
   }
 
   setDirectMessageClosed(roomId: string, closed: boolean): Promise<void> {
-    const job = this.closedDirectRoomQueue.catch(() => undefined).then(() => this.persistDirectMessageClosed(roomId, closed));
+    const client = this.client;
+    const job = this.closedDirectRoomQueue.catch(() => undefined).then(() => {
+      if (this.client !== client) return;
+      return this.persistDirectMessageClosed(roomId, closed);
+    });
     this.closedDirectRoomQueue = job;
     return job;
   }
@@ -447,6 +484,7 @@ export class MatrixJsSdkClient implements IMatrixClient, ICallProvider {
       backwards: true,
       limit,
     });
+    this.assertCurrent(client);
     return {
       messages: this.getTimeline(roomId),
       hasMore:
@@ -575,6 +613,9 @@ export class MatrixJsSdkClient implements IMatrixClient, ICallProvider {
   }
 
   private attachSdkListeners(client: MatrixClient): void {
+    // Receive every reported status, including the first offline presence event
+    // when the SDK's default presence value has not changed.
+    client.on(UserEvent.LastPresenceTs, this.handlePresence);
     client.on(UserEvent.AvatarUrl, this.handleProfileUpdate);
     client.on(UserEvent.DisplayName, this.handleProfileUpdate);
     client.on(MatrixEventEvent.Decrypted, this.handleDecrypted);
@@ -592,6 +633,7 @@ export class MatrixJsSdkClient implements IMatrixClient, ICallProvider {
   }
 
   private detachSdkListeners(client: MatrixClient): void {
+    client.off(UserEvent.LastPresenceTs, this.handlePresence);
     client.off(UserEvent.AvatarUrl, this.handleProfileUpdate);
     client.off(UserEvent.DisplayName, this.handleProfileUpdate);
     client.off(MatrixEventEvent.Decrypted, this.handleDecrypted);
@@ -717,6 +759,10 @@ export class MatrixJsSdkClient implements IMatrixClient, ICallProvider {
     }
   };
 
+  private handlePresence = (_event: MatrixEvent | undefined, user: User): void => {
+    this.emit("presenceChanged", { userId: user.userId, presence: matrixPresence(user.events.presence?.getContent().presence) });
+  };
+
   private handleProfileUpdate = (_event: MatrixEvent | undefined, user: User): void => {
     if (user.userId === this.session?.userId) this.emit("profileUpdated", {
       id: user.userId, displayName: user.displayName || user.userId,
@@ -826,6 +872,10 @@ export class MatrixJsSdkClient implements IMatrixClient, ICallProvider {
     payload: MatrixApplicationEvents[K],
   ): void {
     for (const listener of this.listeners.get(event) ?? []) listener(payload);
+  }
+
+  private assertCurrent(client: MatrixClient): void {
+    if (this.client !== client) throw new Error("The Matrix session changed.");
   }
 
   private requireClient(): MatrixClient {

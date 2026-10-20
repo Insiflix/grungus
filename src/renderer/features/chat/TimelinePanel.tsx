@@ -11,6 +11,8 @@ import type { MessageAction } from "./MessageContextMenu";
 import { BrandLogo } from "../../components/common/BrandLogo";
 import { usePreferences } from "../../hooks/usePreferences";
 import { Settings } from "lucide-react";
+import { useTimelineScroll } from "./useTimelineScroll";
+import { RoomMemberList } from "../rooms/RoomMemberList";
 
 // Typing and sync updates must not re-render unchanged Markdown message bodies.
 const TimelineMessage = memo(function TimelineMessage({ message, grouped, onReact, onAction, onMediaLoad }: {
@@ -30,39 +32,28 @@ interface TimelinePanelProps {
   onCall: (video: boolean) => void;
   callActive: boolean;
   onDirectCall: (video: boolean) => void;
+  compact?: boolean;
 }
 
-export function TimelinePanel({ room, onOpenIdentity, onOpenSettings, onCall, callActive, onDirectCall }: TimelinePanelProps) {
+export function TimelinePanel({ room, onOpenIdentity, onOpenSettings, onCall, callActive, onDirectCall, compact = false }: TimelinePanelProps) {
   const prefs = usePreferences();
   const { messages, members, typingMembers, loadOlder, sendMessage, sendAttachment, getUploadLimit, setTyping, toggleReaction, editMessage, deleteMessage, togglePin } =
     useMatrixTimeline(room?.id ?? null);
   const [loadingOlder, setLoadingOlder] = useState(false);
   const [hasMore, setHasMore] = useState(true);
   const [inviting, setInviting] = useState(false);
+  const [membersVisible, setMembersVisible] = useState(false);
+  const memberToggle = useRef<HTMLButtonElement>(null);
+  const closeMembers = () => { setMembersVisible(false); memberToggle.current?.focus(); };
   const [action, setAction] = useState<{ type: "reply" | "edit"; message: MatrixMessage } | null>(null);
   const activeAction = action?.message.roomId === room?.id ? action : null;
-  const endRef = useRef<HTMLDivElement>(null);
-  const previousRoom = useRef<string | null>(null);
-  const previousLength = useRef(0);
-  const nearBottom = useRef(true);
+  const { timelineRef, contentRef, onScroll, scrollToLatest } = useTimelineScroll(room?.id ?? null, messages);
 
   const handleMessageAction = useCallback(async (message: MatrixMessage, type: MessageAction) => {
     if (type === "reply" || type === "edit") setAction({ type, message });
     else if (type === "delete") await deleteMessage(message);
     else await togglePin(message);
   }, [deleteMessage, togglePin]);
-  const handleMediaLoad = useCallback(() => {
-    if (nearBottom.current) endRef.current?.scrollIntoView({ block: "end" });
-  }, []);
-
-  useEffect(() => {
-    const changedRoom = previousRoom.current !== room?.id;
-    const appended = messages.length > previousLength.current;
-    if (changedRoom || appended) endRef.current?.scrollIntoView({ behavior: changedRoom || prefs.reduceMotion || window.matchMedia?.("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth" });
-    previousRoom.current = room?.id ?? null;
-    previousLength.current = messages.length;
-  }, [messages.length, room?.id, prefs.reduceMotion]);
-
   useEffect(() => setHasMore(true), [room?.id]);
   useEffect(() => setAction(null), [room?.id]);
 
@@ -89,26 +80,26 @@ export function TimelinePanel({ room, onOpenIdentity, onOpenSettings, onCall, ca
         <div className="room-header__title">
           {room.isEncrypted ? <LockIcon /> : <span className="room-hash">#</span>}
           <div>
-            <h1>{room.name}</h1>
+            <h1>{compact ? "Voice chat" : room.name}</h1>
             {room.topic && <p>{room.topic}</p>}
           </div>
         </div>
-        <div className="room-header__actions">
+        <div className="room-header__actions" hidden={compact}>
           <button type="button" className="icon-button" aria-label="Room settings" title="Room settings" onClick={onOpenSettings}><Settings /></button>
           <button className="icon-button" title="Sprachanruf / laufendem Anruf beitreten" aria-label="Sprachanruf starten" disabled={callActive} onClick={() => onCall(false)}><Phone /></button>
           <button className="icon-button" title="Videoanruf / laufendem Anruf beitreten" aria-label="Videoanruf starten" disabled={callActive} onClick={() => onCall(true)}><Video /></button>
           {room.memberCount === 2 && <details className="call-options"><summary title="Klassische Matrix-Anrufe" aria-label="Weitere Anrufoptionen"><ChevronDown size={16} /></summary><div><button disabled={callActive} onClick={event => { event.currentTarget.closest("details")?.removeAttribute("open"); onDirectCall(false); }}>Klassischer Sprachanruf</button><button disabled={callActive} onClick={event => { event.currentTarget.closest("details")?.removeAttribute("open"); onDirectCall(true); }}>Klassischer Videoanruf</button></div></details>}
           <button type="button" className="icon-button room-invite-button" aria-label="Invite people to this room" title="Invite people" onClick={() => setInviting(true)}><UserPlus /></button>
           {room.isEncrypted && <button type="button" className="encrypted-pill" onClick={onOpenIdentity} title="Identität & Verschlüsselung"><LockIcon /> Encrypted</button>}
-          <span className="member-count"><UsersIcon /> {room.memberCount}</span>
+          <button ref={memberToggle} type="button" className="member-count" aria-label="Show room members" title="Room members"
+            aria-expanded={membersVisible} aria-controls="room-members" onClick={() => setMembersVisible(visible => !visible)}><UsersIcon /> {room.memberCount}</button>
         </div>
       </header>
 
-      <section className="timeline" aria-label={`${room.name} message timeline`} onScroll={(event) => {
-        const element = event.currentTarget;
-        nearBottom.current = element.scrollHeight - element.scrollTop - element.clientHeight < 160;
-      }}>
-        <div className="timeline__inner">
+      <div className="room-body">
+      <div className="room-conversation">
+      <section ref={timelineRef} className="timeline" aria-label={`${room.name} message timeline`} onScroll={onScroll}>
+        <div ref={contentRef} className="timeline__inner">
           {hasMore && (
             <button
               type="button"
@@ -138,12 +129,11 @@ export function TimelinePanel({ room, onOpenIdentity, onOpenSettings, onCall, ca
                 grouped={grouped}
                 onReact={toggleReaction}
                 onAction={handleMessageAction}
-                onMediaLoad={handleMediaLoad}
+                onMediaLoad={scrollToLatest}
               />
             );
           })}
           {messages.length === 0 && <p className="timeline-empty">No messages loaded yet.</p>}
-          <div ref={endRef} />
         </div>
       </section>
 
@@ -169,6 +159,9 @@ export function TimelinePanel({ room, onOpenIdentity, onOpenSettings, onCall, ca
           onSendAttachment={async (file, onProgress) => { await sendAttachment(file, onProgress, activeAction?.type === "reply" ? activeAction.message.id : undefined); setAction(null); }}
           onTyping={setTyping}
         />
+      </div>
+      </div>
+      {membersVisible && <RoomMemberList key={room.id} members={members} onClose={closeMembers} />}
       </div>
       {inviting && <PeopleDialog key={room.id} room={room} onClose={() => setInviting(false)} />}
     </>
