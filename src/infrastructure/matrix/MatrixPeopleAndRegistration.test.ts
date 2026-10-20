@@ -1,5 +1,5 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import { ClientEvent, createClient, EventType, MatrixEvent, MatrixEventEvent, Preset, RoomEvent, RoomStateEvent, SyncState, SSOAction, type MatrixClient, type Room } from "matrix-js-sdk";
+import { ClientEvent, createClient, EventType, EventStatus, MatrixEvent, MatrixEventEvent, Preset, RoomEvent, RoomStateEvent, SyncState, SSOAction, type MatrixClient, type Room } from "matrix-js-sdk";
 import type { MatrixAuthCapabilities, MatrixSession } from "../../domain/matrix/MatrixTypes";
 import { MatrixAuthProvider } from "./MatrixAuthProvider";
 import { MatrixJsSdkClient } from "./MatrixJsSdkClient";
@@ -59,6 +59,7 @@ function setup() {
     registerRequest: vi.fn(),
     sendStateEvent: vi.fn(async () => ({ event_id: "$pin" })),
     sendEvent: vi.fn(async () => ({ event_id: "$message" })),
+    resendEvent: vi.fn(async () => ({ event_id: "$retried" })), cancelPendingEvent: vi.fn(),
     getSsoLoginUrl: vi.fn((_callback?: string) => "https://matrix.example.org/sso"),
   };
   vi.mocked(createClient).mockReturnValue(sdk as unknown as MatrixClient);
@@ -68,6 +69,19 @@ function setup() {
 beforeEach(() => vi.clearAllMocks());
 
 describe("authentication security", () => {
+  it("retries the existing pending event and cancels only failed own sends", async () => {
+    const { sdk, rooms } = setup(); const room = sdkRoom("!pending:example.org"); rooms.push(room);
+    const event = new MatrixEvent({ event_id: "~pending", room_id: room.roomId, sender: session.userId, type: EventType.RoomMessage, content: { msgtype: "m.text", body: "Pending" } });
+    event.setStatus(EventStatus.NOT_SENT); room.getPendingEvents = () => [event];
+    const client = new MatrixJsSdkClient(); await client.start(session);
+    await client.retryMessage(room.roomId, "~pending"); expect(sdk.resendEvent).toHaveBeenCalledWith(event, room);
+    const removed = vi.fn(); client.subscribe("messageRemoved", removed);
+    await client.cancelSend(room.roomId, "~pending"); expect(sdk.cancelPendingEvent).toHaveBeenCalledWith(event);
+    expect(removed).toHaveBeenCalledWith({ roomId: room.roomId, eventId: "~pending" });
+    event.setStatus(EventStatus.SENT); await expect(client.retryMessage(room.roomId, "~pending")).rejects.toThrow("already sent");
+    await expect(client.cancelSend(room.roomId, "~pending")).rejects.toThrow("Only failed");
+    expect(sdk.sendEvent).not.toHaveBeenCalled();
+  });
   it("rejects forged, mismatched and replayed browser callbacks before exchanging tokens", async () => {
     const { sdk } = setup();
     vi.stubGlobal("window", { desktop: { auth: { openExternal: vi.fn() } } });

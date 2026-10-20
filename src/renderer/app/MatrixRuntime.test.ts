@@ -71,6 +71,10 @@ class FakeClient implements IMatrixClient {
   setMessagePinned = vi.fn(async () => undefined);
   setTyping = vi.fn(async () => undefined);
   sendReadReceipt = vi.fn(async () => undefined);
+  retryMessage = vi.fn(async () => undefined);
+  cancelSend = vi.fn(async () => undefined);
+  searchMessages = vi.fn(async () => ({ messages: [], scanned: 0, roomsDone: 0, totalRooms: 0, undecryptable: 0, limited: false }));
+  getMessageContext = vi.fn(async () => [] as MatrixMessage[]);
   addReaction = vi.fn(async () => "$reaction");
   removeReaction = vi.fn(async () => undefined);
   getRoomMembers = () => [];
@@ -90,6 +94,20 @@ const auth: IMatrixAuthProvider = {
 };
 
 describe("MatrixRuntime event bridge", () => {
+  it("does not mark hidden voice chat read on selection or refresh, and reads new messages on reopening", async () => {
+    const client = new FakeClient();
+    const runtime = new MatrixRuntime(client, auth);
+    const room: MatrixRoom = { id: "!voice:example", name: "Voice", avatarUrl: null, topic: null, unreadCount: 2, highlightCount: 0, isEncrypted: true, membership: "join", memberCount: 2 };
+    const message: MatrixMessage = { id: "$before", roomId: room.id, sender: { id: "@alice:example", displayName: "Alice", avatarUrl: null }, timestamp: 1, type: "text", body: "Hello", edited: false, replyTo: null, reactions: [], sendState: "sent", isOwn: false, isRedacted: false };
+    client.rooms = [room]; client.timelines[room.id] = [message]; client.emit("roomsChanged", client.rooms);
+    runtime.setRoomChatVisible(room.id, false);
+    runtime.selectRoom(room.id);
+    await Promise.resolve(); await Promise.resolve();
+    expect(client.sendReadReceipt).not.toHaveBeenCalled();
+    client.emit("messageAdded", { ...message, id: "$hidden", timestamp: 2 });
+    runtime.setRoomChatVisible(room.id, true);
+    expect(client.sendReadReceipt).toHaveBeenLastCalledWith(room.id, "$hidden");
+  });
   it("discards old account history when pagination completes after logout", async () => {
     const client = new FakeClient();
     const runtime = new MatrixRuntime(client, auth);

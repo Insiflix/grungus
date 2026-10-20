@@ -1,5 +1,7 @@
+import { isTheme, type Theme } from "./Themes";
+
 export interface Preferences {
-  theme: "forest" | "dark" | "light";
+  theme: Theme;
   fontSize: number;
   compact: boolean;
   reduceMotion: boolean;
@@ -45,7 +47,7 @@ export function parsePreferences(value: unknown): Preferences {
     const candidate = raw[key];
     if (typeof result[key] === "boolean" && typeof candidate === "boolean") Object.assign(result, { [key]: candidate });
   }
-  if (["forest", "dark", "light"].includes(String(raw.theme))) result.theme = raw.theme as Preferences["theme"];
+  if (isTheme(raw.theme)) result.theme = raw.theme;
   if (raw.roomSort === "name" || raw.roomSort === "unread") result.roomSort = raw.roomSort;
   if (typeof raw.fontSize === "number" && Number.isFinite(raw.fontSize)) result.fontSize = Math.max(12, Math.min(22, raw.fontSize));
   for (const key of ["audioInput", "videoInput", "audioOutput"] as const) if (typeof raw[key] === "string") result[key] = raw[key];

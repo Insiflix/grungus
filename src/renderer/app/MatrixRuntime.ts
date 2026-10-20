@@ -2,6 +2,7 @@ import type { MessageAttachment } from "../../domain/messaging/Attachments";
 import type { IMatrixAuthProvider } from "../../domain/matrix/IMatrixAuthProvider";
 import type { IMatrixClient } from "../../domain/matrix/IMatrixClient";
 import { preferences } from "../../domain/settings/Preferences";
+import type { MessageSearchQuery, MessageSearchResults } from "../../domain/messaging/MessageSearch";
 import type {
   MatrixAuthCapabilities,
   MatrixMessage,
@@ -68,6 +69,7 @@ export class MatrixRuntime {
   private bootstrapPromise: Promise<void> | null = null;
   private authCallbackCleanup: (() => void) | null = null;
   private readonly spaceDiscoveries = new Map<string, Promise<void>>();
+  private readonly hiddenRoomChats = new Set<string>();
 
   constructor(
     private readonly client: IMatrixClient,
@@ -243,6 +245,7 @@ export class MatrixRuntime {
   }
 
   async logout(): Promise<void> {
+    this.hiddenRoomChats.clear();
     this.spaceDiscoveries.clear();
     this.reactionQueues.clear();
     this.update({ phase: "restoring", session: null });
@@ -276,6 +279,15 @@ export class MatrixRuntime {
 
   clearSelectedRoom(): void { this.update({ selectedRoomId: null }); }
 
+  setRoomChatVisible(roomId: string, visible: boolean): void {
+    if (!visible) { this.hiddenRoomChats.add(roomId); return; }
+    this.hiddenRoomChats.delete(roomId);
+    const latest = this.snapshot.timelines[roomId]?.at(-1);
+    if (this.snapshot.selectedRoomId === roomId && latest?.sendState === "sent" && preferences.getSnapshot().sendReadReceipts) {
+      void this.client.sendReadReceipt(roomId, latest.id).catch(() => undefined);
+    }
+  }
+
   selectRoom(roomId: string): void {
     const room = this.snapshot.rooms.find((candidate) => candidate.id === roomId);
     if (!room || room.membership !== "join" || room.isSpace) return;
@@ -291,14 +303,14 @@ export class MatrixRuntime {
         .sort((left, right) => left.timestamp - right.timestamp);
       this.update({ timelines: { ...this.snapshot.timelines, [roomId]: merged } });
       const latest = merged.at(-1);
-      if (this.snapshot.selectedRoomId === roomId && latest?.sendState === "sent" && preferences.getSnapshot().sendReadReceipts) {
+      if (this.snapshot.selectedRoomId === roomId && !this.hiddenRoomChats.has(roomId) && latest?.sendState === "sent" && preferences.getSnapshot().sendReadReceipts) {
         void this.client.sendReadReceipt(roomId, latest.id).catch(() => undefined);
       }
     }).catch(error => {
       if (this.snapshot.session === session) this.update({ error: `Unable to refresh messages: ${messageOf(error)}` });
     });
     const latest = timelines[roomId]?.at(-1);
-    if (latest?.sendState === "sent" && preferences.getSnapshot().sendReadReceipts) {
+    if (!this.hiddenRoomChats.has(roomId) && latest?.sendState === "sent" && preferences.getSnapshot().sendReadReceipts) {
       void this.client.sendReadReceipt(roomId, latest.id);
     }
   }
@@ -365,6 +377,18 @@ export class MatrixRuntime {
   searchUsers(term: string) {
     return this.client.searchUsers(term);
   }
+  searchMessages = (query: MessageSearchQuery, signal?: AbortSignal, onProgress?: (result: MessageSearchResults) => void) => {
+    const session = this.snapshot.session;
+    return this.client.searchMessages(query, signal, result => { if (this.snapshot.session === session) onProgress?.(result); });
+  };
+  async openSearchResult(message: MatrixMessage): Promise<void> {
+    const session = this.snapshot.session;
+    const context = await this.client.getMessageContext(message.roomId, message.id);
+    if (this.snapshot.session !== session) return;
+    const messages = [...new Map([message, ...(this.snapshot.timelines[message.roomId] ?? []), ...context].map(item => [item.id, item])).values()].sort((a, b) => a.timestamp - b.timestamp);
+    this.update({ timelines: { ...this.snapshot.timelines, [message.roomId]: messages } });
+    this.selectRoom(message.roomId);
+  }
 
   async inviteUser(roomId: string, userId: string): Promise<void> {
     await this.client.inviteUser(roomId, userId);
@@ -409,6 +433,8 @@ export class MatrixRuntime {
   }
 
   getUploadLimit = () => this.client.getUploadLimit();
+  retryMessage = (roomId: string, eventId: string) => this.client.retryMessage(roomId, eventId);
+  cancelSend = (roomId: string, eventId: string) => this.client.cancelSend(roomId, eventId);
   async sendAttachment(roomId: string, file: File, onProgress?: (percent: number) => void, replyToEventId?: string): Promise<void> {
     const session = this.snapshot.session;
     try { await this.client.sendAttachment(roomId, file, onProgress, replyToEventId ? { replyToEventId } : undefined); }

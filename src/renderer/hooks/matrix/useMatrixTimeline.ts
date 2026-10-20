@@ -14,6 +14,8 @@ export function useMatrixTimeline(roomId: string | null) {
     sendMessage: (body: string, replyToEventId?: string) =>
       roomId ? runtime.sendMessage(roomId, body, replyToEventId) : Promise.resolve(),
     getUploadLimit: runtime.getUploadLimit,
+    retryMessage: (eventId: string) => roomId ? runtime.retryMessage(roomId, eventId) : Promise.resolve(),
+    cancelSend: (eventId: string) => roomId ? runtime.cancelSend(roomId, eventId) : Promise.resolve(),
     sendAttachment: (file: File, onProgress?: (percent: number) => void, replyToEventId?: string) =>
       roomId ? runtime.sendAttachment(roomId, file, onProgress, replyToEventId) : Promise.reject(new Error("Select a room first.")),
     editMessage: (message: Parameters<typeof runtime.editMessage>[1], body: string) =>

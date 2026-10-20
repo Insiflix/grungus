@@ -12,6 +12,8 @@ import { MessageContextMenu, type MessageAction } from "./MessageContextMenu";
 import { EmojiPicker } from "./EmojiPicker";
 
 interface MessageRowProps {
+  onRetry?: () => Promise<void>;
+  onCancelSend?: () => Promise<void>;
   message: MatrixMessage;
   grouped: boolean;
   onReact(key: string): void | Promise<void>;
@@ -19,7 +21,12 @@ interface MessageRowProps {
   onMediaLoad?: () => void;
 }
 
-export function MessageRow({ message, grouped, onReact, onMediaLoad, onAction }: MessageRowProps) {
+export function MessageRow({ message, grouped, onReact, onMediaLoad, onAction, onRetry, onCancelSend }: MessageRowProps) {
+  const [recovering, setRecovering] = useState(false);
+  const recover = async (action: () => Promise<void>) => {
+    setRecovering(true); setError("");
+    try { await action(); } catch (cause) { setError(cause instanceof Error ? cause.message : "Could not update this send."); } finally { setRecovering(false); }
+  };
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
   const [emojiOpen, setEmojiOpen] = useState(false);
   const [error, setError] = useState("");
@@ -33,7 +40,7 @@ export function MessageRow({ message, grouped, onReact, onMediaLoad, onAction }:
   const gif = prefs.showInlineMedia && message.type === "text" && !message.isRedacted ? parseGifMessage(message.body) : null;
   const mentioned = Boolean(message.mentionsOwnUser && !message.isRedacted);
   return (
-    <article aria-label={mentioned ? "Message mentioning you" : undefined} className={`message-row ${grouped ? "is-grouped" : ""} ${message.sendState === "failed" ? "is-failed" : ""} ${mentioned ? "is-mentioned" : ""}`} onContextMenu={event => { if (actionable) { event.preventDefault(); setMenu({ x: event.clientX, y: event.clientY }); } }}>
+    <article id={`message-${message.id}`} aria-label={mentioned ? "Message mentioning you" : undefined} className={`message-row ${grouped ? "is-grouped" : ""} ${message.sendState === "failed" ? "is-failed" : ""} ${mentioned ? "is-mentioned" : ""}`} onContextMenu={event => { if (actionable) { event.preventDefault(); setMenu({ x: event.clientX, y: event.clientY }); } }}>
       <div className="message-row__avatar">
         {!grouped && <Avatar name={message.sender.displayName} url={message.sender.avatarUrl} />}
         {grouped && <time>{timeFormatter.format(timestamp)}</time>}
@@ -66,13 +73,17 @@ export function MessageRow({ message, grouped, onReact, onMediaLoad, onAction }:
                 key={reaction.key}
                 onClick={() => react(reaction.key)}
                 disabled={!actionable}
-                title={reaction.userIds.join(", ")}
+                data-tooltip={reaction.userIds.join(", ")}
               >
                 <span className="reaction-emoji">{reaction.key}</span><span className="reaction-count">{reaction.count}</span>
               </button>
             ))}
           </div>
         )}
+        {message.isOwn && message.sendState === "failed" && (onRetry || onCancelSend) && <div className="failed-send-actions" aria-label="Failed message controls">
+          {onRetry && <button type="button" disabled={recovering} aria-label="Resend message" onClick={() => void recover(onRetry)}>{recovering ? "Working…" : "Retry send"}</button>}
+          {onCancelSend && <button type="button" disabled={recovering} aria-label="Cancel failed send" onClick={() => void recover(onCancelSend)}>Cancel send</button>}
+        </div>}
         {message.sendState !== "sent" && (
           <span className={`send-state send-state--${message.sendState}`}>
             {message.sendState === "sending" ? "Sending…" : message.sendState}
@@ -82,10 +93,10 @@ export function MessageRow({ message, grouped, onReact, onMediaLoad, onAction }:
       {error && <p role="alert">{error}</p>}
       {actionable && (
         <div className="message-actions" role="toolbar" aria-label="Quick message actions">
-          {[['👍', 'thumbs up'], ['🙏', 'folded hands'], ['💀', 'skull']].map(([emoji, label]) => <button type="button" className="message-actions__emoji" key={emoji} onClick={() => react(emoji)} aria-label={`React with ${label}`} title={`React with ${emoji}`}>{emoji}</button>)}
+          {[['👍', 'thumbs up'], ['🙏', 'folded hands'], ['💀', 'skull']].map(([emoji, label]) => <button type="button" className="message-actions__emoji" key={emoji} onClick={() => react(emoji)} aria-label={`React with ${label}`} data-tooltip={`React with ${emoji}`}>{emoji}</button>)}
           <span className="message-actions__divider" aria-hidden="true" />
-          <button type="button" aria-label="Choose reaction emoji" title="Add reaction" onClick={() => setEmojiOpen(true)}><SmilePlus size={20} /></button>
-          <button type="button" aria-label="Reply" title="Reply" onClick={() => { void Promise.resolve().then(() => onAction?.("reply")).catch(cause => setError(cause instanceof Error ? cause.message : "Reply failed.")); }}><Reply size={20} /></button>
+          <button type="button" aria-label="Choose reaction emoji" data-tooltip="Add reaction" onClick={() => setEmojiOpen(true)}><SmilePlus size={20} /></button>
+          <button type="button" aria-label="Reply" data-tooltip="Reply" onClick={() => { void Promise.resolve().then(() => onAction?.("reply")).catch(cause => setError(cause instanceof Error ? cause.message : "Reply failed.")); }}><Reply size={20} /></button>
           <button type="button" aria-label="Message actions" aria-haspopup="menu" aria-expanded={Boolean(menu)} onClick={event => { const rect = event.currentTarget.getBoundingClientRect(); setMenu({ x: rect.right, y: rect.bottom }); }}><MoreHorizontal size={18} /></button>
         </div>
       )}

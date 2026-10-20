@@ -1,3 +1,5 @@
+import { ThemedSelect } from "../../components/common/ThemedSelect";
+import { ThemePicker } from "./ThemePicker";
 import { preferences, type Preferences } from "../../../domain/settings/Preferences";
 import { usePreferences } from "../../hooks/usePreferences";
 import { SettingsSection, type SettingsPanelProps } from "./SettingsDialog";
@@ -15,7 +17,7 @@ export function AsyncSettingsToggle({ title, detail, checked, disabled, save }: 
 
 export function AsyncSettingsSelect<T extends string>({ title, value, save, children }: { title: string; value: T; save: (value: T) => Promise<unknown>; children: ReactNode }) {
   const setting = useQueuedSetting(value, save);
-  return <label className="settings-field">{title}<select value={setting.value} aria-busy={setting.saving || undefined} onChange={(event) => setting.change(event.target.value as T)}>{children}</select>{setting.error && <span className="settings-inline-error" role="alert">{setting.error}</span>}</label>;
+  return <label className="settings-field">{title}<ThemedSelect value={setting.value} aria-busy={setting.saving || undefined} onChange={(event) => setting.change(event.target.value as T)}>{children}</ThemedSelect>{setting.error && <span className="settings-inline-error" role="alert">{setting.error}</span>}</label>;
 }
 
 export function usePreferenceUpdate() {
@@ -32,9 +34,9 @@ export function PreferenceSettings({ kind }: SettingsPanelProps & { kind: "appea
   const { update, error } = usePreferenceUpdate();
   const toggle = (key: keyof Preferences, title: string, detail?: string) => <SettingsToggle key={key} title={title} detail={detail} checked={Boolean(prefs[key])} onChange={(value) => update({ [key]: value })} />;
   return <>{error && <p className="settings-inline-error" role="alert">{error}</p>}{kind === "appearance" ? <>
-    <SettingsSection title="Theme"><div className="settings-theme-options">{(["forest", "dark", "light"] as const).map((theme) => <button key={theme} className={`settings-theme settings-theme--${theme}`} aria-pressed={prefs.theme === theme} onClick={() => update({ theme })}><span />{theme[0].toUpperCase() + theme.slice(1)}</button>)}</div></SettingsSection>
+    <SettingsSection title="Theme"><ThemePicker value={prefs.theme} onChange={theme => update({theme})} /></SettingsSection>
     <SettingsSection title="Messages"><label className="settings-field">Message text size <output>{prefs.fontSize}px</output><input type="range" min={12} max={22} value={prefs.fontSize} onChange={(event) => update({ fontSize: Number(event.target.value) })} /></label>{toggle("compact", "Compact layout")}{toggle("showAvatars", "Show message avatars")}{toggle("showTimestamps", "Show message timestamps")}{toggle("use24HourTime", "Use 24-hour time")}{toggle("groupMessages", "Group consecutive messages")}{toggle("reduceMotion", "Reduce animation", "System reduced-motion preferences are also respected.")}</SettingsSection>
-    <SettingsSection title="Room list"><label className="settings-field">Sort rooms<select value={prefs.roomSort} onChange={(event) => update({ roomSort: event.target.value as Preferences["roomSort"] })}><option value="name">Alphabetical</option><option value="unread">Unread and mentions first</option></select></label>{toggle("showRoomPreviews", "Show room topics and member counts")}</SettingsSection>
+    <SettingsSection title="Room list"><label className="settings-field">Sort rooms<ThemedSelect value={prefs.roomSort} onChange={(event) => update({ roomSort: event.target.value as Preferences["roomSort"] })}><option value="name">Alphabetical</option><option value="unread">Unread and mentions first</option></ThemedSelect></label>{toggle("showRoomPreviews", "Show room topics and member counts")}</SettingsSection>
   </> : <>
     <SettingsSection title="Composing messages">{toggle("sendWithEnter", "Send messages with Enter", "When off, use Ctrl / ⌘ + Enter to send.")}{toggle("convertEmoji", "Convert emoji shortcodes", "Turn :smile: into an emoji in messages.")}{toggle("showInlineMedia", "Display GIFs inline", "When off, GIF messages display as text URLs.")}</SettingsSection>
     <SettingsSection title="Privacy">{toggle("sendTyping", "Send typing notifications")}{toggle("showTyping", "Show other people’s typing indicators")}{toggle("sendReadReceipts", "Send read receipts", "Applies when you open a room. Previously sent receipts remain visible.")}</SettingsSection>

@@ -29,7 +29,7 @@ export function SpaceChannels({ rooms, selectedRoomId, calls, onOpen, callActive
             <button type="button" className={`channel-row ${selectedRoomId === room.id ? "is-selected" : ""} ${room.unreadCount ? "has-unread" : ""}`}
               aria-current={selectedRoomId === room.id ? "page" : undefined}
               aria-label={`${voice ? "Join voice channel" : "Open text channel"} ${room.name}${locked ? ", invitation required" : ""}`}
-              title={locked ? "Invitation required" : room.topic || (voice ? "Join voice" : "Open channel")}
+              data-tooltip={locked ? "Invitation required" : room.topic || (voice ? "Join voice" : "Open channel")}
               disabled={locked || pending !== null || (voice && callActive)} onClick={() => void open(room, voice)}>
               {locked ? <LockKeyhole /> : voice ? <Volume2 /> : <Hash />}
               <strong>{room.name}</strong>

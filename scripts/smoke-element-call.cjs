@@ -1,12 +1,11 @@
 ﻿const { app, BrowserWindow, session } = require("electron");
 app.setName("grungus-isolated-call-test");
 app.commandLine.appendSwitch("use-fake-device-for-media-stream");
-app.commandLine.appendSwitch("use-fake-ui-for-media-stream");
 app.whenReady().then(async () => {
   const errors = [];
   const window = new BrowserWindow({ width:1440, height:900, show: false, webPreferences: { offscreen: true, backgroundThrottling: false, sandbox: true, contextIsolation: true, nodeIntegration: false } });
   session.defaultSession.webRequest.onBeforeRequest((details, callback) => callback({ cancel: /^https?:/.test(details.url) && !/^http:\/\/(127\.0\.0\.1|localhost):5175\//.test(details.url) }));
-  session.defaultSession.setPermissionRequestHandler((_contents, permission, callback) => callback(permission === "media"));
+  session.defaultSession.setPermissionRequestHandler((_contents, permission, callback) => callback(permission === "media" || permission === "fullscreen"));
   window.webContents.on("console-message", event => {
     if (/Failed to load config|Failed to obtain the host|Improper sequence|Unknown or unsupported from-widget action|violates the following Content Security Policy|Refused to .*Content Security Policy/.test(event.message)) errors.push(event.message);
   });
@@ -75,6 +74,111 @@ app.whenReady().then(async () => {
     const joined = await window.webContents.executeJavaScript(`(()=>{ const minimize=document.querySelector('button[aria-label="Minimize call"]'); const result={preview:!!document.querySelector('.call-panel--preview'),minimize:!!minimize}; minimize?.click(); return result;})()`);
     if(joined.preview || !joined.minimize) throw new Error('Call layout did not activate after joining');
     console.log('PASS: full call layout and minimize become available only after the join notification.');
+    await new Promise(resolve => setTimeout(resolve,100));
+    const docked = await window.webContents.executeJavaScript(`(() => {
+      const dock = document.querySelector('.voice-dock'), panel = document.querySelector('.call-panel');
+      return { dock: !!dock?.closest('.room-sidebar'), away: panel.classList.contains('call-panel--away'), deafen: !!dock?.querySelector('button[aria-label="Deafen"]') };
+    })()`);
+    if (!docked.dock || !docked.away || !docked.deafen) throw new Error('Voice controls did not dock: ' + JSON.stringify(docked));
+    const originalFrame = callFrame().routingId;
+    await window.webContents.executeJavaScript(`document.querySelector('.voice-dock__room').click()`);
+    await new Promise(resolve => setTimeout(resolve,100));
+    const bounds = await window.webContents.executeJavaScript(`(() => {
+      const panel = document.querySelector('.call-panel'), sidebar = document.querySelector('.room-sidebar');
+      const p = panel.getBoundingClientRect(), s = sidebar.getBoundingClientRect();
+      return { left:p.left, sidebarRight:s.right, right:p.right, bottom:p.bottom, visible: !panel.classList.contains('call-panel--away'), width:innerWidth, height:innerHeight };
+    })()`);
+    if (!bounds.visible || bounds.left < bounds.sidebarRight || bounds.right > bounds.width || bounds.bottom > bounds.height) throw new Error('Inline call overlaps navigation: ' + JSON.stringify(bounds));
+    await window.webContents.executeJavaScript('window.__smokeEnableChat()');
+    await new Promise(resolve => setTimeout(resolve,100));
+    const chatBefore = await window.webContents.executeJavaScript(`document.querySelector('.call-panel__media').getBoundingClientRect().width`);
+    await window.webContents.executeJavaScript(`document.querySelector('.call-panel .voice-chat-toggle').click(); window.__smokeVoiceUnread(7);`);
+    await new Promise(resolve => setTimeout(resolve,100));
+    const hiddenChat = await window.webContents.executeJavaScript(`(() => ({ hidden:getComputedStyle(document.querySelector('.voice-chat-slot')).display === 'none', width:document.querySelector('.call-panel__media').getBoundingClientRect().width, badge:document.querySelector('.call-panel .voice-chat-toggle').textContent }))()`);
+    if (!hiddenChat.hidden || hiddenChat.width <= chatBefore || !hiddenChat.badge.includes('7')) throw new Error('Chat did not collapse with unread badge: '+JSON.stringify({chatBefore,hiddenChat}));
+    await window.webContents.executeJavaScript(`document.querySelector('.call-panel .voice-chat-toggle').click()`);
+    await new Promise(resolve => setTimeout(resolve,100));
+    const restoredChat = await window.webContents.executeJavaScript(`({draft:document.querySelector('textarea[aria-label="Voice draft"]').value, expanded:document.querySelector('.call-panel .voice-chat-toggle').getAttribute('aria-expanded')})`);
+    if (restoredChat.draft !== 'Unsent draft' || restoredChat.expanded !== 'true' || callFrame().routingId !== originalFrame) throw new Error('Chat reopening lost state');
+    console.log('PASS: hiding voice chat grows the media area, displays unread counts and preserves drafts and the call session.');
+    const headerControls = await window.webContents.executeJavaScript(`(() => {
+      const header = document.querySelector('.call-panel > header');
+      return [...header.querySelectorAll(':scope > button, :scope > label .themed-select__trigger')].map(element => { const r=element.getBoundingClientRect(); return {height:r.height,center:r.top+r.height/2}; });
+    })()`);
+    if (headerControls.some(control => Math.abs(control.height-34)>1 || Math.abs(control.center-headerControls[0].center)>1)) throw new Error('Voice header controls misaligned: '+JSON.stringify(headerControls));
+    console.log('PASS: camera selector, chat, minimize and leave controls share a 34px height and center line.');
+    if (process.env.GRUNGUS_VOICE_HEADER_SCREENSHOT) require('node:fs').writeFileSync(process.env.GRUNGUS_VOICE_HEADER_SCREENSHOT, (await window.webContents.capturePage()).toPNG());
+    await window.webContents.executeJavaScript(`window.__smokeBrowseAway()`);
+    await new Promise(resolve => setTimeout(resolve,100));
+    if (callFrame().routingId !== originalFrame) throw new Error('Browsing replaced the call iframe');
+    if (process.env.GRUNGUS_VOICE_SCREENSHOT) require('node:fs').writeFileSync(process.env.GRUNGUS_VOICE_SCREENSHOT, (await window.webContents.capturePage()).toPNG());
+    console.log('PASS: voice controls dock in the sidebar; the call opens inline and survives browsing away.');
+    // Exercise the isolated host-to-widget sharing path without granting desktop capture.
+    let captureRequests = 0;
+    window.webContents.debugger.attach('1.3');
+    await window.webContents.debugger.sendCommand('Emulation.setFocusEmulationEnabled', { enabled: true });
+    const { targetInfos } = await window.webContents.debugger.sendCommand('Target.getTargets');
+    const callTarget = targetInfos.find(target => target.type === 'iframe' && target.url.includes('/element-call/'));
+    if (callTarget) {
+      const { sessionId } = await window.webContents.debugger.sendCommand('Target.attachToTarget', { targetId: callTarget.targetId, flatten:true });
+      await window.webContents.debugger.sendCommand('Emulation.setFocusEmulationEnabled', {enabled:true}, sessionId);
+    }
+    // Synthetic camera/share videos exercise the actual fullscreen API without real media or peers.
+    await window.webContents.executeJavaScript(`document.querySelector('.voice-dock__room').click()`);
+    await new Promise(resolve => setTimeout(resolve,100));
+    await callFrame().executeJavaScript(`(() => {
+      for (const id of ['camera','screen']) {
+        const tile = document.createElement('div'); tile.dataset.testid = 'videoTile'; tile.dataset.videoEnabled = 'true'; tile.id = 'smoke-'+id;
+        const video = document.createElement('video'); tile.append(video); document.body.append(tile);
+        const canvas = document.createElement('canvas'); canvas.width=320; canvas.height=180;
+        canvas.getContext('2d').fillRect(0,0,320,180); video.srcObject=canvas.captureStream(1); video.muted=true;
+      }
+    })()`);
+    await new Promise(resolve => setTimeout(resolve,100));
+    await callFrame().executeJavaScript(`document.querySelector('#smoke-camera .grungus-tile-fullscreen').click()`, true);
+    await new Promise(resolve => setTimeout(resolve,250));
+    const cameraFullscreen = await callFrame().executeJavaScript(`document.fullscreenElement === document.querySelector('#smoke-camera video')`);
+    if (!cameraFullscreen) throw new Error('Camera did not enter fullscreen');
+    await callFrame().executeJavaScript('document.exitFullscreen()');
+    await new Promise(resolve => setTimeout(resolve,250));
+    await callFrame().executeJavaScript(`document.querySelector('#smoke-screen video').dispatchEvent(new MouseEvent('dblclick', {bubbles:true}))`, true);
+    await new Promise(resolve => setTimeout(resolve,250));
+    const screenFullscreen = await callFrame().executeJavaScript(`document.fullscreenElement === document.querySelector('#smoke-screen video')`);
+    if (!screenFullscreen) throw new Error('Screen share did not enter fullscreen');
+    await callFrame().executeJavaScript(`(async () => { await document.exitFullscreen(); for (const tile of document.querySelectorAll('[id^="smoke-"][data-testid="videoTile"]')) { tile.querySelector('video').srcObject.getTracks().forEach(track=>track.stop()); tile.remove(); } })()`);
+    console.log('PASS: camera button and screen-share double-click enter native fullscreen and exit without replacing the call.');
+    // Record consent routing but never supply a source; the fixture exits with capture still ungranted.
+    session.defaultSession.setDisplayMediaRequestHandler(() => { captureRequests++; });
+    await callFrame().executeJavaScript(`(() => {
+      const footer = document.createElement('div'); footer.dataset.testid = 'footer-container'; footer.id = 'smoke-toolbar';
+      footer.innerHTML = '<div class="_buttons_fixture"><div><button data-testid="incall_mute">Mic</button><button>Devices</button></div><button data-testid="incall_videomute">Camera</button><button data-testid="incall_screenshare">Share</button><button data-testid="incall_leave">Leave</button><button id="smoke-reactions">Reactions</button></div><fieldset><input type="radio" checked /></fieldset>';
+      document.body.append(footer);
+      window.__smokeCaptureError = null;
+      footer.querySelector('[data-testid="incall_screenshare"]').onclick = () => {
+        window.__smokeShareClicked = true;
+        navigator.mediaDevices.getDisplayMedia({video:true}).then(stream => stream.getTracks().forEach(track => track.stop())).catch(error => { window.__smokeCaptureError = error.name; });
+      };
+    })()`);
+    await window.webContents.executeJavaScript(`document.querySelector('.voice-dock button[aria-label="Share screen"]').click()`);
+    await new Promise(resolve => setTimeout(resolve,500));
+    const toolbar = await callFrame().executeJavaScript(`(() => {
+      const footer = document.querySelector('#smoke-toolbar');
+      return { clicked:window.__smokeShareClicked, target:document.querySelector('button[data-testid="incall_screenshare"]')?.outerHTML, hosted:document.documentElement.hasAttribute('data-grungus-host-controls'), shareHidden:getComputedStyle(footer.querySelector('[data-testid="incall_screenshare"]')).display === 'none', splitHidden:getComputedStyle(footer.querySelector('._buttons_fixture > div')).display === 'none', radius:getComputedStyle(document.querySelector('#smoke-reactions')).borderRadius, captureError:window.__smokeCaptureError };
+    })()`);
+    if (!captureRequests || !toolbar.hosted || !toolbar.shareHidden || !toolbar.splitHidden || toolbar.radius !== '8px') throw new Error('Sidebar sharing or toolbar styling failed: ' + JSON.stringify({captureRequests,toolbar, focus:await callFrame().executeJavaScript('({focus:document.hasFocus(),visibility:document.visibilityState,activation:navigator.userActivation.isActive})')}));
+    console.log('PASS: sidebar sharing reaches Electron capture consent across origins; duplicate controls are hidden and remaining controls match the theme. No capture granted.');
+    await window.loadURL('http://127.0.0.1:5175/scripts/fixtures/element-call-smoke.html?autojoin=1');
+    let autoJoin;
+    const autoJoinDeadline = Date.now() + 10000;
+    while (Date.now() < autoJoinDeadline) {
+      autoJoin = await window.webContents.executeJavaScript(`({attempted:!!window.__smokeAutoJoinAttempted, preview:!!document.querySelector('.call-panel--preview'), inline:!!document.querySelector('.call-panel--docked')})`);
+      if (autoJoin.attempted) break;
+      await new Promise(resolve => setTimeout(resolve,100));
+    }
+    const autoJoinFrame = callFrame();
+    const lobby = autoJoinFrame ? await autoJoinFrame.executeJavaScript(`({joinButton:!!document.querySelector('[data-testid="joincall_joincall"]'), skipLobby:new URLSearchParams(location.hash.slice(2)).get('skipLobby')})`) : null;
+    if (!autoJoin?.attempted || autoJoin.preview || !autoJoin.inline || lobby?.joinButton || lobby?.skipLobby !== 'true') throw new Error('Voice channel required a second join: '+JSON.stringify({autoJoin,lobby}));
+    console.log('PASS: voice channels automatically reach RTC authorization without a second Join button or modal. Test authorization remains denied.');
     app.exit(0);
   } catch (error) { console.error(error); app.exit(1); }
 });

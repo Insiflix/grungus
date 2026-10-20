@@ -1,23 +1,33 @@
 import { useCallback, useEffect, useRef, useState, type RefObject } from "react";
 import { FileText, Upload, X } from "lucide-react";
 import { attachmentSizeWarning, formatFileSize } from "../../../domain/messaging/Attachments";
+import { roomDrafts, useRoomDraft } from "./RoomDrafts";
 
 export interface DraftAttachment { id: string; file: File; preview?: string }
 
-export function useAttachmentDraft(form: RefObject<HTMLFormElement | null>, enabled: boolean) {
+export function useAttachmentDraft(form: RefObject<HTMLFormElement | null>, enabled: boolean, draftKey?: string) {
+  const saved = useRoomDraft(draftKey);
   const [files, setFiles] = useState<DraftAttachment[]>([]);
   const [dragging, setDragging] = useState(false);
   const current = useRef<DraftAttachment[]>([]);
+  useEffect(() => {
+    if (!draftKey) return;
+    current.current.forEach(item => { if (item.preview) URL.revokeObjectURL(item.preview); });
+    current.current = saved.files.map(item => ({ ...item, preview: item.file.type.startsWith("image/") ? URL.createObjectURL(item.file) : undefined }));
+    setFiles(current.current);
+  }, [draftKey, saved.files]);
   const add = useCallback((incoming: File[]) => {
     if (!enabled) return;
     const added = incoming.map(file => ({ id: crypto.randomUUID(), file, preview: file.type.startsWith("image/") ? URL.createObjectURL(file) : undefined }));
     current.current = [...current.current, ...added]; setFiles(current.current);
-  }, [enabled]);
+    roomDrafts.patch(draftKey, { files: current.current.map(({ id, file }) => ({ id, file })) });
+  }, [enabled, draftKey]);
   const remove = useCallback((id: string) => {
     const file = current.current.find(item => item.id === id);
     if (file?.preview) URL.revokeObjectURL(file.preview);
     current.current = current.current.filter(item => item.id !== id); setFiles(current.current);
-  }, []);
+    roomDrafts.patch(draftKey, { files: current.current.map(({ id, file }) => ({ id, file })) });
+  }, [draftKey]);
   useEffect(() => () => { current.current.forEach(item => { if (item.preview) URL.revokeObjectURL(item.preview); }); }, []);
   useEffect(() => {
     const root = form.current?.closest(".chat-workspace") ?? form.current;
@@ -48,7 +58,7 @@ export function AttachmentDraft({ files, remove, sending, progress, maxSize }: {
   return <div className="attachment-draft" aria-label="Attachments ready to send">{files.map(item => <div className={`attachment-draft__card ${typeof maxSize === "number" && item.file.size > maxSize ? "is-too-large" : ""}`} key={item.id}>
     <div className="attachment-draft__preview">{item.preview ? <img src={item.preview} alt={`Preview of ${item.file.name}`} /> : <FileText size={38} />}</div>
     <button type="button" className="attachment-draft__remove" aria-label={`Remove ${item.file.name}`} disabled={sending} onClick={() => remove(item.id)}><X size={14} /></button>
-    <strong title={item.file.name}>{item.file.name}</strong><small>{progress?.id === item.id ? `Uploading ${progress.percent}%` : formatFileSize(item.file.size)}</small>
+    <strong data-tooltip={item.file.name}>{item.file.name}</strong><small>{progress?.id === item.id ? `Uploading ${progress.percent}%` : formatFileSize(item.file.size)}</small>
     {typeof maxSize === "number" && item.file.size > maxSize && <p className="attachment-draft__warning" role="alert">{attachmentSizeWarning(item.file, maxSize)}</p>}
     {progress?.id === item.id && <progress aria-label={`Uploading ${item.file.name}`} max={100} value={progress.percent} />}
   </div>)}</div>;

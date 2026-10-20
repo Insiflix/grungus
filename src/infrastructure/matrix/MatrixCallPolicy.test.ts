@@ -4,6 +4,14 @@ import { allowedCallCapabilities, elementCallUrl, ownCallStateKeys, isConversati
 import type { Room } from "matrix-js-sdk";
 const user = "@alice:example.org", device = "DEVICE", room = "!call:example.org";
 describe("Element Call isolation", () => {
+  it.each([false, true])("can skip the lobby for a voice channel with an existing call=%s", joining => {
+    const url = new URL(elementCallUrl("http://localhost/", room, user, device, "https://matrix.example.org", false, "widget", false, joining, true));
+    const params = new URLSearchParams(url.hash.slice(2));
+    expect(params.get("skipLobby")).toBe("true");
+    expect(params.get("intent")).toBe(joining ? "join_existing_voice" : "start_call_voice");
+    const preview = new URL(elementCallUrl("http://localhost/", room, user, device, "https://matrix.example.org", true, "widget"));
+    expect(new URLSearchParams(preview.hash.slice(2)).has("skipLobby")).toBe(false);
+  });
   it("uses ringing for standalone group chats and never for server channels, regardless of size", () => {
     const room = { roomId: "!chat", getJoinedMemberCount: () => 4, getType: () => undefined, currentState: { getStateEvents: () => [] } } as unknown as Room;
     expect(isConversationCall(room, [])).toBe(true);

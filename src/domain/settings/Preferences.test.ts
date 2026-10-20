@@ -1,9 +1,16 @@
 // @vitest-environment jsdom
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { defaultPreferences, parsePreferences, preferences } from "./Preferences";
+import { themes } from "./Themes";
 
 beforeEach(() => { localStorage.clear(); preferences.setAccount(crypto.randomUUID()); });
 describe("persisted preferences", () => {
+  it.each(themes)("persists the $name theme through reload and account changes", ({id}) => {
+    preferences.setAccount("theme-account"); preferences.update({theme:id}); preferences.reload();
+    expect(preferences.getSnapshot().theme).toBe(id);
+    preferences.setAccount("other-account"); preferences.setAccount("theme-account");
+    expect(preferences.getSnapshot().theme).toBe(id);
+  });
   it("validates stored values and clamps font sizes", () => {
     expect(parsePreferences({ theme: "invalid", fontSize: 999, showAvatars: "false", sendTyping: false })).toMatchObject({ theme: "forest", fontSize: 22, showAvatars: true, sendTyping: false });
     expect(parsePreferences(null)).toEqual(defaultPreferences);

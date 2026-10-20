@@ -1,3 +1,4 @@
+import { ThemedSelect } from "../../components/common/ThemedSelect";
 import { useState, type FormEvent } from "react";
 import { useMatrixSession } from "../../hooks/matrix/useMatrixSession";
 
@@ -54,9 +55,9 @@ export function RegistrationForm() {
       <strong>Verify your account</strong>
       {challenge.flows.length > 1 && <>
         <label htmlFor="registration-flow">Verification method</label>
-        <select id="registration-flow" value={flowIndex} disabled={busy} onChange={(event) => { setFlowIndex(Number(event.target.value)); setToken(""); }}>
+        <ThemedSelect id="registration-flow" value={flowIndex} disabled={busy} onChange={(event) => { setFlowIndex(Number(event.target.value)); setToken(""); }}>
           {challenge.flows.map((candidate, index) => <option key={index} value={index}>{candidate.stages.map((item) => stageNames[item] ?? item).join(" + ")}</option>)}
-        </select>
+        </ThemedSelect>
       </>}
       <ol>{flow?.stages.map((item) => <li key={item}>{stageNames[item] ?? item}{challenge.completed.includes(item) ? " — complete" : item === stage ? " — next" : ""}</li>)}</ol>
       {isToken && <><label htmlFor="register-token">Registration token</label><input id="register-token" value={token} onChange={(event) => setToken(event.target.value)} required disabled={busy} autoComplete="off" /></>}

@@ -2,6 +2,7 @@ import { ClientEvent, RoomEvent, RoomStateEvent, MatrixEventEvent, MatrixError, 
 import { ClientWidgetApi, Widget, WidgetDriver, OpenIDRequestState, type SimpleObservable, type IOpenIDUpdate, type IRoomEvent, type Capability } from "matrix-widget-api";
 import { allowedCallCapabilities, callEvents, callState, callToDevice, ownCallStateKeys, readableCallState, elementCallUrl, isConversationCall } from "./MatrixCallPolicy";
 import { guardWidgetMessages } from "./WidgetMessageGuard";
+import type { CallOptions } from "../../domain/calls/ICallProvider";
 
 const raw = (event: MatrixEvent) => event.getEffectiveEvent() as IRoomEvent;
 export class MatrixCallDriver extends WidgetDriver {
@@ -82,12 +83,12 @@ export class MatrixCallDriver extends WidgetDriver {
     return { file };
   }
 }
-export function mountMatrixCall(client: MatrixClient, iframe: HTMLIFrameElement, roomId: string, video: boolean, onClose: () => void, onReady?: () => void, onJoined?: () => void) {
+export function mountMatrixCall(client: MatrixClient, iframe: HTMLIFrameElement, roomId: string, video: boolean, onClose: () => void, onReady?: () => void, onJoined?: () => void, options: CallOptions = {}) {
   const widgetId = `grungus-call-${crypto.randomUUID()}`;
   const room = client.getRoom(roomId);
   const direct = isConversationCall(room, client.getRooms());
   const joining = Boolean(room && client.matrixRTC.getActiveRoomSession(room)?.memberships.length);
-  const url = elementCallUrl(window.location.href, roomId, client.getUserId()!, client.getDeviceId()!, client.getHomeserverUrl(), video, widgetId, direct, joining);
+  const url = elementCallUrl(window.location.href, roomId, client.getUserId()!, client.getDeviceId()!, client.getHomeserverUrl(), video, widgetId, direct, joining, options.skipLobby);
   const driver = new MatrixCallDriver(client, roomId);
   const releaseGuard = guardWidgetMessages(iframe, widgetId, url);
   let api: ClientWidgetApi;
@@ -106,12 +107,18 @@ export function mountMatrixCall(client: MatrixClient, iframe: HTMLIFrameElement,
   api.on("action:im.vector.hangup", event => { event.preventDefault(); api.transport.reply(event.detail, {}); onClose(); });
   api.on("action:io.element.close", event => { event.preventDefault(); api.transport.reply(event.detail, {}); onClose(); });
   api.on("action:io.element.join", event => { event.preventDefault(); api.transport.reply(event.detail, {}); onJoined?.(); });
-  for (const action of ["io.element.device_mute", "set_always_on_screen"]) api.on(`action:${action}`, event => { event.preventDefault(); api.transport.reply(event.detail, {}); });
+  api.on("action:io.element.device_mute", event => {
+    event.preventDefault();
+    api.transport.reply(event.detail, {});
+    iframe.dispatchEvent(new CustomEvent("grungus:devices", { detail: event.detail.data }));
+  });
+  api.on("action:set_always_on_screen", event => { event.preventDefault(); api.transport.reply(event.detail, {}); });
   iframe.src = url;
   const dispose = () => { api.stop(); releaseGuard(); void driver.cleanup(); client.off(RoomEvent.Timeline, timeline); client.off(RoomStateEvent.Events, state); client.off(ClientEvent.ToDeviceEvent, device); client.off(MatrixEventEvent.Decrypted, decrypted); };
   const hangup = async () => {
     let timer: ReturnType<typeof setTimeout> | undefined;
     try { await Promise.race([api.transport.send("im.vector.hangup", {}), new Promise(resolve => { timer = setTimeout(resolve, 2500); })]); } catch {} finally { clearTimeout(timer); onClose(); }
   };
-  return { dispose, hangup };
+  const setDevices = (state: { audio_enabled?: boolean; video_enabled?: boolean }) => api.transport.send<typeof state, { audio_enabled: boolean; video_enabled: boolean }>("io.element.device_mute", state);
+  return { dispose, hangup, setDevices };
 }

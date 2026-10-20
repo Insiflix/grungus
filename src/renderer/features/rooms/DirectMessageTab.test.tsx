@@ -1,10 +1,11 @@
 // @vitest-environment jsdom
 import { afterEach, expect, it, vi } from "vitest";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen } from "@testing-library/react";
 import type { MatrixRoom } from "../../../domain/matrix/MatrixTypes";
 import { DirectMessageTab } from "./DirectMessageTab";
+import { blockedUsers } from "../../../domain/settings/BlockedUsers";
 
-afterEach(cleanup);
+afterEach(() => { cleanup(); blockedUsers.update([]); });
 const room: MatrixRoom = { id: "!alice:example", name: "Alice", avatarUrl: null, topic: null, unreadCount: 2, highlightCount: 0, isEncrypted: true, membership: "join", memberCount: 2, isDirect: true };
 
 it("updates a DM's presence while preserving selection, unread count and close actions", () => {
@@ -26,4 +27,14 @@ it("updates a DM's presence while preserving selection, unread count and close a
 it("shows unknown presence instead of assuming offline when no status is supplied", () => {
   render(<DirectMessageTab room={room} selected={false} onSelect={vi.fn()} onClose={vi.fn()} />);
   expect(screen.getByText("Status unknown")).toBeTruthy();
+});
+it("updates the visible badge and accessible tab label immediately when blocked or unblocked", () => {
+  const view = render(<DirectMessageTab room={{ ...room, directUserId: "@alice:example" }} selected presence="online" onSelect={vi.fn()} onClose={vi.fn()} />);
+  act(() => blockedUsers.update(["@alice:example"]));
+  const tab = screen.getByRole("button", { name: "Alice, Blocked, Online, 2 unread messages" });
+  expect(tab.classList.contains("is-blocked")).toBe(true);
+  expect(screen.getByText("Blocked")).toBeDefined();
+  act(() => blockedUsers.update([]));
+  expect(screen.queryByText("Blocked")).toBeNull();
+  expect(view.container.querySelector(".is-blocked")).toBeNull();
 });

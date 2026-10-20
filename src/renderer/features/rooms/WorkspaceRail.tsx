@@ -13,17 +13,17 @@ interface WorkspaceRailProps {
 export function WorkspaceRail({ spaces, selectedSpaceId, onSelectSpace, onCreateServer }: WorkspaceRailProps) {
   return (
     <nav className="workspace-rail" aria-label="Servers">
-      <button type="button" className="rail-button rail-button--brand" aria-label="Grungus home" title="Grungus home" onClick={() => onSelectSpace(null)}><BrandLogo /></button>
+      <button type="button" className="rail-button rail-button--brand" aria-label="Grungus home" data-tooltip="Grungus home" onClick={() => onSelectSpace(null)}><BrandLogo /></button>
       <div className="rail-divider" />
-      <button type="button" className={`rail-button ${selectedSpaceId === null ? "is-active" : ""}`} aria-label="Messages and group chats" title="Messages and group chats" aria-pressed={selectedSpaceId === null} onClick={() => onSelectSpace(null)}><MessageCircle /></button>
+      <button type="button" className={`rail-button ${selectedSpaceId === null ? "is-active" : ""}`} aria-label="Messages and group chats" data-tooltip="Messages and group chats" aria-pressed={selectedSpaceId === null} onClick={() => onSelectSpace(null)}><MessageCircle /></button>
       <div className="rail-servers">
         {spaces.map((space) => (
-          <button type="button" key={space.id} className={`rail-button ${selectedSpaceId === space.id ? "is-active" : ""}`} aria-label={space.name} title={space.name} aria-pressed={selectedSpaceId === space.id} onClick={() => onSelectSpace(space.id)}>
+          <button type="button" key={space.id} className={`rail-button ${selectedSpaceId === space.id ? "is-active" : ""}`} aria-label={space.name} data-tooltip={space.name} aria-pressed={selectedSpaceId === space.id} onClick={() => onSelectSpace(space.id)}>
             <Avatar name={space.name} url={space.avatarUrl} />
           </button>
         ))}
       </div>
-      <button type="button" className="rail-button rail-button--create" aria-label="Create server" title="Create server" onClick={onCreateServer}><Plus /></button>
+      <button type="button" className="rail-button rail-button--create" aria-label="Create server" data-tooltip="Create server" onClick={onCreateServer}><Plus /></button>
       <div className="rail-spacer" />
       <span className="rail-caption">GRUNGUS</span>
     </nav>

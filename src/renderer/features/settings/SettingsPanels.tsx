@@ -1,3 +1,4 @@
+import { ThemedSelect } from "../../components/common/ThemedSelect";
 import { useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import { PushRuleKind } from "matrix-js-sdk";
 import { matrixSettings, directCalls } from "../../app/providers/MatrixProvider";
@@ -191,7 +192,7 @@ export function VoiceSettings({ execute, busy }: SettingsPanelProps) {
   });
   const cameraQuality = useQueuedSetting(quality, async (next) => { await directCalls.setCameraQuality(next); setQuality(next); });
   const update = (patch: Partial<typeof media.value>) => media.change({ ...media.value, ...patch });
-  const select = (key: "audioInput" | "videoInput" | "audioOutput", kind: MediaDeviceKind, label: string) => <label className="settings-field">{label}<select value={media.value[key]} aria-busy={media.saving || undefined} onChange={(event) => update({ [key]: event.target.value })}><option value="">System default</option>{devices.filter((device) => device.kind === kind && device.deviceId).map((device, index) => <option key={device.deviceId} value={device.deviceId}>{device.label || `${label} ${index + 1}`}</option>)}</select></label>;
+  const select = (key: "audioInput" | "videoInput" | "audioOutput", kind: MediaDeviceKind, label: string) => <label className="settings-field">{label}<ThemedSelect value={media.value[key]} aria-busy={media.saving || undefined} onChange={(event) => update({ [key]: event.target.value })}><option value="">System default</option>{devices.filter((device) => device.kind === kind && device.deviceId).map((device, index) => <option key={device.deviceId} value={device.deviceId}>{device.label || `${label} ${index + 1}`}</option>)}</ThemedSelect></label>;
   return <>
     {media.error && <p className="settings-inline-error" role="alert">{media.error}</p>}
     <SettingsSection title="Call devices"><p>These defaults apply to classic Matrix calls. Group calls use the device controls in their embedded Element Call window.</p>{!navigator.mediaDevices && <p role="status">Camera and microphone access requires the desktop app or a secure browser context.</p>}{select("audioInput", "audioinput", "Microphone")}{select("videoInput", "videoinput", "Camera")}{typeof HTMLMediaElement.prototype.setSinkId === "function" && select("audioOutput", "audiooutput", "Speaker")}
