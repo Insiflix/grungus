@@ -54,7 +54,7 @@ export function TimelinePanel({ room, draftKey, search, onOpenIdentity, onOpenSe
   const closeMembers = () => { setMembersVisible(false); memberToggle.current?.focus(); };
   const [action, setAction] = useState<{ type: "reply" | "edit"; message: MatrixMessage } | null>(null);
   const activeAction = action?.message.roomId === room?.id ? action : savedDraft.reply && savedDraft.reply.roomId === room?.id ? { type: "reply" as const, message: savedDraft.reply } : null;
-  const { timelineRef, contentRef, onScroll, scrollToLatest } = useTimelineScroll(room?.id ?? null, messages);
+  const { timelineRef, contentRef, onScroll, scrollToLatest, pauseAutoScroll } = useTimelineScroll(room?.id ?? null, messages);
 
   const handleMessageAction = useCallback(async (message: MatrixMessage, type: MessageAction) => {
     if (type === "reply") { roomDrafts.patch(draftKey, { reply: message }); setAction({ type, message }); }
@@ -70,12 +70,13 @@ export function TimelinePanel({ room, draftKey, search, onOpenIdentity, onOpenSe
       const detail = (event as CustomEvent<{ roomId: string; eventId: string }>).detail;
       if (detail.roomId !== room?.id) return;
       const node = document.getElementById(`message-${detail.eventId}`);
+      if (node) pauseAutoScroll();
       node?.scrollIntoView({ block: "center", behavior: "smooth" }); node?.classList.add("is-search-target");
       timer = setTimeout(() => node?.classList.remove("is-search-target"), 3000);
     };
     window.addEventListener("grungus:focus-message", focus);
     return () => { window.removeEventListener("grungus:focus-message", focus); clearTimeout(timer); };
-  }, [room?.id]);
+  }, [room?.id, pauseAutoScroll]);
 
   if (!room) {
     return (
@@ -88,6 +89,7 @@ export function TimelinePanel({ room, draftKey, search, onOpenIdentity, onOpenSe
   }
 
   const handleLoadOlder = async () => {
+    pauseAutoScroll();
     setLoadingOlder(true);
     const more = await loadOlder();
     setHasMore(more);

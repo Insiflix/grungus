@@ -109,3 +109,15 @@ it.each(["m.call.invite", "m.call.candidates", "m.call.negotiate", "m.call.hangu
  const event = new MatrixEvent({ event_id: "$signal", room_id: room.roomId, sender: "@alice:example", type, content: {}, origin_server_ts: 1 });
  expect(mapper.map(event, room)).toBeNull();
 });
+
+it("maps encrypted video previews and native audio duration/waveforms without accepting external poster URLs", () => {
+  const video = messageEvent("m.video", "private.mp4");
+  const thumbnail = { url: "mxc://example/poster", v: "v2", key: {}, iv: "iv", hashes: {} };
+  Object.assign(video.event.content!, { url: "mxc://example/video", info: { mimetype: "video/mp4", duration: 3200, thumbnail_file: thumbnail, thumbnail_info: { mimetype: "image/jpeg", w: 320, h: 180 } } });
+  expect(mapper.map(video, room)?.attachment).toMatchObject({ durationMs: 3200, thumbnail: { url: thumbnail.url, mimeType: "image/jpeg", encrypted: thumbnail } });
+  const audio = messageEvent("m.audio", "voice.ogg");
+  Object.assign(audio.event.content!, { url: "mxc://example/voice", info: { mimetype: "audio/ogg" }, "org.matrix.msc1767.audio": { duration: 5000, waveform: [0, 500, 50000, -1] }, "org.matrix.msc3245.voice": {} });
+  expect(mapper.map(audio, room)?.attachment).toMatchObject({ durationMs: 5000, voice: true, waveform: [0, 500, 1024, 0] });
+  Object.assign(video.event.content!, { info: { thumbnail_url: "https://external.example/poster", thumbnail_info: { mimetype: "image/jpeg" } } });
+  expect(mapper.map(video, room)?.attachment?.thumbnail).toBeUndefined();
+});

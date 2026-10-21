@@ -10,11 +10,12 @@ const general: MatrixRoom = { ...base, lastMessageTimestamp: 100, id: "!general"
 const voice: MatrixRoom = { ...base, id: "!voice", name: "Lounge", roomType: "org.matrix.msc3417.call" };
 const group: MatrixRoom = { ...base, id: "!group", name: "Weekend crew", isEncrypted: true, memberCount: 4 };
 const dm: MatrixRoom = { ...base, lastMessageTimestamp: 200, id: "!dm", name: "Alice", isDirect: true, memberCount: 2, directUserId: "@alice:example" };
+const secondDm: MatrixRoom = { ...base, id: "!bob-dm", name: "Bob", isDirect: true, memberCount: 2, directUserId: "@bob:example", lastMessageTimestamp: 150 };
 const publicChannel: MatrixRoom = { ...base, id: "!public", name: "introductions", membership: "leave", joinRule: "public", viaServers: ["example"] };
 preferences.setAccount("space-navigation-fixture");
 preferences.update({ showChannelsInTopBar: true });
 hiddenTopChannels.setAccount("space-navigation-fixture"); hiddenTopChannels.reopen(general.id);
-let snapshot = { session: { userId: "@you:example" }, rooms: [space, general, voice, group, dm], selectedRoomId: group.id as string | null, spaceRooms: {} as Record<string, MatrixRoom[]>, timelines: {} as Record<string, MatrixMessage[]>, presences: { "@alice:example": "online" }, identity: null };
+let snapshot = { session: { userId: "@you:example" }, rooms: [space, general, voice, group, dm, secondDm], selectedRoomId: group.id as string | null, spaceRooms: {} as Record<string, MatrixRoom[]>, timelines: {} as Record<string, MatrixMessage[]>, presences: { "@alice:example": "online" }, identity: null };
 const listeners = new Set<() => void>();
 function update(value: Partial<typeof snapshot>) { snapshot = { ...snapshot, ...value }; listeners.forEach(listener => listener()); }
 const members = [{ id: "@alice:example", displayName: "Alice", avatarUrl: null, membership: "join" as const, isTyping: false }, { id: "@bob:example", displayName: "Bob", avatarUrl: null, membership: "join" as const, isTyping: false }];
@@ -22,7 +23,7 @@ const calls = [{ roomId: voice.id, name: voice.name, participants: 2, members },
 const pollListeners = new Set<(snapshot: PollSnapshot) => void>();
 let pollState: PollSnapshot = { counts: {}, totalVoters: 0, ownAnswers: [], ended: false, canEnd: true, loading: false, incomplete: false };
 const publishPoll = () => { for (const listener of pollListeners) listener(pollState); };
-Object.assign(window, { navigationFixture: { incomingChannelMessage: () => update({ rooms: snapshot.rooms.map(room => room.id === general.id ? { ...room, lastMessageTimestamp: 300 } : room) }) } });
+Object.assign(window, { navigationFixture: { populateDm: () => update({ timelines: { ...snapshot.timelines, [dm.id]: Array.from({ length: 40 }, (_, index): MatrixMessage => ({ id: 'dm-message-' + index, roomId: dm.id, sender: { id: '@alice:example', displayName: 'Alice', avatarUrl: null }, timestamp: index * 60_000, type: 'text', body: 'Message ' + index, edited: false, replyTo: null, reactions: [], sendState: 'sent', isOwn: false, isRedacted: false })) } }), incomingChannelMessage: () => update({ rooms: snapshot.rooms.map(room => room.id === general.id ? { ...room, lastMessageTimestamp: 300 } : room) }) } });
 export const runtime = {
   subscribe: (listener: () => void) => { listeners.add(listener); return () => listeners.delete(listener); },
   getSnapshot: () => snapshot,

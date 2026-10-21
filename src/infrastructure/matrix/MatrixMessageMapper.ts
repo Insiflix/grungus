@@ -118,9 +118,23 @@ export class MatrixMessageMapper {
         const encrypted = contentRecord(content.file);
         const url = typeof encrypted.url === "string" ? encrypted.url : content.url;
         const info = contentRecord(content.info);
+        const audio = contentRecord(content["org.matrix.msc1767.audio"]);
+        const duration = info.duration ?? audio.duration;
+        const thumbnailFile = contentRecord(info.thumbnail_file);
+        const thumbnailInfo = contentRecord(info.thumbnail_info);
+        const thumbnailUrl = typeof thumbnailFile.url === "string" ? thumbnailFile.url : info.thumbnail_url;
+        const thumbnailMime = typeof thumbnailInfo.mimetype === "string" ? thumbnailInfo.mimetype : "image/jpeg";
         return typeof url === "string" && url.startsWith("mxc://") ? { attachment: {
           url, name: typeof content.filename === "string" ? content.filename : mappedBody,
           mimeType: typeof info.mimetype === "string" ? info.mimetype : "application/octet-stream",
+          ...(typeof duration === "number" && Number.isFinite(duration) && duration >= 0 ? { durationMs: duration } : {}),
+          ...(content["org.matrix.msc3245.voice"] ? { voice: true } : {}),
+          ...(Array.isArray(audio.waveform) ? { waveform: audio.waveform.slice(0, 512).map(value => typeof value === "number" && Number.isFinite(value) ? Math.max(0, Math.min(1024, value)) : 0) } : {}),
+          ...(typeof thumbnailUrl === "string" && thumbnailUrl.startsWith("mxc://") && ["image/jpeg", "image/png", "image/webp"].includes(thumbnailMime) ? { thumbnail: {
+            url: thumbnailUrl, mimeType: thumbnailMime,
+            ...(typeof thumbnailFile.url === "string" ? { encrypted: thumbnailFile as unknown as EncryptedAttachment } : {}),
+            width: typeof thumbnailInfo.w === "number" ? thumbnailInfo.w : undefined, height: typeof thumbnailInfo.h === "number" ? thumbnailInfo.h : undefined,
+          } } : {}),
           size: typeof info.size === "number" ? info.size : undefined,
           width: typeof info.w === "number" ? info.w : undefined, height: typeof info.h === "number" ? info.h : undefined,
           ...(typeof encrypted.url === "string" ? { encrypted: encrypted as unknown as EncryptedAttachment } : {}),

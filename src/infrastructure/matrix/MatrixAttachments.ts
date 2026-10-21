@@ -1,3 +1,4 @@
+import { readMediaMetadata } from "./MediaMetadata";
 import { EventType, MsgType, getHttpUriForMxc, type MatrixClient } from "matrix-js-sdk";
 import type { MessageAttachment } from "../../domain/messaging/Attachments";
 import type { MatrixSendTextOptions } from "../../domain/matrix/MatrixTypes";
@@ -11,6 +12,7 @@ export async function sendAttachment(client: MatrixClient, roomId: string, file:
   const encrypted = client.isRoomEncrypted(roomId);
   const mimeType = attachmentMimeType(file.name, file.type);
   const kind = attachmentMediaKind({ name: file.name, mimeType });
+  const metadataJob = kind === "video" || kind === "audio" ? readMediaMetadata(file.slice(0, file.size, mimeType), kind).catch(() => ({})) : Promise.resolve({});
   onProgress?.(0);
   const cipher = encrypted ? await encryptAttachment(await file.arrayBuffer()) : null;
   const { content_uri } = await client.uploadContent(cipher ? new Blob([cipher.ciphertext], { type: "application/octet-stream" }) : file, {
@@ -22,10 +24,23 @@ export async function sendAttachment(client: MatrixClient, roomId: string, file:
     if (error?.httpStatus === 413 || error?.errcode === "M_TOO_LARGE") throw new Error("The server rejected this file as too large. Its storage or proxy limit may be lower than its advertised upload limit.");
     throw error;
   });
+  const metadata: import("./MediaMetadata").MediaMetadata = await metadataJob;
+  let thumbnail: Record<string, unknown> = {};
+  if (metadata.poster) {
+    try {
+      const preview = metadata.poster;
+      const thumbnailCipher = encrypted ? await encryptAttachment(await preview.arrayBuffer()) : null;
+      const upload = await client.uploadContent(thumbnailCipher ? new Blob([thumbnailCipher.ciphertext], { type: "application/octet-stream" }) : preview, { name: encrypted ? "attachment" : "preview.jpg", type: encrypted ? "application/octet-stream" : preview.type, includeFilename: !encrypted });
+      thumbnail = {
+        thumbnail_info: { mimetype: preview.type, size: preview.size },
+        ...(thumbnailCipher ? { thumbnail_file: { ...thumbnailCipher.metadata, url: upload.content_uri } } : { thumbnail_url: upload.content_uri }),
+      };
+    } catch { /* A missing preview must not prevent sending the original attachment. */ }
+  }
   const response = await client.sendEvent(roomId, EventType.RoomMessage, {
     msgtype: kind === "image" ? MsgType.Image : kind === "video" ? MsgType.Video : kind === "audio" ? MsgType.Audio : MsgType.File,
     body: file.name, filename: file.name,
-    info: { mimetype: mimeType, size: file.size },
+    info: { mimetype: mimeType, size: file.size, ...(metadata.durationMs ? { duration: metadata.durationMs } : {}), ...(metadata.width && metadata.height ? { w: metadata.width, h: metadata.height } : {}), ...thumbnail },
     ...(cipher ? { file: { ...cipher.metadata, url: content_uri } } : { url: content_uri }),
     ...(options.replyToEventId ? { "m.relates_to": { "m.in_reply_to": { event_id: options.replyToEventId } } } : {}),
   });

@@ -11,10 +11,66 @@ app.whenReady().then(async () => {
     await waitFor('!!document.querySelector(".conversation-call")');
     await evaluate(`(() => { const sidebar = document.querySelector('.room-sidebar'); if (sidebar.textContent.includes('Lounge') || !sidebar.textContent.includes('Weekend crew') || !sidebar.textContent.includes('Group chats')) throw new Error('Group chats must be separate from server channels'); const tabs = document.querySelector('.dm-tabs').getBoundingClientRect(); const chat = document.querySelector('.chat-workspace').getBoundingClientRect(); if (chat.top - tabs.bottom > 4) throw new Error('DM gap is too large'); })()`);
     await evaluate(`(() => { const sidebar = document.querySelector('.room-sidebar').getBoundingClientRect(); const tabs = document.querySelector('.dm-tabs').getBoundingClientRect(); if (Math.abs(sidebar.top - tabs.top) > 1) throw new Error('Sidebar does not reach the top'); const row = document.querySelector('.room-row.is-selected'); if (row.getBoundingClientRect().height > 44) throw new Error('Chat rows are too tall'); if (getComputedStyle(row).boxShadow !== 'none') throw new Error('Selected row has a stripe'); if (document.querySelector('.dm-tabs__tools')) throw new Error('Redundant top tools remain'); })()`);
+    await evaluate(`document.querySelector('.dm-tabs .dm-tab[aria-label^="Alice,"]').click()`);
+    await waitFor('!!document.querySelector(".conversation-surface.has-connected-tab")');
+    await evaluate('new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))');
+    await evaluate("window.navigationFixture.populateDm()");
+    await waitFor('document.querySelectorAll(".timeline .message-row").length === 40');
+    await evaluate(`(async () => {
+      const frame = () => new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+      const timeline = () => document.querySelector(".timeline");
+      const atBottom = () => timeline().scrollHeight - timeline().scrollTop - timeline().clientHeight < 2;
+      await frame();
+      if (!atBottom()) throw new Error("Asynchronous DM history did not open at the bottom");
+      timeline().scrollTop = 0;
+      timeline().dispatchEvent(new Event("scroll"));
+      await frame();
+      if (timeline().scrollTop !== 0) throw new Error("Timeline prevented reading older messages");
+      document.querySelector('.dm-tab[aria-label^="Bob,"]').click();
+      await frame();
+      document.querySelector('.dm-tab[aria-label^="Alice,"]').click();
+      await frame();
+      if (!atBottom()) throw new Error("Reopened DM did not reset to latest");
+      const media = document.createElement("div");
+      media.style.height = "1800px";
+      timeline().querySelector(".timeline__inner").append(media);
+      // Reproduce layout scroll delivery before ResizeObserver.
+      timeline().dispatchEvent(new Event("scroll"));
+      await frame();
+      if (!atBottom()) throw new Error("Delayed media released the bottom pin");
+      media.remove();
+      await frame();
+    })()`);
+    const switchingFrames = await evaluate(`(async () => {
+      const surface = document.querySelector('.conversation-surface');
+      const pane = surface.querySelector('.conversation-surface__pane-glass');
+      const times = [];
+      for (let index = 0; index < 8; index++) {
+        const before = performance.now();
+        const previous = surface.querySelector('.conversation-surface__outline path').getAttribute('d');
+        const tabs = surface.querySelectorAll('.dm-tab');
+        tabs[index % 2 === 0 ? 1 : 0].click();
+        await new Promise(resolve => requestAnimationFrame(resolve));
+        if (surface.querySelector('.conversation-surface__outline path').getAttribute('d') === previous) throw new Error('Tab shape lagged behind the chat switch');
+        if (surface.querySelector('.conversation-surface__pane-glass') !== pane) throw new Error('Chat backdrop was recreated on tab switch');
+        times.push(performance.now() - before);
+      }
+      return times;
+    })()`);
+    console.log(JSON.stringify({ tabSwitchFirstFrameMs: switchingFrames }));
+    await screenshot("connected-dm");
+    await evaluate('document.documentElement.dataset.theme = "light"');
+    await screenshot("connected-dm-light");
+    await evaluate('document.documentElement.dataset.theme = "dark"');
+    await screenshot("connected-dm-dark");
+    await evaluate('delete document.documentElement.dataset.theme');
+    await evaluate(`[...document.querySelectorAll('.room-row')].find(row => row.textContent.includes('Weekend crew')).click()`);
     await evaluate(`document.querySelector('[aria-label="Close channel general"]').click()`);
     await waitFor("!document.querySelector('[aria-label=\"Close channel general\"]')");
     await evaluate(`document.querySelector('[aria-label="The Forest"]').click()`);
     await waitFor("!!document.querySelector('[aria-label=\"Close channel general\"]')");
+    await waitFor('!!document.querySelector(".conversation-surface.has-connected-tab")');
+    await screenshot("connected-channel");
     await evaluate(`document.querySelector('[aria-label="Close channel general"]').click()`);
     await waitFor("!document.querySelector('[aria-label=\"Close channel general\"]')");
     await evaluate('window.navigationFixture.incomingChannelMessage()');
@@ -77,7 +133,7 @@ app.whenReady().then(async () => {
     await evaluate(`document.querySelector('.call-hangup').click()`);
     window.setSize(760, 700);
     await screenshot("groups-narrow");
-    console.log(JSON.stringify({ passed: true, checks: ["compact DM gap", "full-height sidebar", "compact chat rows", "channel tab hide/reopen/new message", "dashboard cleanup", "create/vote/end poll", "separate group chats", "create and open server", "public channel discovery and join", "voice participants", "send text during voice call", "voice channel view", "group call view"], screenshots: path.join(app.getPath("temp"), "grungus-*.png") }));
+    console.log(JSON.stringify({ passed: true, checks: ["DM initial/reopen/delayed-media bottom positioning", "manual history scrolling", "compact DM gap", "full-height sidebar", "compact chat rows", "channel tab hide/reopen/new message", "dashboard cleanup", "create/vote/end poll", "separate group chats", "create and open server", "public channel discovery and join", "voice participants", "send text during voice call", "voice channel view", "group call view"], screenshots: path.join(app.getPath("temp"), "grungus-*.png") }));
     app.exit(0);
   } catch (error) { console.error(error); app.exit(1); }
 });

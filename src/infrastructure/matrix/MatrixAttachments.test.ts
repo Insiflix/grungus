@@ -1,9 +1,11 @@
+import { readMediaMetadata } from "./MediaMetadata";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import type { MatrixClient } from "matrix-js-sdk";
 import { sendAttachment, loadAttachment } from "./MatrixAttachments";
 import { encryptAttachment, decryptAttachment } from "./MatrixAttachmentCrypto";
 
-afterEach(() => vi.unstubAllGlobals());
+vi.mock("./MediaMetadata", () => ({ readMediaMetadata: vi.fn(async () => ({})) }));
+afterEach(() => { vi.unstubAllGlobals(); vi.mocked(readMediaMetadata).mockReset().mockResolvedValue({}); });
 const file = () => new File(["private content"], "notes.txt", { type: "text/plain" });
 function setup(encrypted = false) {
   const sdk = {
@@ -69,4 +71,26 @@ describe("Matrix file attachments", () => {
     await expect(sendAttachment(client, "!room", file())).rejects.toThrow("Too large");
     expect(sdk.sendEvent).not.toHaveBeenCalled();
   });
+});
+
+it("uploads an independently encrypted video poster and duration metadata in encrypted rooms", async () => {
+  const { sdk, client } = setup(true);
+  const poster = new Blob(["private preview"], { type: "image/jpeg" });
+  vi.mocked(readMediaMetadata).mockResolvedValueOnce({ durationMs: 1200, width: 640, height: 360, poster });
+  sdk.uploadContent.mockResolvedValueOnce({ content_uri: "mxc://example.org/video" }).mockResolvedValueOnce({ content_uri: "mxc://example.org/poster" });
+  await sendAttachment(client, "!encrypted", new File(["private video"], "secret.mp4", { type: "video/mp4" }));
+  const content = sdk.sendEvent.mock.calls[0][2];
+  expect(content.info).toMatchObject({ duration: 1200, w: 640, h: 360, thumbnail_file: { url: "mxc://example.org/poster", v: "v2" } });
+  expect(content.info.thumbnail_url).toBeUndefined();
+  expect(content.info.thumbnail_file.key.k).not.toBe(content.file.key.k);
+  const [upload, options] = sdk.uploadContent.mock.calls[1];
+  expect(options).toMatchObject({ includeFilename: false, type: "application/octet-stream", name: "attachment" });
+  expect(new TextDecoder().decode(await decryptAttachment(await upload.arrayBuffer(), content.info.thumbnail_file))).toBe("private preview");
+});
+it("still sends the original when thumbnail creation or upload fails", async () => {
+  const { sdk, client } = setup();
+  vi.mocked(readMediaMetadata).mockResolvedValueOnce({ poster: new Blob(["preview"], { type: "image/jpeg" }) });
+  sdk.uploadContent.mockResolvedValueOnce({ content_uri: "mxc://example.org/video" }).mockRejectedValueOnce(new Error("Preview upload failed"));
+  await sendAttachment(client, "!room", new File(["video"], "clip.mp4", { type: "video/mp4" }));
+  expect(sdk.sendEvent).toHaveBeenCalledWith("!room", "m.room.message", expect.objectContaining({ url: "mxc://example.org/video" }));
 });

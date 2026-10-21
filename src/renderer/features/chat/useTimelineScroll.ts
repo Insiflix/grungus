@@ -5,11 +5,17 @@ export function useTimelineScroll(roomId: string | null, messages: readonly unkn
   const timelineRef = useRef<HTMLElement>(null);
   const contentRef = useRef<HTMLDivElement>(null);
   const nearBottom = useRef(true);
+  const positionedLayout = useRef({ height: 0, viewport: 0, top: 0 });
   const previous = useRef<{ roomId: string | null; hasMessages: boolean }>({ roomId: null, hasMessages: false });
 
   const scrollToLatest = useCallback(() => {
     const timeline = timelineRef.current;
-    if (timeline && nearBottom.current) timeline.scrollTop = timeline.scrollHeight;
+    if (timeline && nearBottom.current) {
+      timeline.scrollTop = timeline.scrollHeight;
+      positionedLayout.current = {
+        height: timeline.scrollHeight, viewport: timeline.clientHeight, top: timeline.scrollTop,
+      };
+    }
   }, []);
 
   useLayoutEffect(() => {
@@ -35,8 +41,22 @@ export function useTimelineScroll(roomId: string | null, messages: readonly unkn
 
   const onScroll = useCallback(() => {
     const timeline = timelineRef.current;
-    if (timeline) nearBottom.current = timeline.scrollHeight - timeline.scrollTop - timeline.clientHeight < 160;
-  }, []);
+    if (!timeline) return;
+    const previousLayout = positionedLayout.current;
+    const layoutChanged = timeline.scrollHeight !== previousLayout.height || timeline.clientHeight !== previousLayout.viewport;
+    // Browser scroll events also follow layout changes and our own scrollTop writes.
+    // Neither should release the bottom pin before ResizeObserver can catch up.
+    if (nearBottom.current && (layoutChanged || timeline.scrollTop >= previousLayout.top)) {
+      scrollToLatest();
+      return;
+    }
+    nearBottom.current = timeline.scrollHeight - timeline.scrollTop - timeline.clientHeight < 160;
+    positionedLayout.current = {
+      height: timeline.scrollHeight, viewport: timeline.clientHeight, top: timeline.scrollTop,
+    };
+  }, [scrollToLatest]);
 
-  return { timelineRef, contentRef, onScroll, scrollToLatest };
+  const pauseAutoScroll = useCallback(() => { nearBottom.current = false; }, []);
+
+  return { timelineRef, contentRef, onScroll, scrollToLatest, pauseAutoScroll };
 }
