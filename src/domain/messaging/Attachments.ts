@@ -13,6 +13,10 @@ export interface MessageAttachment {
   width?: number;
   height?: number;
   encrypted?: EncryptedAttachment;
+  durationMs?: number;
+  voice?: boolean;
+  waveform?: number[];
+  thumbnail?: { url: string; mimeType: string; width?: number; height?: number; encrypted?: EncryptedAttachment };
 }
 const mediaExtensions: Record<string, string> = {
   mp4: "video/mp4", m4v: "video/mp4", webm: "video/webm", mpg: "video/mpeg", mpeg: "video/mpeg", mov: "video/quicktime", mkv: "video/x-matroska", avi: "video/x-msvideo", ogv: "video/ogg",

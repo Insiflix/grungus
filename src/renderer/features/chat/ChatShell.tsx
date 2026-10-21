@@ -1,3 +1,4 @@
+import { ChatSurface } from "./ChatSurface";
 import { channelTabVisible, hiddenTopChannels } from "../../../domain/settings/HiddenTopChannels";
 import { GrungusHome } from "../rooms/GrungusHome";
 import { Avatar } from "../../components/common/Avatar";
@@ -141,6 +142,8 @@ export function ChatShell() {
   return (
     <main className="app-shell">
       <WorkspaceRail spaces={spaces} selectedSpaceId={spaceId} onSelectSpace={selectSpace} onCreateServer={() => setCreatingServer(true)} />
+      <RoomSidebar voiceDockRef={setVoiceDock} key={spaceId ?? "home"} space={activeSpace ?? null} calls={roomCalls} callActive={Boolean(call || directCall)} onJoinVoice={room => startCall(room, false)} discoveryPending={spaceId ? discovery[spaceId]?.pending : false} discoveryError={spaceId ? discovery[spaceId]?.error : undefined} onRetryDiscovery={() => { if (spaceId) void refreshSpace(spaceId); }} onOpenIdentity={() => setIdentityOpen(true)} onOpenSettings={() => setSettingsOpen(true)} onManageSpace={() => { if (activeSpace) setManagedRoomId(activeSpace.id); }} />
+      <ChatSurface activeRoomId={selectedRoomId}>
       <nav className="dm-tabs" aria-label={prefs.showChannelsInTopBar ? "Recent conversations" : "Direct messages"}>
         <div className="dm-tabs__list">
         {topRooms.map((direct) => channelServers.has(direct.id) ? (
@@ -157,7 +160,6 @@ export function ChatShell() {
         {topRooms.length === 0 && <span className="dm-tabs__empty">Your direct messages will appear here</span>}
         </div>
       </nav>
-      <RoomSidebar voiceDockRef={setVoiceDock} key={spaceId ?? "home"} space={activeSpace ?? null} calls={roomCalls} callActive={Boolean(call || directCall)} onJoinVoice={room => startCall(room, false)} discoveryPending={spaceId ? discovery[spaceId]?.pending : false} discoveryError={spaceId ? discovery[spaceId]?.error : undefined} onRetryDiscovery={() => { if (spaceId) void refreshSpace(spaceId); }} onOpenIdentity={() => setIdentityOpen(true)} onOpenSettings={() => setSettingsOpen(true)} onManageSpace={() => { if (activeSpace) setManagedRoomId(activeSpace.id); }} />
       <section className="chat-workspace">
         {(identity?.available && !identity.verified || incomingVerification) && <div className="status-banner identity-banner">
           <span>{incomingVerification ? `Bestätigungsanfrage von ${identity?.verification?.userId}` : "Bestätige dieses Gerät, um deine verschlüsselten Chats vollständig zu nutzen."}</span>
@@ -177,6 +179,7 @@ export function ChatShell() {
           {renderTimeline(room)}
         </>}
       </section>
+      </ChatSurface>
       {!call && !directCall && otherGroupCalls.length > 0 && <aside className="active-calls" aria-label="Group calls">{otherGroupCalls.map(active => <button key={active.roomId} onClick={() => setCall({ roomId: active.roomId, name: active.name, video: false })}><Phone size={18} /><span><strong>{active.name}</strong><small>{active.participants} in call</small></span><b>Join call</b></button>)}</aside>}
       {directCall && <DirectCallPanel key={directCall.id} call={directCall} canAnswer={!call} />}
       {call && <CallPanel {...call} search={renderSearch(rooms.find(item => item.id === call.roomId) ?? null)} mode={serverRooms.has(call.roomId) ? "voice" : "group"} dock={voiceDock} visible={selectedRoomId === call.roomId} onOpen={() => selectRoom(call.roomId)} onSettings={() => setSettingsOpen(true)} chatVisible={!hiddenVoiceChats.has(call.roomId)} chatUnreadCount={voiceCallRoom?.unreadCount ?? 0} onToggleChat={() => toggleVoiceChat(call.roomId)} chat={voiceCallRoom ? voiceChat(voiceCallRoom) : undefined} onClose={closeCall} />}

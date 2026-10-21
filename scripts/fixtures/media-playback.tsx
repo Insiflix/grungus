@@ -13,5 +13,5 @@ createRoot(document.getElementById("root")!).render(<AttachmentMediaContext.Prov
   if (!response.ok) throw new Error("Sample media unavailable");
   return response.blob();
 }}><main style={{ display: "grid", gridTemplateColumns: "repeat(3, minmax(0, 1fr))", gap: 20, padding: 24, height: "100%", overflow: "auto" }}>
-  {files.map(([name, mimeType]) => <section data-media={name} key={name}><h2>{name}</h2><AttachmentMessage attachment={{ name, mimeType, url: `mxc://example/${name}` }} inline /></section>)}
+  {files.map(([name, mimeType]) => <section data-media={name} key={name}><h2>{name}</h2><AttachmentMessage attachment={{ name, mimeType, size: 8192, url: `mxc://example/${name}` }} inline /></section>)}
 </main></AttachmentMediaContext.Provider>);

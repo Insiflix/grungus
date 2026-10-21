@@ -1,3 +1,4 @@
+import { StrictMode } from "react";
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -8,20 +9,24 @@ vi.mock("@ffmpeg/ffmpeg", () => ({ FFmpeg: class { load = codec.load; writeFile 
 
 const attachment = { name: "photo.png", url: "mxc://example/photo", mimeType: "image/png", size: 2048 };
 beforeEach(() => {
+  vi.spyOn(HTMLMediaElement.prototype, "play").mockResolvedValue(undefined);
+  vi.spyOn(HTMLMediaElement.prototype, "pause").mockImplementation(() => {});
   HTMLDialogElement.prototype.showModal = function () { this.setAttribute("open", ""); };
   HTMLDialogElement.prototype.close = function () { this.removeAttribute("open"); };
   URL.createObjectURL = vi.fn(() => "blob:media"); URL.revokeObjectURL = vi.fn(); });
 afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); Reflect.deleteProperty(window, "desktop"); });
 
 describe("received attachments", () => {
-  it.each([["clip.webm", "video/webm", "video"], ["clip.mp4", "video/mp4", "video"], ["song.mp3", "audio/mpeg", "audio"], ["song.wav", "audio/wav", "audio"]])("loads %s on demand with native controls and cleans up media URLs", async (name, mimeType, tag) => {
+  it.each([["clip.webm", "video/webm", "video"], ["clip.mp4", "video/mp4", "video"], ["song.mp3", "audio/mpeg", "audio"], ["song.wav", "audio/wav", "audio"]])("loads %s on demand with custom controls and cleans up media URLs", async (name, mimeType, tag) => {
     const load = vi.fn().mockResolvedValue(new Blob(["media"], { type: mimeType }));
     const view = render(<AttachmentMediaContext.Provider value={load}><AttachmentMessage attachment={{ name, mimeType, url: "mxc://example/media" }} inline /></AttachmentMediaContext.Provider>);
     expect(load).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole("button", { name: `Play ${tag}` }));
     await waitFor(() => expect(view.container.querySelector(tag)?.getAttribute("src")).toBe("blob:media"));
-    expect(view.container.querySelector(tag)?.hasAttribute("controls")).toBe(true);
+    expect(view.container.querySelector(tag)?.hasAttribute("controls")).toBe(false);
     expect(screen.getByRole("button", { name: `Download ${name}` })).toBeTruthy();
+    expect(screen.getByRole("slider", { name: `Seek ${name}` })).toBeTruthy();
+    expect(view.container.querySelector(".message-attachment__details")).toBeNull();
     view.unmount();
     expect(URL.revokeObjectURL).toHaveBeenCalledWith("blob:media");
   });
@@ -101,4 +106,41 @@ describe("received attachments", () => {
     await waitFor(() => expect(click).toHaveBeenCalledOnce());
     expect(load).toHaveBeenCalledWith(attachment);
   });
+});
+
+it("loads an encrypted Matrix poster without downloading the video and releases it on unmount", async () => {
+  const encrypted = { url: "mxc://example/poster", key: { alg: "A256CTR", key_ops: ["decrypt"], kty: "oct", k: "secret", ext: true }, iv: "iv", hashes: {}, v: "v2" };
+  const file = { name: "private.mp4", mimeType: "video/mp4", url: "mxc://example/video", size: 99_000_000, thumbnail: { url: encrypted.url, mimeType: "image/jpeg", encrypted } };
+  const load = vi.fn().mockResolvedValue(new Blob(["poster"], { type: "image/jpeg" }));
+  const view = render(<AttachmentMediaContext.Provider value={load}><AttachmentMessage attachment={file} inline /></AttachmentMediaContext.Provider>);
+  expect(await screen.findByAltText("Preview of private.mp4")).toBeTruthy();
+  expect(load).toHaveBeenCalledOnce(); expect(load).toHaveBeenCalledWith(expect.objectContaining({ url: encrypted.url, encrypted }), expect.any(AbortSignal));
+  expect(view.container.querySelector("video")).toBeNull();
+  view.unmount(); expect(URL.revokeObjectURL).toHaveBeenCalledWith("blob:media");
+});
+it("does not download a large original just to show its embed", async () => {
+  const load = vi.fn(); render(<AttachmentMediaContext.Provider value={load}><AttachmentMessage attachment={{ name: "large.mp4", mimeType: "video/mp4", url: "mxc://example/large", size: 100_000_000 }} inline /></AttachmentMediaContext.Provider>);
+  expect(screen.getByRole("button", { name: "Load preview" })).toBeTruthy();
+  expect(load).not.toHaveBeenCalled();
+});
+it("supports custom audio seeking, mute, volume and speed in StrictMode", async () => {
+  const file = { name: "music.mp3", mimeType: "audio/mpeg", url: "mxc://example/music", durationMs: 90_000 };
+  const load = vi.fn().mockResolvedValue(new Blob(["audio"], { type: "audio/mpeg" }));
+  const view = render(<StrictMode><AttachmentMediaContext.Provider value={load}><AttachmentMessage attachment={file} inline /></AttachmentMediaContext.Provider></StrictMode>);
+  fireEvent.click(screen.getByRole("button", { name: "Play audio" }));
+  await waitFor(() => expect(view.container.querySelector("audio")?.src).toBe("blob:media"));
+  const audio = view.container.querySelector("audio")!;
+  Object.defineProperty(audio, "duration", { value: 90 }); fireEvent.loadedMetadata(audio);
+  fireEvent.change(screen.getByRole("slider", { name: "Seek music.mp3" }), { target: { value: "25" } }); expect(audio.currentTime).toBe(25);
+  fireEvent.click(screen.getByRole("button", { name: "Mute music.mp3" })); expect(audio.muted).toBe(true);
+  fireEvent.change(screen.getByRole("slider", { name: "Volume music.mp3" }), { target: { value: ".4" } }); expect(audio.volume).toBe(.4); expect(audio.muted).toBe(false);
+  fireEvent.click(screen.getByRole("button", { name: "Playback speed 1x" })); expect(audio.playbackRate).toBe(1.25);
+  expect((load.mock.calls[0][1] as AbortSignal).aborted).toBe(false);
+  expect(view.container.querySelector(".message-attachment__details")).toBeNull();
+});
+it("keeps a usable play button when autoplay is blocked", async () => {
+  vi.mocked(HTMLMediaElement.prototype.play).mockRejectedValue(new DOMException("Blocked", "NotAllowedError"));
+  const view = render(<AttachmentMediaContext.Provider value={vi.fn().mockResolvedValue(new Blob(["video"], { type: "video/mp4" }))}><AttachmentMessage attachment={{ name: "clip.mp4", url: "mxc://example/video", mimeType: "video/mp4" }} inline /></AttachmentMediaContext.Provider>);
+  fireEvent.click(screen.getByRole("button", { name: "Play video" })); await waitFor(() => expect(view.container.querySelector("video")).toBeTruthy());
+  expect(screen.getByRole("button", { name: "Play video" })).toBeTruthy(); expect(screen.queryByRole("alert")).toBeNull();
 });

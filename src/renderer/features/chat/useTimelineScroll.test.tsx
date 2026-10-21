@@ -12,12 +12,13 @@ const observe = vi.fn();
 const positionsAfterPaint = vi.fn();
 
 function Timeline({ roomId = "alice", messages = ["latest"] }: { roomId?: string | null; messages?: string[] }) {
-  const { timelineRef, contentRef, onScroll, scrollToLatest } = useTimelineScroll(roomId, messages);
+  const { timelineRef, contentRef, onScroll, scrollToLatest, pauseAutoScroll } = useTimelineScroll(roomId, messages);
   useEffect(() => { positionsAfterPaint(timelineRef.current?.scrollTop); });
   if (!roomId) return null;
   return <section ref={timelineRef} data-testid="timeline" onScroll={onScroll}>
     <div ref={contentRef}>{messages.join(",")}</div>
     <button onClick={scrollToLatest}>Media loaded</button>
+    <button onClick={pauseAutoScroll}>Read search result</button>
   </section>;
 }
 
@@ -101,6 +102,40 @@ describe("timeline initial positioning", () => {
     contentHeight = 4000;
     act(() => resize());
     expect(timeline.scrollTop).toBe(3500);
+  });
+
+  it("keeps the initial bottom pin when a layout scroll event arrives before resize observation", () => {
+    render(<Timeline />);
+    const timeline = screen.getByTestId("timeline");
+    contentHeight = 4000;
+    // Loading/decrypting content can dispatch scroll before ResizeObserver runs.
+    fireEvent.scroll(timeline);
+    act(() => resize());
+    expect(timeline.scrollTop).toBe(3500);
+    viewportHeight = 250;
+    fireEvent.scroll(timeline);
+    act(() => resize());
+    expect(timeline.scrollTop).toBe(3750);
+  });
+
+  it("stays pinned when shrinking content clamps the browser scroll position", () => {
+    render(<Timeline />);
+    const timeline = screen.getByTestId("timeline");
+    contentHeight = 1000;
+    fireEvent.scroll(timeline, { target: { scrollTop: 500 } });
+    contentHeight = 3000;
+    act(() => resize());
+    expect(timeline.scrollTop).toBe(2500);
+  });
+
+  it("allows search and history navigation to release the pin before scrolling", () => {
+    render(<Timeline />);
+    const timeline = screen.getByTestId("timeline");
+    fireEvent.click(screen.getByText("Read search result"));
+    contentHeight = 4000;
+    fireEvent.scroll(timeline, { target: { scrollTop: 200 } });
+    act(() => resize());
+    expect(timeline.scrollTop).toBe(200);
   });
 
   it("disconnects observers on unmount", () => {
