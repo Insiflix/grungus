@@ -1,3 +1,4 @@
+import { parsePoll } from "./MatrixPolls";
 import type { EncryptedAttachment } from "../../domain/messaging/Attachments";
 import { isHiddenTimelineEvent } from "./MatrixTimelinePolicy";
 import {
@@ -76,6 +77,7 @@ export class MatrixMessageMapper {
     const encryptedPending =
       wireType === EventType.RoomMessageEncrypted && type === EventType.RoomMessageEncrypted;
     const content = contentRecord(event.getContent());
+    const poll = parsePoll(event);
     const body = typeof content.body === "string" ? content.body : "";
     const relatesTo = contentRecord(content["m.relates_to"]);
     const inReplyTo = contentRecord(relatesTo["m.in_reply_to"]);
@@ -94,6 +96,8 @@ export class MatrixMessageMapper {
     } else if (encryptedPending) {
       mappedType = "encrypted";
       mappedBody = "Waiting for encryption keys…";
+    } else if (poll) {
+      mappedType = "poll"; mappedBody = poll.question;
     } else if (type === EventType.RoomMessage) {
       mappedType = messageType(content.msgtype);
       mappedBody = body || "Unsupported message";
@@ -109,6 +113,7 @@ export class MatrixMessageMapper {
       timestamp: Number.isFinite(rawTimestamp) ? rawTimestamp : Date.now(),
       type: mappedType,
       body: mappedBody,
+      ...(poll ? { poll } : {}),
       ...(["image", "video", "audio", "file"].includes(mappedType) ? (() => {
         const encrypted = contentRecord(content.file);
         const url = typeof encrypted.url === "string" ? encrypted.url : content.url;

@@ -68,6 +68,18 @@ function setup() {
 
 beforeEach(() => vi.clearAllMocks());
 
+it("allows contact reads before a room is stored, then returns members when sync stores it", async () => {
+  const { rooms } = setup();
+  const client = new MatrixJsSdkClient(); await client.start(session);
+  expect(client.getRoomMembers("!arriving:example.org")).toEqual([]);
+  const room = sdkRoom("!arriving:example.org");
+  room.getMembers = () => [{ userId: "@alice:example.org", name: "Alice", membership: "join", typing: false, getMxcAvatarUrl: () => null }] as never;
+  rooms.push(room);
+  expect(client.getRoomMembers(room.roomId)).toEqual([expect.objectContaining({ id: "@alice:example.org", displayName: "Alice" })]);
+  rooms.length = 0;
+  expect(client.getRoomMembers(room.roomId)).toEqual([]);
+});
+
 describe("authentication security", () => {
   it("retries the existing pending event and cancels only failed own sends", async () => {
     const { sdk, rooms } = setup(); const room = sdkRoom("!pending:example.org"); rooms.push(room);
@@ -328,7 +340,9 @@ describe("people and invitations", () => {
     expect(updated).toHaveBeenLastCalledWith(expect.objectContaining({ id: "$message", reactions: [expect.objectContaining({ eventId: "$server-reaction" })] }));
     reaction.makeRedacted(new MatrixEvent({ type: EventType.RoomRedaction, redacts: "$server-reaction", content: {} }), room);
     const redacted = sdk.on.mock.calls.find(([name]) => name === RoomEvent.Redaction)?.[1];
-    redacted?.(new MatrixEvent({ type: EventType.RoomRedaction, redacts: "$server-reaction", content: {} }), room);
+    // Sync can dispatch this callback before the room enters the client store.
+    rooms.length = 0;
+    expect(() => redacted?.(new MatrixEvent({ type: EventType.RoomRedaction, redacts: "$server-reaction", content: {} }), room)).not.toThrow();
     expect(updated).toHaveBeenLastCalledWith(expect.objectContaining({ id: "$message", reactions: [] }));
   });
   it("preserves other room pins when pinning and unpinning a message", async () => {

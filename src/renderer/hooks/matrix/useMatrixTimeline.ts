@@ -1,3 +1,4 @@
+import type { PollInput } from "../../../domain/messaging/Polls";
 import { useMatrixRuntime } from "../../app/providers/MatrixProvider";
 import { useMatrixSnapshot } from "./useMatrixSnapshot";
 import { usePreferences } from "../usePreferences";
@@ -13,6 +14,7 @@ export function useMatrixTimeline(roomId: string | null) {
     loadOlder: () => (roomId ? runtime.loadOlder(roomId) : Promise.resolve(false)),
     sendMessage: (body: string, replyToEventId?: string) =>
       roomId ? runtime.sendMessage(roomId, body, replyToEventId) : Promise.resolve(),
+    createPoll: (input: PollInput) => roomId ? runtime.createPoll(roomId, input) : Promise.reject(new Error("Select a room first.")),
     getUploadLimit: runtime.getUploadLimit,
     retryMessage: (eventId: string) => roomId ? runtime.retryMessage(roomId, eventId) : Promise.resolve(),
     cancelSend: (eventId: string) => roomId ? runtime.cancelSend(roomId, eventId) : Promise.resolve(),

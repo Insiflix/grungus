@@ -1,3 +1,7 @@
+import type { TimelineEvents } from "matrix-js-sdk";
+import { createPollEvent, observeMatrixPoll, sendPollVote, closeMatrixPoll } from "./MatrixPolls";
+import type { PollInput, PollSnapshot } from "../../domain/messaging/Polls";
+import { hiddenTopChannels } from "../../domain/settings/HiddenTopChannels";
 import { getUploadLimit } from "./MatrixUploadLimit";
 import { PendingMessageError } from "../../domain/messaging/PendingMessageError";
 import { searchMatrixMessages } from "./MatrixMessageSearch";
@@ -169,6 +173,7 @@ export class MatrixJsSdkClient implements IMatrixClient, ICallProvider {
     if (this.client) await this.stop();
     this.session = session;
     preferences.setAccount(session.userId);
+    hiddenTopChannels.setAccount(session.userId);
     blockedUsers.update([]);
     this.hasPrepared = false;
     this.updateStatus({ state: "connecting", error: null });
@@ -458,7 +463,10 @@ export class MatrixJsSdkClient implements IMatrixClient, ICallProvider {
     return events.map(event => this.mapMessage(event, room)).filter((message): message is MatrixMessage => message !== null);
   }
   getTimeline(roomId: string): MatrixMessage[] {
-    const room = this.requireRoom(roomId);
+    return this.mapRoomTimeline(this.requireRoom(roomId));
+  }
+
+  private mapRoomTimeline(room: Room): MatrixMessage[] {
     const events = collectTimelineEvents(room.getLiveTimeline());
     for (const event of events) {
       if (event.getType() === EventType.RoomMessageEncrypted && !event.isRedacted() && !event.isBeingDecrypted()) {
@@ -536,6 +544,18 @@ export class MatrixJsSdkClient implements IMatrixClient, ICallProvider {
     ).catch(error => { throw this.pendingSendError(roomId, pending, error, trimmed); });
     return response.event_id;
   }
+
+  async createPoll(roomId: string, input: PollInput): Promise<string> {
+    const event = createPollEvent(input);
+    this.requireRoom(roomId);
+    const pending = new Set(this.pendingEvents(roomId).map(event => event.getId()));
+    const response = await this.requireClient().sendEvent(roomId, event.type as keyof TimelineEvents, event.content as TimelineEvents[keyof TimelineEvents])
+      .catch(error => { throw this.pendingSendError(roomId, pending, error, input.question); });
+    return response.event_id;
+  }
+  observePoll(roomId: string, eventId: string, listener: (poll: PollSnapshot) => void) { return observeMatrixPoll(this.requireClient(), this.requireRoom(roomId), eventId, listener); }
+  votePoll(roomId: string, eventId: string, answers: string[]) { const client = this.requireClient(); return sendPollVote(client, this.requireRoom(roomId), eventId, answers, () => this.assertCurrent(client)); }
+  endPoll(roomId: string, eventId: string) { return closeMatrixPoll(this.requireClient(), this.requireRoom(roomId), eventId); }
 
   getUploadLimit = () => getUploadLimit(this.requireClient());
   sendAttachment(roomId: string, file: File, onProgress?: (percent: number) => void, options?: MatrixSendTextOptions) {
@@ -634,7 +654,9 @@ export class MatrixJsSdkClient implements IMatrixClient, ICallProvider {
   }
 
   getRoomMembers(roomId: string): MatrixRoomMember[] {
-    const room = this.requireRoom(roomId);
+    // Sync can announce rooms before storing them; contact reads wait for that gap.
+    const room = this.requireClient().getRoom(roomId);
+    if (!room) return [];
     const mapper = this.requireRoomMapper();
     return room
       .getMembers()
@@ -863,7 +885,7 @@ export class MatrixJsSdkClient implements IMatrixClient, ICallProvider {
     const target = targetId ? room.findEventById(targetId) : undefined;
     if (target?.getType() === EventType.Reaction) {
       // A redacted reaction no longer contains its parent relation.
-      for (const message of this.getTimeline(room.roomId)) this.emit("messageUpdated", message);
+      for (const message of this.mapRoomTimeline(room)) this.emit("messageUpdated", message);
       return;
     }
     const mapped = target ? this.mapMessage(target, room) : null;

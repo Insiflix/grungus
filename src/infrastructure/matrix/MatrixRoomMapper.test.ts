@@ -3,6 +3,18 @@ import type { MatrixClient, Room, RoomMember } from "matrix-js-sdk";
 import { MatrixRoomMapper } from "./MatrixRoomMapper";
 
 describe("MatrixRoomMapper", () => {
+  it("orders startup activity by messages and replies, excluding edits and state changes", () => {
+    const event = (type: string, timestamp: number, relation?: object) => ({ getType: () => type, getTs: () => timestamp, getRelation: () => relation });
+    const room = {
+      roomId: "!recent", name: "Recent", getLiveTimeline: () => ({
+        getState: () => ({ getStateEvents: () => undefined }),
+        getEvents: () => [event("m.room.message", 100), event("m.room.encrypted", 200), event("m.room.message", 300, { "m.in_reply_to": { event_id: "$original" } }), event("m.room.message", 400, { rel_type: "m.replace" }), event("m.room.member", 500)],
+      }),
+      getMxcAvatarUrl: () => null, getUnreadNotificationCount: () => 0,
+      hasEncryptionStateEvent: () => false, getMyMembership: () => "join", getJoinedMemberCount: () => 2,
+    } as unknown as Room;
+    expect(new MatrixRoomMapper({} as MatrixClient).map(room).lastMessageTimestamp).toBe(300);
+  });
   it("uses the other member's profile picture when a DM has no explicit room avatar", () => {
     const room = {
       roomId: "!dm:example.org", name: "Alice", getLiveTimeline: () => ({ getState: () => ({ getStateEvents: () => undefined }) }),

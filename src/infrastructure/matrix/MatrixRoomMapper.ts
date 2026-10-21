@@ -1,4 +1,5 @@
 import {
+  M_POLL_START,
   Direction,
   EventType,
   NotificationCountType,
@@ -59,6 +60,9 @@ export class MatrixRoomMapper {
       name: room.name || "Unnamed room",
       avatarUrl: this.media.resolve(roomAvatar || peerAvatar, 128, 128),
       topic: typeof topic === "string" ? topic : null,
+      lastMessageTimestamp: Math.max(0, ...(room.getLiveTimeline().getEvents?.() ?? [])
+        .filter(event => ([EventType.RoomMessage, EventType.RoomMessageEncrypted].includes(event.getType() as EventType) || M_POLL_START.matches(event.getType())) && event.getRelation()?.rel_type !== "m.replace")
+        .map(event => event.getTs())),
       unreadCount: room.getUnreadNotificationCount(NotificationCountType.Total),
       highlightCount: room.getUnreadNotificationCount(
         NotificationCountType.Highlight,

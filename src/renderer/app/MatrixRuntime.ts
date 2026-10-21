@@ -1,3 +1,5 @@
+import type { PollInput, PollSnapshot } from "../../domain/messaging/Polls";
+import { hiddenTopChannels } from "../../domain/settings/HiddenTopChannels";
 import type { MessageAttachment } from "../../domain/messaging/Attachments";
 import type { IMatrixAuthProvider } from "../../domain/matrix/IMatrixAuthProvider";
 import type { IMatrixClient } from "../../domain/matrix/IMatrixClient";
@@ -294,6 +296,7 @@ export class MatrixRuntime {
     const timelines = this.snapshot.timelines[roomId]
       ? this.snapshot.timelines
       : { ...this.snapshot.timelines, [roomId]: this.client.getRoom(roomId) ? this.client.getTimeline(roomId) : [] };
+    try { hiddenTopChannels.reopen(roomId); } catch (error) { this.update({ error: messageOf(error) }); }
     this.update({ selectedRoomId: roomId, timelines });
     if (room.isDirectClosed) void this.client.setDirectMessageClosed(roomId, false).catch(error => this.update({ error: messageOf(error) }));
     const session = this.snapshot.session;
@@ -445,6 +448,11 @@ export class MatrixRuntime {
   setTyping(roomId: string, typing: boolean): void {
     void this.client.setTyping(roomId, typing).catch(() => undefined);
   }
+
+  createPoll = (roomId: string, input: PollInput) => this.client.createPoll(roomId, input);
+  observePoll = (roomId: string, eventId: string, listener: (poll: PollSnapshot) => void) => this.client.observePoll(roomId, eventId, listener);
+  votePoll = (roomId: string, eventId: string, answers: string[]) => this.client.votePoll(roomId, eventId, answers);
+  endPoll = (roomId: string, eventId: string) => this.client.endPoll(roomId, eventId);
 
   getRoomMembers(roomId: string) {
     return this.client.getRoomMembers(roomId);

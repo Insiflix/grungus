@@ -1,3 +1,6 @@
+import { PollDialog } from "./PollDialog";
+import { ThemedPopover } from "../../components/common/ThemedPopover";
+import type { PollInput } from "../../../domain/messaging/Polls";
 import { AttachmentDraft, AttachmentDropOverlay, useAttachmentDraft } from "./AttachmentDraft";
 import { useEffect, useLayoutEffect, useId, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
 import { Plus as PlusIcon, SendHorizontal as SendIcon, Smile } from "lucide-react";
@@ -18,6 +21,7 @@ interface MessageComposerProps {
   onSendComplete?: () => void;
   roomName: string;
   onSend(body: string): Promise<void>;
+  onSendPoll?: (input: PollInput) => Promise<unknown>;
   onTyping(typing: boolean): void;
   getUploadLimit?: () => Promise<number | null>;
   onSendAttachment?: (file: File, onProgress: (percent: number) => void) => Promise<void>;
@@ -27,7 +31,7 @@ interface MessageComposerProps {
   members?: MatrixRoomMember[];
 }
 
-export function MessageComposer({ roomName, draftKey, onSendComplete, onSend, onTyping, onSendAttachment, getUploadLimit, editing, replying, onCancelAction, members = [] }: MessageComposerProps) {
+export function MessageComposer({ roomName, draftKey, onSendComplete, onSend, onSendPoll, onTyping, onSendAttachment, getUploadLimit, editing, replying, onCancelAction, members = [] }: MessageComposerProps) {
   const savedDraft = useRoomDraft(draftKey);
   const prefs = usePreferences();
   const [body, setBody] = useState(() => savedDraft.body);
@@ -51,6 +55,9 @@ export function MessageComposer({ roomName, draftKey, onSendComplete, onSend, on
   const [uploadProgress, setUploadProgress] = useState<{ id: string; percent: number } | null>(null);
   const [sendError, setSendError] = useState("");
   const [retryable, setRetryable] = useState(false);
+  const [addOpen, setAddOpen] = useState(false);
+  const [pollOpen, setPollOpen] = useState(false);
+  const addButton = useRef<HTMLButtonElement>(null);
   const [gifOpen, setGifOpen] = useState(false);
   const [emojiOpen, setEmojiOpen] = useState(false);
   const [caret, setCaret] = useState(0);
@@ -234,9 +241,10 @@ export function MessageComposer({ roomName, draftKey, onSendComplete, onSend, on
     {(editing || replying) && <div className="composer-message-context"><span>{editing ? "Editing message" : `Replying to ${replying?.sender.displayName}`}<small>{(editing ?? replying)?.body}</small></span><button type="button" className="icon-button" aria-label="Cancel message action" disabled={sending} onClick={onCancelAction}>×</button></div>}
     <form ref={form} className="composer composer--gifs composer--emojis" onSubmit={(event) => void submit(event)}>
       <input ref={fileInput} type="file" multiple hidden aria-label="Choose files to attach" disabled={sending || Boolean(editing) || !onSendAttachment} onChange={event => { attachments.add(Array.from(event.currentTarget.files ?? [])); event.currentTarget.value = ""; }} />
-      <button type="button" className="composer__add" aria-label="Attach files" data-tooltip="Attach files" disabled={sending || Boolean(editing) || !onSendAttachment} onClick={() => fileInput.current?.click()}>
+      <button ref={addButton} type="button" className="composer__add" aria-label={onSendPoll ? "Add attachment or poll" : "Attach files"} data-tooltip={onSendPoll ? "Add attachment or poll" : "Attach files"} aria-haspopup={onSendPoll ? "dialog" : undefined} aria-expanded={onSendPoll ? addOpen : undefined} disabled={sending || Boolean(editing) || (!onSendAttachment && !onSendPoll)} onClick={() => onSendPoll ? setAddOpen(value => !value) : fileInput.current?.click()}>
         <PlusIcon />
       </button>
+      {addOpen && <ThemedPopover anchor={addButton} onClose={() => setAddOpen(false)} role="dialog" label="Add to message" className="composer-add-menu" width={210}><button type="button" disabled={!onSendAttachment} onClick={() => { setAddOpen(false); fileInput.current?.click(); }}>Attach files</button><button type="button" onClick={() => { setAddOpen(false); setPollOpen(true); }}>Create poll</button></ThemedPopover>}
       <div className="composer__input">
       {mentionSuggestions.length > 0 && <div className="emoji-suggestions mention-suggestions" role="listbox" id={suggestionId} aria-label="Room members" ref={suggestionList}>
         {mentionSuggestions.map((member, index) => <button type="button" role="option" id={`${suggestionId}-${index}`} key={member.id} aria-selected={index === activeEmoji} onMouseDown={event => event.preventDefault()} onMouseEnter={() => setActiveEmoji(index)} onClick={() => pickMention(member)}>
@@ -273,6 +281,7 @@ export function MessageComposer({ roomName, draftKey, onSendComplete, onSend, on
         <SendIcon />
       </button>
     </form>
+    {pollOpen && onSendPoll && <PollDialog onSend={async input => { await onSendPoll(input); }} onClose={() => { setPollOpen(false); addButton.current?.focus(); }} />}
     {gifOpen && <GifPicker onSend={sendGif} onClose={() => setGifOpen(false)} />}
     {emojiOpen && <EmojiPicker onPick={(emoji) => pickEmoji(emoji, Boolean(token))} onClose={() => setEmojiOpen(false)} />}
     </>

@@ -14,6 +14,10 @@ import type {
 import { MatrixRuntime } from "./MatrixRuntime";
 
 class FakeClient implements IMatrixClient {
+  createPoll = vi.fn();
+  observePoll = vi.fn(() => () => {});
+  votePoll = vi.fn();
+  endPoll = vi.fn();
   loadAvatar = vi.fn(async (url: string) => url);
   getOwnProfile = vi.fn();
   getIdentityState = vi.fn();

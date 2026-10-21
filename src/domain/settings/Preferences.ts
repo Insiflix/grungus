@@ -17,6 +17,7 @@ export interface Preferences {
   sendReadReceipts: boolean;
   roomSort: "name" | "unread";
   showRoomPreviews: boolean;
+  showChannelsInTopBar: boolean;
   desktopNotifications: boolean;
   notificationPreviews: boolean;
   notificationSound: boolean;
@@ -33,7 +34,7 @@ export const defaultPreferences: Readonly<Preferences> = {
   showAvatars: true, showTimestamps: true, use24HourTime: false,
   groupMessages: true, showInlineMedia: true, convertEmoji: true,
   sendWithEnter: true, sendTyping: true, showTyping: true, sendReadReceipts: true,
-  roomSort: "name", showRoomPreviews: true, desktopNotifications: false,
+  roomSort: "name", showRoomPreviews: true, showChannelsInTopBar: false, desktopNotifications: false,
   notificationPreviews: false, notificationSound: false,
   audioInput: "", videoInput: "", audioOutput: "",
   echoCancellation: true, noiseSuppression: true, autoGainControl: true,
