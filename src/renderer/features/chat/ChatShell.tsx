@@ -1,11 +1,16 @@
+import { channelTabVisible, hiddenTopChannels } from "../../../domain/settings/HiddenTopChannels";
+import { GrungusHome } from "../rooms/GrungusHome";
+import { Avatar } from "../../components/common/Avatar";
+import { usePreferences } from "../../hooks/usePreferences";
+import { latestMessageTime, recentConversations } from "../../../domain/matrix/RecentConversations";
 import { DirectCallPanel } from "./DirectCallPanel";
 import type { DirectCallState } from "../../../domain/calls/DirectCall";
 import { directCalls } from "../../app/providers/MatrixProvider";
 import { observeCalls } from "../../app/providers/MatrixProvider";
 import type { RoomCall } from "../../../domain/calls/ICallProvider";
 import { CallPanel } from "./CallPanel";
-import { useCallback, useEffect, useState } from "react";
-import { MessageCircle, UserPlus, Phone } from "lucide-react";
+import { useCallback, useEffect, useState, useSyncExternalStore } from "react";
+import { X, Phone } from "lucide-react";
 import { MessageSearch } from "./MessageSearch";
 import { DirectMessageTab } from "../rooms/DirectMessageTab";
 import { PeopleDialog } from "../rooms/PeopleDialog";
@@ -40,6 +45,8 @@ export function ChatShell() {
   const closeCall = useCallback(() => setCall(null), []);
   const { rooms, spaceRooms, selectedRoomId, selectRoom, closeDirectMessage } = useMatrixRooms();
   const runtime = useMatrixRuntime();
+  const prefs = usePreferences();
+  const hiddenChannels = useSyncExternalStore(hiddenTopChannels.subscribe, hiddenTopChannels.getSnapshot, hiddenTopChannels.getSnapshot);
   const [discovery, setDiscovery] = useState<Record<string, { pending: boolean; error?: string }>>({});
   const refreshSpace = useCallback(async (id: string) => {
     setDiscovery(state => ({ ...state, [id]: { pending: true } }));
@@ -82,6 +89,8 @@ export function ChatShell() {
   const spaces = rooms.filter((candidate) => candidate.isSpace && candidate.membership === "join");
   const serverRooms = spaceRoomIds(spaces, spaceRooms);
   const directRooms = rooms.filter((candidate) => candidate.isDirect && candidate.memberCount <= 2 && !serverRooms.has(candidate.id) && !candidate.isDirectClosed && !candidate.isSpace && candidate.membership === "join");
+  const channelServers = new Map(spaces.flatMap(space => [...(space.childRoomIds ?? []), ...(spaceRooms[space.id] ?? []).map(room => room.id)].map(id => [id, space] as const)));
+  const topRooms = recentConversations([...directRooms, ...(prefs.showChannelsInTopBar ? rooms.filter(room => room.membership === "join" && !room.isSpace && serverRooms.has(room.id) && latestMessageTime(room, timelines) > 0 && channelTabVisible(hiddenChannels, room.id, latestMessageTime(room, timelines))) : [])], timelines);
   const activeSpace = spaces.find((candidate) => candidate.id === spaceId);
   const room = useMatrixRoom(selectedRoomId);
   const voiceRoom = room && serverRooms.has(room.id) && isVoiceRoom(room);
@@ -103,6 +112,7 @@ export function ChatShell() {
   const selectConversation = (id: string) => { setSpaceId(null); selectRoom(id); };
   const selectSpace = (id: string | null) => {
     setSpaceId(id);
+    if (id === null) { runtime.clearSelectedRoom(); return; }
     const space = spaces.find(space => space.id === id);
     const ids = id ? new Set([...(space?.childRoomIds ?? []), ...(spaceRooms[id] ?? []).map(room => room.id)]) : null;
     const next = rooms.find(room => room.membership === "join" && !room.isSpace && (ids ? ids.has(room.id) : !serverRooms.has(room.id) && !room.isDirectClosed));
@@ -131,18 +141,20 @@ export function ChatShell() {
   return (
     <main className="app-shell">
       <WorkspaceRail spaces={spaces} selectedSpaceId={spaceId} onSelectSpace={selectSpace} onCreateServer={() => setCreatingServer(true)} />
-      <nav className="dm-tabs" aria-label="Direct messages">
-        <div className="dm-tabs__tools">
-        <span className="dm-tabs__label"><MessageCircle /><span>Direct messages</span></span>
-        <button type="button" className="dm-add-button" onClick={() => setAddingPeople(true)}><UserPlus size={16} /> Add people</button>
-        </div>
+      <nav className="dm-tabs" aria-label={prefs.showChannelsInTopBar ? "Recent conversations" : "Direct messages"}>
         <div className="dm-tabs__list">
-        {directRooms.map((direct) => (
+        {topRooms.map((direct) => channelServers.has(direct.id) ? (
+          <div className="dm-tab-wrap" key={direct.id}><button type="button" className={`dm-tab ${selectedRoomId === direct.id ? "is-selected" : ""}`} aria-current={selectedRoomId === direct.id ? "page" : undefined} onClick={() => selectRoom(direct.id)} aria-label={`#${direct.name}, ${channelServers.get(direct.id)!.name}${direct.unreadCount ? `, ${direct.unreadCount} unread messages` : ""}`}>
+            <Avatar name={channelServers.get(direct.id)!.name} url={channelServers.get(direct.id)!.avatarUrl} size="small" />
+            <span><strong>#{direct.name}</strong><small>{channelServers.get(direct.id)!.name}</small></span>
+            {direct.unreadCount > 0 && <b className="mention-badge">{direct.unreadCount > 99 ? "99+" : direct.unreadCount}</b>}
+          </button><button type="button" className="dm-tab__close" aria-label={`Close channel ${direct.name}`} data-tooltip="Hide channel from top bar" onClick={() => { try { hiddenTopChannels.hide(direct.id, latestMessageTime(direct, timelines)); } catch (error) { setCallError(error instanceof Error ? error.message : "Could not hide channel."); } }}><X size={14} /></button></div>
+        ) : (
           <DirectMessageTab key={direct.id} room={direct} selected={selectedRoomId === direct.id}
             presence={direct.directUserId ? presences[direct.directUserId] : "unknown"}
             onSelect={selectConversation} onClose={id => void closeDirectMessage(id)} />
         ))}
-        {directRooms.length === 0 && <span className="dm-tabs__empty">Your direct messages will appear here</span>}
+        {topRooms.length === 0 && <span className="dm-tabs__empty">Your direct messages will appear here</span>}
         </div>
       </nav>
       <RoomSidebar voiceDockRef={setVoiceDock} key={spaceId ?? "home"} space={activeSpace ?? null} calls={roomCalls} callActive={Boolean(call || directCall)} onJoinVoice={room => startCall(room, false)} discoveryPending={spaceId ? discovery[spaceId]?.pending : false} discoveryError={spaceId ? discovery[spaceId]?.error : undefined} onRetryDiscovery={() => { if (spaceId) void refreshSpace(spaceId); }} onOpenIdentity={() => setIdentityOpen(true)} onOpenSettings={() => setSettingsOpen(true)} onManageSpace={() => { if (activeSpace) setManagedRoomId(activeSpace.id); }} />
@@ -160,7 +172,7 @@ export function ChatShell() {
             {error && <button type="button" onClick={clearError}>Dismiss</button>}
           </div>
         )}
-        {room && voiceRoom ? <div className="voice-workspace"><div className="voice-workspace__main"><div className="voice-workspace__tools">{renderSearch(room)}<VoiceChatToggle visible={!hiddenVoiceChats.has(room.id)} unreadCount={room.unreadCount} onToggle={() => toggleVoiceChat(room.id)} controls={`voice-room-chat-${room.id}`} /></div><ConversationCallCard room={room} call={selectedCall} voice disabled={Boolean(call || directCall)} onCall={video => startCall(room, video)} /></div>{call?.roomId !== room.id && <div id={`voice-room-chat-${room.id}`} className="voice-chat-slot" hidden={hiddenVoiceChats.has(room.id)}>{voiceChat(room)}</div>}</div> : <>
+        {!room && !spaceId ? <GrungusHome onAddPeople={() => setAddingPeople(true)} rooms={rooms} calls={roomCalls} channelServers={channelServers} onOpen={selectRoom} onJoinVoice={target => startCall(target, false)} callActive={Boolean(call || directCall)} /> : room && voiceRoom ? <div className="voice-workspace"><div className="voice-workspace__main"><div className="voice-workspace__tools">{renderSearch(room)}<VoiceChatToggle visible={!hiddenVoiceChats.has(room.id)} unreadCount={room.unreadCount} onToggle={() => toggleVoiceChat(room.id)} controls={`voice-room-chat-${room.id}`} /></div><ConversationCallCard room={room} call={selectedCall} voice disabled={Boolean(call || directCall)} onCall={video => startCall(room, video)} /></div>{call?.roomId !== room.id && <div id={`voice-room-chat-${room.id}`} className="voice-chat-slot" hidden={hiddenVoiceChats.has(room.id)}>{voiceChat(room)}</div>}</div> : <>
           {room && groupRoom && selectedCall && <ConversationCallCard room={room} call={selectedCall} disabled={Boolean(call || directCall)} onCall={video => startCall(room, video)} />}
           {renderTimeline(room)}
         </>}

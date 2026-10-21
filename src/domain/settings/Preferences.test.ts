@@ -5,6 +5,13 @@ import { themes } from "./Themes";
 
 beforeEach(() => { localStorage.clear(); preferences.setAccount(crypto.randomUUID()); });
 describe("persisted preferences", () => {
+  it("defaults channel tabs off and persists the opt-in per account", () => {
+    expect(preferences.getSnapshot().showChannelsInTopBar).toBe(false);
+    preferences.update({ showChannelsInTopBar: true });
+    preferences.reload();
+    expect(preferences.getSnapshot().showChannelsInTopBar).toBe(true);
+    expect(parsePreferences({ showChannelsInTopBar: "true" }).showChannelsInTopBar).toBe(false);
+  });
   it.each(themes)("persists the $name theme through reload and account changes", ({id}) => {
     preferences.setAccount("theme-account"); preferences.update({theme:id}); preferences.reload();
     expect(preferences.getSnapshot().theme).toBe(id);

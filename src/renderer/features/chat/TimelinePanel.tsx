@@ -44,7 +44,7 @@ interface TimelinePanelProps {
 export function TimelinePanel({ room, draftKey, search, onOpenIdentity, onOpenSettings, onCall, callActive, onDirectCall, compact = false }: TimelinePanelProps) {
   const savedDraft = useRoomDraft(draftKey);
   const prefs = usePreferences();
-  const { messages, members, typingMembers, loadOlder, sendMessage, sendAttachment, getUploadLimit, setTyping, toggleReaction, editMessage, deleteMessage, togglePin, retryMessage, cancelSend } =
+  const { messages, members, typingMembers, loadOlder, sendMessage, createPoll, sendAttachment, getUploadLimit, setTyping, toggleReaction, editMessage, deleteMessage, togglePin, retryMessage, cancelSend } =
     useMatrixTimeline(room?.id ?? null);
   const [loadingOlder, setLoadingOlder] = useState(false);
   const [hasMore, setHasMore] = useState(true);
@@ -181,6 +181,7 @@ export function TimelinePanel({ room, draftKey, search, onOpenIdentity, onOpenSe
           }}
           getUploadLimit={getUploadLimit}
           onSendAttachment={async (file, onProgress) => { await sendAttachment(file, onProgress, activeAction?.type === "reply" ? activeAction.message.id : undefined); }}
+          onSendPoll={createPoll}
           onTyping={setTyping}
         />
       </div>

@@ -1,3 +1,4 @@
+import type { PollInput, PollSnapshot } from "../messaging/Polls";
 import type { MessageAttachment } from "../messaging/Attachments";
 import type { MatrixEventSource } from "./MatrixEvents";
 import type { MessageSearchQuery, MessageSearchResults } from "../messaging/MessageSearch";
@@ -55,6 +56,10 @@ export interface IMatrixClient extends MatrixEventSource {
     body: string,
     options?: MatrixSendTextOptions,
   ): Promise<string>;
+  createPoll(roomId: string, input: PollInput): Promise<string>;
+  observePoll(roomId: string, eventId: string, listener: (poll: PollSnapshot) => void): () => void;
+  votePoll(roomId: string, eventId: string, answers: string[]): Promise<void>;
+  endPoll(roomId: string, eventId: string): Promise<void>;
   getUploadLimit(): Promise<number | null>;
   retryMessage(roomId: string, eventId: string): Promise<void>;
   cancelSend(roomId: string, eventId: string): Promise<void>;

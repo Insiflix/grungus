@@ -1,3 +1,4 @@
+import type { PollDefinition } from "../messaging/Polls";
 import type { MessageAttachment } from "../messaging/Attachments";
 export type MatrixMembership = "join" | "invite" | "leave" | "ban" | "knock";
 export type MatrixPresence = "online" | "unavailable" | "offline" | "unknown";
@@ -39,6 +40,7 @@ export interface MatrixRoom {
   name: string;
   avatarUrl: string | null;
   topic: string | null;
+  lastMessageTimestamp?: number;
   unreadCount: number;
   highlightCount: number;
   isEncrypted: boolean;
@@ -55,6 +57,7 @@ export interface MatrixRoom {
 }
 
 export type MatrixMessageType =
+  | "poll"
   | "text"
   | "notice"
   | "emote"
@@ -85,6 +88,7 @@ export interface MatrixMessage {
   timestamp: number;
   type: MatrixMessageType;
   body: string;
+  poll?: PollDefinition;
   attachment?: MessageAttachment;
   edited: boolean;
   replyTo: string | null;
