@@ -13,6 +13,36 @@
     return { width: { ideal: preset.width, max: preset.width }, height: { ideal: preset.height, max: preset.height }, frameRate: { ideal: preset.frameRate, max: preset.frameRate } };
   };
   const sendStatus = (data) => parent.postMessage({ type: "grungus:media-status", widgetId: params.get("widgetId"), ...data }, parentOrigin);
+  // Track the actual media connections, including publisher/subscriber reconnects.
+  const connections = new Set();
+  if (window.RTCPeerConnection) {
+    window.RTCPeerConnection = new Proxy(window.RTCPeerConnection, {
+      construct(Target, args, NewTarget) {
+        const connection = Reflect.construct(Target, args, NewTarget);
+        connections.add(connection);
+        connection.addEventListener("connectionstatechange", () => {
+          if (connection.connectionState === "closed") connections.delete(connection);
+        });
+        return connection;
+      },
+    });
+  }
+  const connectionPing = async () => {
+    const samples = [];
+    await Promise.allSettled([...connections].map(async connection => {
+      if (connection.connectionState === "closed") { connections.delete(connection); return; }
+      if (connection.connectionState !== "connected") return;
+      const stats = await connection.getStats();
+      const selected = new Set();
+      stats.forEach(report => { if (report.type === "transport" && report.selectedCandidatePairId) selected.add(report.selectedCandidatePairId); });
+      stats.forEach(report => {
+        if (report.type === "candidate-pair" && report.state === "succeeded" &&
+          (selected.size ? selected.has(report.id) : report.nominated) &&
+          Number.isFinite(report.currentRoundTripTime) && report.currentRoundTripTime >= 0) samples.push(report.currentRoundTripTime * 1000);
+      });
+    }));
+    return samples.length ? Math.round(Math.max(...samples)) : null;
+  };
   media.getUserMedia = async (constraints) => {
     const video = constraints?.video;
     const isCamera = video && !(typeof video === "object" && (video.mandatory?.chromeMediaSource || video.mediaSource));
@@ -44,6 +74,10 @@
   window.addEventListener("message", async (event) => {
     const data = event.data;
     const fromHost = event.source === parent && event.origin === parentOrigin && data?.widgetId === params.get("widgetId");
+    if (fromHost && data.type === "grungus:connection-stats") {
+      sendStatus({ pingMs: await connectionPing() });
+      return;
+    }
     if (fromHost && data.type === "grungus:host-controls" && typeof data.enabled === "boolean") {
       document.documentElement.toggleAttribute("data-grungus-host-controls", data.enabled);
       for (const key of ["background", "surface", "text", "muted", "accent", "border"]) {

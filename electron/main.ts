@@ -1,9 +1,10 @@
+import { writeClipboardImage } from "./imageClipboard.js";
 import { registerWindowControls } from "./windowControls.js";
 import { DesktopCaptureBroker } from "./desktopCapture.js";
 import { configureAppPermissions, allowsAppPermission } from "./permissions.js";
 import { assertTrustedAppSender } from "./ipcSecurity.js";
 import { secureStorageAvailable, isPersistedSession, SessionOperationQueue } from "./sessionSecurity.js";
-import { secureExternalUrl } from "./shared/urls.js";
+import { secureMessageUrl, secureExternalUrl } from "./shared/urls.js";
 import { app, BrowserWindow, clipboard, ipcMain, safeStorage, shell, session, protocol, net, desktopCapturer } from "electron";
 import { promises as fs } from "node:fs";
 import path from "node:path";
@@ -15,6 +16,10 @@ import type {
 
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
+
+// Keep development windows separate from installed/pinned application groups.
+const APP_ID = app.isPackaged ? "dev.grungus.matrix" : "dev.grungus.matrix.development";
+if (process.platform === "win32") app.setAppUserModelId(APP_ID);
 
 protocol.registerSchemesAsPrivileged([{ scheme: "grungus-app", privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true, stream: true } }]);
 
@@ -101,13 +106,14 @@ function isTrustedRendererUrl(url: string): boolean {
 }
 
 function createWindow(): void {
+  const assetDirectory = path.join(app.getAppPath(), app.isPackaged ? "dist" : "public");
   mainWindow = new BrowserWindow({
     width: 1440,
     height: 900,
     minWidth: 980,
     minHeight: 640,
     backgroundColor: "#090d18",
-    icon: path.join(app.getAppPath(), app.isPackaged ? "dist" : "public", process.platform === "win32" ? "grungus.ico" : "grungus.png"),
+    icon: path.join(assetDirectory, process.platform === "win32" ? "grungus.ico" : "grungus.png"),
     frame: false,
     autoHideMenuBar: true,
     show: false,
@@ -121,13 +127,20 @@ function createWindow(): void {
     },
   });
 
+  if (process.platform === "win32") mainWindow.setAppDetails({
+    appId: APP_ID,
+    appIconPath: app.isPackaged ? process.execPath : path.join(assetDirectory, "grungus.ico"),
+    appIconIndex: 0,
+    relaunchDisplayName: "Grungus Matrix",
+    relaunchCommand: app.isPackaged ? `"${process.execPath}"` : `"${process.execPath}" "${app.getAppPath()}"`,
+  });
   mainWindow.removeMenu();
   const publishWindowState = () => mainWindow?.webContents.send("window:state-changed", { maximized: mainWindow.isMaximized() });
   mainWindow.on("maximize", publishWindowState);
   mainWindow.on("unmaximize", publishWindowState);
 
   mainWindow.webContents.setWindowOpenHandler(({ url }) => {
-    try { void shell.openExternal(secureExternalUrl(url)).catch(() => undefined); } catch { /* Unsupported external scheme. */ }
+    try { void shell.openExternal(secureMessageUrl(url)).catch(() => undefined); } catch { /* Unsupported external scheme. */ }
     return { action: "deny" };
   });
   mainWindow.webContents.on("will-navigate", (event, url) => {
@@ -159,7 +172,11 @@ function registerIpc(): void {
   ipcMain.handle("clipboard:write-text", (event, text: unknown) => {
     if (event.sender !== mainWindow?.webContents || event.senderFrame !== mainWindow.webContents.mainFrame || !isTrustedRendererUrl(event.senderFrame.url)) throw new Error("Untrusted clipboard request");
     if (typeof text !== "string") throw new Error("Invalid clipboard text");
-    clipboard.writeText(text);
+    return clipboard.writeText(text);
+  });
+  ipcMain.handle("clipboard:write-image", async (event, bytes: unknown) => {
+    assertTrustedAppSender(event, mainWindow, isTrustedRendererUrl);
+    await writeClipboardImage(bytes);
   });
   ipcMain.handle("desktop-capture:respond", (event, requestId: unknown, sourceId: unknown, audio: unknown) => {
     if (event.sender !== mainWindow?.webContents || event.senderFrame !== mainWindow.webContents.mainFrame || !isTrustedRendererUrl(event.senderFrame.url)) throw new Error("Untrusted capture response");
@@ -217,7 +234,6 @@ if (!app.requestSingleInstanceLock()) {
       desktopCapture?.cancel();
     });
     configureAppPermissions(session.defaultSession, () => mainWindow, app.isPackaged);
-    if (process.platform === "win32") app.setAppUserModelId("dev.grungus.matrix");
     if (process.platform === "darwin" && !app.isPackaged) {
       app.dock?.setIcon(path.join(app.getAppPath(), "public", "grungus.png"));
     }

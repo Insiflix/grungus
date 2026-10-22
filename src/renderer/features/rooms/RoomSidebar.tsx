@@ -13,7 +13,7 @@ import { SpaceChannels } from "./SpaceChannels";
 import { CreateChannelDialog } from "./CreateChannelDialog";
 import { BlockedUserBadge } from "../../components/common/BlockedUserBadge";
 
-export function RoomSidebar({ space, onOpenIdentity, onOpenSettings, onManageSpace, calls = [], onJoinVoice, callActive = false, discoveryPending = false, discoveryError, onRetryDiscovery, voiceDockRef }: { space: MatrixRoom | null; onOpenIdentity: () => void; onOpenSettings: () => void; onManageSpace: () => void; calls?: RoomCall[]; onJoinVoice?: (room: MatrixRoom) => void; callActive?: boolean; discoveryPending?: boolean; discoveryError?: string; onRetryDiscovery?: () => void; voiceDockRef?: RefCallback<HTMLDivElement> }) {
+export function RoomSidebar({ space, onOpenIdentity, onOpenSettings, onManageSpace, onManageChannel, calls = [], onJoinVoice, callActive = false, discoveryPending = false, discoveryError, onRetryDiscovery, voiceDockRef }: { space: MatrixRoom | null; onOpenIdentity: () => void; onOpenSettings: () => void; onManageSpace: () => void; onManageChannel?: (roomId: string) => void; calls?: RoomCall[]; onJoinVoice?: (room: MatrixRoom) => void; callActive?: boolean; discoveryPending?: boolean; discoveryError?: string; onRetryDiscovery?: () => void; voiceDockRef?: RefCallback<HTMLDivElement> }) {
   const [filter, setFilter] = useState("");
   const [joining, setJoining] = useState(false);
   const [roomAddress, setRoomAddress] = useState("");
@@ -83,7 +83,7 @@ export function RoomSidebar({ space, onOpenIdentity, onOpenSettings, onManageSpa
         {space && !searching ? <>
           {discoveryPending && <p className="channel-notice" role="status">Discovering channels…</p>}
           {discoveryError && <p className="channel-notice" role="alert">{discoveryError} <button type="button" onClick={onRetryDiscovery}>Retry</button></p>}
-          <SpaceChannels rooms={channels} selectedRoomId={selectedRoomId} calls={calls} callActive={callActive} onOpen={async (channel, voice) => {
+          <SpaceChannels onSettings={onManageChannel} rooms={channels} selectedRoomId={selectedRoomId} calls={calls} callActive={callActive} onOpen={async (channel, voice) => {
             if (channel.membership !== "join") { if (!await joinRoom(channel.id, channel.viaServers)) return; }
             else selectRoom(channel.id);
             if (voice) onJoinVoice?.(channel);

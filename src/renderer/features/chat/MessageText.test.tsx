@@ -53,3 +53,33 @@ describe("emoji-only detection", () => {
   it.each(["😀", " ❤️ \n🔥", "👍🏿", "👩🏽‍💻", "🇺🇸", "#️⃣", "🏴\u{E0067}\u{E0062}\u{E0073}\u{E0063}\u{E0074}\u{E007F}"])("recognizes %s", text => expect(isEmojiOnly(text)).toBe(true));
   it.each(["", " ", "1", "#", "*", "hello 😀", "😀!", "🏽", "🇩", "\u200D", "1\uFE0F"])("rejects %s", text => expect(isEmojiOnly(text)).toBe(false));
 });
+
+describe("clickable message links", () => {
+  it("links bare URLs and domains while leaving trailing punctuation outside", () => {
+    const html = render("See https://example.org/path?q=1&x=2, www.example.com! Also example.org.");
+    expect(html).toContain('href="https://example.org/path?q=1&amp;x=2"');
+    expect(html).toContain('href="https://www.example.com/"');
+    expect(html).toContain('href="https://example.org/"');
+    expect(html).toContain('rel="noopener noreferrer"');
+    expect(html).toContain('</a>,');
+    expect(html).toContain('</a>!');
+    expect(html.match(/<a /g)).toHaveLength(3);
+  });
+  it("keeps balanced URL parentheses and email destinations", () => {
+    const html = render("(https://example.org/wiki/Frog_(animal)). alice@example.org");
+    expect(html).toContain('href="https://example.org/wiki/Frog_(animal)"');
+    expect(html).toContain('href="mailto:alice@example.org"');
+  });
+  it("preserves code, existing links, mentions, and literal emoji shortcodes in URLs", () => {
+    const html = render("**https://example.org/:smile:** @alice:example.org `https://code.example` [site](https://example.com) [www.example.org][ref]\n\n[ref]: https://example.net", { mentions: [message.sender] });
+    expect(html).toContain('href="https://example.org/:smile:"');
+    expect(html).toContain('<code>https://code.example</code>');
+    expect(html).toContain('class="message-mention"');
+    expect(html.match(/<a /g)).toHaveLength(3);
+    expect(html).not.toContain('<a href="https://www.example.org/"');
+  });
+  it("keeps disallowed Markdown destinations non-clickable", () => {
+    const html = render("[script](javascript:alert) [file](file:///private) [login](https://user:pass@example.com) [data](data:text/html,test)");
+    expect(html).not.toContain('<a ');
+  });
+});

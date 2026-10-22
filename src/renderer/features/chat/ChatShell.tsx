@@ -24,6 +24,7 @@ import { TimelineErrorBoundary } from "../../components/common/TimelineErrorBoun
 import { TimelinePanel } from "./TimelinePanel";
 import { IdentityDialog } from "../auth/IdentityDialog";
 import { useMatrixSnapshot } from "../../hooks/matrix/useMatrixSnapshot";
+import { MembershipToast } from "../rooms/MembershipToast";
 import { SettingsDialog } from "../settings/SettingsDialog";
 import { RoomSettingsDialog } from "../settings/RoomSettingsDialog";
 import { matrixNotifications } from "../../app/providers/MatrixProvider";
@@ -141,8 +142,9 @@ export function ChatShell() {
 
   return (
     <main className="app-shell">
+      <MembershipToast />
       <WorkspaceRail spaces={spaces} selectedSpaceId={spaceId} onSelectSpace={selectSpace} onCreateServer={() => setCreatingServer(true)} />
-      <RoomSidebar voiceDockRef={setVoiceDock} key={spaceId ?? "home"} space={activeSpace ?? null} calls={roomCalls} callActive={Boolean(call || directCall)} onJoinVoice={room => startCall(room, false)} discoveryPending={spaceId ? discovery[spaceId]?.pending : false} discoveryError={spaceId ? discovery[spaceId]?.error : undefined} onRetryDiscovery={() => { if (spaceId) void refreshSpace(spaceId); }} onOpenIdentity={() => setIdentityOpen(true)} onOpenSettings={() => setSettingsOpen(true)} onManageSpace={() => { if (activeSpace) setManagedRoomId(activeSpace.id); }} />
+      <RoomSidebar onManageChannel={setManagedRoomId} voiceDockRef={setVoiceDock} key={spaceId ?? "home"} space={activeSpace ?? null} calls={roomCalls} callActive={Boolean(call || directCall)} onJoinVoice={room => startCall(room, false)} discoveryPending={spaceId ? discovery[spaceId]?.pending : false} discoveryError={spaceId ? discovery[spaceId]?.error : undefined} onRetryDiscovery={() => { if (spaceId) void refreshSpace(spaceId); }} onOpenIdentity={() => setIdentityOpen(true)} onOpenSettings={() => setSettingsOpen(true)} onManageSpace={() => { if (activeSpace) setManagedRoomId(activeSpace.id); }} />
       <ChatSurface activeRoomId={selectedRoomId}>
       <nav className="dm-tabs" aria-label={prefs.showChannelsInTopBar ? "Recent conversations" : "Direct messages"}>
         <div className="dm-tabs__list">
@@ -182,7 +184,7 @@ export function ChatShell() {
       </ChatSurface>
       {!call && !directCall && otherGroupCalls.length > 0 && <aside className="active-calls" aria-label="Group calls">{otherGroupCalls.map(active => <button key={active.roomId} onClick={() => setCall({ roomId: active.roomId, name: active.name, video: false })}><Phone size={18} /><span><strong>{active.name}</strong><small>{active.participants} in call</small></span><b>Join call</b></button>)}</aside>}
       {directCall && <DirectCallPanel key={directCall.id} call={directCall} canAnswer={!call} />}
-      {call && <CallPanel {...call} search={renderSearch(rooms.find(item => item.id === call.roomId) ?? null)} mode={serverRooms.has(call.roomId) ? "voice" : "group"} dock={voiceDock} visible={selectedRoomId === call.roomId} onOpen={() => selectRoom(call.roomId)} onSettings={() => setSettingsOpen(true)} chatVisible={!hiddenVoiceChats.has(call.roomId)} chatUnreadCount={voiceCallRoom?.unreadCount ?? 0} onToggleChat={() => toggleVoiceChat(call.roomId)} chat={voiceCallRoom ? voiceChat(voiceCallRoom) : undefined} onClose={closeCall} />}
+      {call && <CallPanel {...call} search={renderSearch(rooms.find(item => item.id === call.roomId) ?? null)} mode={serverRooms.has(call.roomId) ? "voice" : "group"} dock={voiceDock} visible={selectedRoomId === call.roomId} onOpen={() => selectRoom(call.roomId)} chatVisible={!hiddenVoiceChats.has(call.roomId)} chatUnreadCount={voiceCallRoom?.unreadCount ?? 0} onToggleChat={() => toggleVoiceChat(call.roomId)} chat={voiceCallRoom ? voiceChat(voiceCallRoom) : undefined} onClose={closeCall} />}
       {creatingServer && <CreateServerDialog onClose={() => setCreatingServer(false)} onCreated={id => { runtime.clearSelectedRoom(); setSpaceId(id); void refreshSpace(id); }} />}
       {addingPeople && <PeopleDialog onClose={() => setAddingPeople(false)} />}
       {settingsOpen && <SettingsDialog onClose={() => setSettingsOpen(false)} onOpenIdentity={() => setIdentityOpen(true)} onManageRoom={setManagedRoomId} />}

@@ -15,6 +15,42 @@ function fixture(document = { querySelector: vi.fn(), documentElement: { toggleA
   return { media: context.navigator.mediaDevices, camera, screen, getUserMedia, getDisplayMedia, postMessage, parent, listener };
 }
 describe("Element Call camera and display capture adapter", () => {
+  it("reports selected WebRTC round-trip times only to the authenticated host", async () => {
+    let receive!: (event: object) => Promise<void>;
+    const postMessage = vi.fn();
+    const parent = { postMessage };
+    const reports = new Map<string, object>([
+      ["transport", { type: "transport", selectedCandidatePairId: "selected" }],
+      ["selected", { id: "selected", type: "candidate-pair", state: "succeeded", currentRoundTripTime: .037 }],
+      ["old", { id: "old", type: "candidate-pair", state: "succeeded", nominated: true, currentRoundTripTime: 1 }],
+    ]);
+    class Connection {
+      connectionState = "connected";
+      getStats = vi.fn().mockResolvedValue(reports);
+      addEventListener = vi.fn();
+    }
+    const context = {
+      navigator: { mediaDevices: { getUserMedia: vi.fn() } }, parent,
+      location: { hash: "#?widgetId=test&parentUrl=http%3A%2F%2Flocalhost%2F" }, URL, URLSearchParams,
+      window: { RTCPeerConnection: Connection, addEventListener: (_: string, callback: typeof receive) => { receive = callback; } },
+    };
+    runInNewContext(readFileSync("scripts/element-call-media.js", "utf8").replace("__GRUNGUS_CAMERA_PRESETS__", JSON.stringify(cameraQualityPresets)), context);
+    const connection = new context.window.RTCPeerConnection();
+    const data = { type: "grungus:connection-stats", widgetId: "test" };
+    for (const event of [{ source: {}, origin: "http://localhost", data }, { source: parent, origin: "https://evil.test", data }, { source: parent, origin: "http://localhost", data: { ...data, widgetId: "other" } }]) await receive(event);
+    expect(connection.getStats).not.toHaveBeenCalled();
+    await receive({ source: parent, origin: "http://localhost", data });
+    expect(postMessage).toHaveBeenLastCalledWith(expect.objectContaining({ pingMs: 37 }), "http://localhost");
+    connection.connectionState = "disconnected";
+    await receive({ source: parent, origin: "http://localhost", data });
+    expect(postMessage).toHaveBeenLastCalledWith(expect.objectContaining({ pingMs: null }), "http://localhost");
+    connection.connectionState = "closed";
+    await receive({ source: parent, origin: "http://localhost", data });
+    connection.connectionState = "connected";
+    await receive({ source: parent, origin: "http://localhost", data });
+    expect(connection.getStats).toHaveBeenCalledTimes(1);
+  });
+
   it("forwards authenticated sharing actions to Element's capture publisher and reports unavailable controls", async () => {
     const button = { click: vi.fn(), disabled: false };
     const querySelector = vi.fn().mockReturnValue(button);

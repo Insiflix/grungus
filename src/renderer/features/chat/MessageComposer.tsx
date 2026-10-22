@@ -262,6 +262,19 @@ export function MessageComposer({ roomName, draftKey, onSendComplete, onSend, on
         onChange={(event) => { updateBody(event.target.value); rememberSelection(event.currentTarget); setActiveEmoji(0); setDismissed(null); }}
         onSelect={event => rememberSelection(event.currentTarget)}
         onBlur={event => rememberSelection(event.currentTarget)}
+        onPaste={event => {
+          if (!onSendAttachment || sending || editing) return;
+          const data = event.clipboardData;
+          const files = Array.from(data.files);
+          if (!files.length) for (const item of Array.from(data.items)) {
+            if (item.kind !== "file") continue;
+            const file = item.getAsFile();
+            if (file) files.push(file);
+          }
+          if (!files.length) return;
+          event.preventDefault();
+          attachments.add(files);
+        }}
         onKeyDown={handleKeyDown}
         placeholder={`Message ${roomName}`}
         aria-label={`Message ${roomName}`}

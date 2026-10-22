@@ -55,8 +55,13 @@ export class MatrixRoomMapper {
     const peerAvatar = roomAvatar ? undefined : (this.profiles && peerId
       ? this.profiles.resolve(peer, peerId)
       : peer?.getMxcAvatarUrl());
+    const powerEvent = state?.getStateEvents(EventType.RoomPowerLevels, "");
+    const power = !Array.isArray(powerEvent) ? powerEvent?.getContent() : undefined;
+    const ownId = this.client.getUserId?.() ?? "";
+    const ownLevel = power ? Number(power.users?.[ownId] ?? power.users_default ?? 0) : room.getMember?.(ownId)?.powerLevel ?? 0;
     return {
       id: room.roomId,
+      canManage: room.getMyMembership() === "join" && ownLevel >= 100,
       name: room.name || "Unnamed room",
       avatarUrl: this.media.resolve(roomAvatar || peerAvatar, 128, 128),
       topic: typeof topic === "string" ? topic : null,

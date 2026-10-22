@@ -1,3 +1,4 @@
+import { DirectMessageIdentity } from "./DirectMessageIdentity";
 import { ChevronDown } from "lucide-react";
 import { Phone, Video } from "lucide-react";
 import { memo, useCallback, useEffect, useRef, useState, type ReactNode } from "react";
@@ -100,11 +101,13 @@ export function TimelinePanel({ room, draftKey, search, onOpenIdentity, onOpenSe
     <>
       <header className="room-header">
         <div className="room-header__title">
-          {room.isEncrypted ? <LockIcon /> : <span className="room-hash">#</span>}
+          {room.isDirect && room.memberCount <= 2 && !compact ? <DirectMessageIdentity key={room.id} room={room} members={members} /> : <>
+          {!room.isDirect && (room.isEncrypted ? <LockIcon /> : <span className="room-hash">#</span>)}
           <div>
             <h1><span className="user-name-label">{compact ? "Voice chat" : room.name}</span>{room.isDirect && room.memberCount <= 2 && <BlockedUserBadge userId={room.directUserId} />}</h1>
             {room.topic && <p>{room.topic}</p>}
           </div>
+          </>}
         </div>
         <div className="room-header__actions" hidden={compact}>
           <button type="button" className="icon-button" aria-label="Room settings" data-tooltip="Room settings" onClick={onOpenSettings}><Settings /></button>
@@ -112,7 +115,7 @@ export function TimelinePanel({ room, draftKey, search, onOpenIdentity, onOpenSe
           <button className="icon-button" data-tooltip="Videoanruf / laufendem Anruf beitreten" aria-label="Videoanruf starten" disabled={callActive} onClick={() => onCall(true)}><Video /></button>
           {room.memberCount === 2 && <details className="call-options"><summary data-tooltip="Klassische Matrix-Anrufe" aria-label="Weitere Anrufoptionen"><ChevronDown size={16} /></summary><div><button disabled={callActive} onClick={event => { event.currentTarget.closest("details")?.removeAttribute("open"); onDirectCall(false); }}>Klassischer Sprachanruf</button><button disabled={callActive} onClick={event => { event.currentTarget.closest("details")?.removeAttribute("open"); onDirectCall(true); }}>Klassischer Videoanruf</button></div></details>}
           <button type="button" className="icon-button room-invite-button" aria-label="Invite people to this room" data-tooltip="Invite people" onClick={() => setInviting(true)}><UserPlus /></button>
-          {room.isEncrypted && <button type="button" className="encrypted-pill" onClick={onOpenIdentity} data-tooltip="Identität & Verschlüsselung"><LockIcon /> Encrypted</button>}
+          {room.isEncrypted && <button type="button" className="encrypted-pill" aria-label="End-to-end encryption" onClick={onOpenIdentity} data-tooltip="Identität & Verschlüsselung"><LockIcon /></button>}
           <button ref={memberToggle} type="button" className="member-count" aria-label="Show room members" data-tooltip="Room members"
             aria-expanded={membersVisible} aria-controls="room-members" onClick={() => setMembersVisible(visible => !visible)}><UsersIcon /> {room.memberCount}</button>
           {search}
@@ -141,7 +144,7 @@ export function TimelinePanel({ room, draftKey, search, onOpenIdentity, onOpenSe
           {messages.map((message, index) => {
             const previous = messages[index - 1];
             const grouped = prefs.groupMessages && Boolean(
-              previous &&
+              previous && previous.type !== "membership" && message.type !== "membership" &&
                 previous.sender.id === message.sender.id &&
                 message.timestamp - previous.timestamp < 5 * 60_000,
             );

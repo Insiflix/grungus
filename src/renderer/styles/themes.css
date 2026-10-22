@@ -1,3 +1,246 @@
+/* Additional dark toad portraits supplied by the user. */
+:root[data-theme="amber-toad"], [data-theme-preview="amber-toad"] {
+  color-scheme: dark;
+  --bg-deep: #090806; --bg-base: #19140e;
+  --surface-1: #2b2116e0; --surface-2: #2b2116b0; --surface-3: #d6b97b2b;
+  --glass: #19140eb0; --glass-heavy: #19140ef5;
+  --border: #ecd9b82b; --border-strong: #ecd9b84a;
+  --text: #f6f3ed; --text-soft: #ecd9b8; --text-muted: #bda789;
+  --accent: #d6b97b; --accent-strong: #d6b97b; --accent-soft: #d6b97b26; --cyan: #ecd9b8;
+  --theme-primary-ink: #090806;
+  --theme-wallpaper: url("../assets/toad-portrait.webp"); --theme-wallpaper-position: center 65%;
+}
+:root[data-theme="obsidian"], [data-theme-preview="obsidian"] {
+  color-scheme: dark;
+  --bg-deep: #080706; --bg-base: #171310;
+  --surface-1: #2b211de0; --surface-2: #2b211db0; --surface-3: #d0a58c2b;
+  --glass: #171310b0; --glass-heavy: #171310f5;
+  --border: #e8d3c72b; --border-strong: #e8d3c74a;
+  --text: #f6f3ed; --text-soft: #e8d3c7; --text-muted: #b7a296;
+  --accent: #d0a58c; --accent-strong: #d0a58c; --accent-soft: #d0a58c26; --cyan: #e8d3c7;
+  --theme-primary-ink: #080706;
+  --theme-wallpaper: url("../assets/toad-obsidian.webp"); --theme-wallpaper-position: center 48%;
+}
+:root[data-theme="bronze"], [data-theme-preview="bronze"] {
+  color-scheme: dark;
+  --bg-deep: #090908; --bg-base: #191914;
+  --surface-1: #2b2a1ee0; --surface-2: #2b2a1eb0; --surface-3: #c8bc912b;
+  --glass: #191914b0; --glass-heavy: #191914f5;
+  --border: #dfdcc82b; --border-strong: #dfdcc84a;
+  --text: #f6f3ed; --text-soft: #dfdcc8; --text-muted: #b4b098;
+  --accent: #c8bc91; --accent-strong: #c8bc91; --accent-soft: #c8bc9126; --cyan: #dfdcc8;
+  --theme-primary-ink: #090908;
+  --theme-wallpaper: url("../assets/toad-bronze.webp"); --theme-wallpaper-position: center 55%;
+}
+:root[data-theme="puddle"], [data-theme-preview="puddle"] {
+  color-scheme: dark;
+  --bg-deep: #060909; --bg-base: #101a1c;
+  --surface-1: #192c30e0; --surface-2: #192c30b0; --surface-3: #9ccac72b;
+  --glass: #101a1cb0; --glass-heavy: #101a1cf5;
+  --border: #cce1e02b; --border-strong: #cce1e04a;
+  --text: #f6f3ed; --text-soft: #cce1e0; --text-muted: #9ab4b6;
+  --accent: #9ccac7; --accent-strong: #9ccac7; --accent-soft: #9ccac726; --cyan: #cce1e0;
+  --theme-primary-ink: #060909;
+  --theme-wallpaper: url("../assets/toad-puddle.webp"); --theme-wallpaper-position: center 58%;
+}
+:root[data-theme="velvet"], [data-theme-preview="velvet"] {
+  color-scheme: dark;
+  --bg-deep: #09070b; --bg-base: #19131e;
+  --surface-1: #2c2136e0; --surface-2: #2c2136b0; --surface-3: #c7a8cb2b;
+  --glass: #19131eb0; --glass-heavy: #19131ef5;
+  --border: #e2d1e42b; --border-strong: #e2d1e44a;
+  --text: #f6f3ed; --text-soft: #e2d1e4; --text-muted: #b5a2bc;
+  --accent: #c7a8cb; --accent-strong: #c7a8cb; --accent-soft: #c7a8cb26; --cyan: #e2d1e4;
+  --theme-primary-ink: #09070b;
+  --theme-wallpaper: url("../assets/toad-velvet.webp"); --theme-wallpaper-position: center 55%;
+}
+:root[data-theme="toad-gaze"], [data-theme-preview="toad-gaze"] {
+  color-scheme: dark;
+  --bg-deep: #080906; --bg-base: #161b11;
+  --surface-1: #253021e0; --surface-2: #253021b0; --surface-3: #b8c7962b;
+  --glass: #161b11b0; --glass-heavy: #161b11f5;
+  --border: #dce4ce2b; --border-strong: #dce4ce4a;
+  --text: #f6f3ed; --text-soft: #dce4ce; --text-muted: #a5b498;
+  --accent: #b8c796; --accent-strong: #b8c796; --accent-soft: #b8c79626; --cyan: #dce4ce;
+  --theme-primary-ink: #080906;
+  --theme-wallpaper: url("../assets/toad-gaze.webp"); --theme-wallpaper-position: center 60%;
+}
+/* Additional supplied photo backgrounds. */
+:root[data-theme="bullfrog"], [data-theme-preview="bullfrog"] {
+  color-scheme: dark;
+  --bg-deep: #14160e;
+  --bg-base: #22261a;
+  --surface-1: #2b3020e0;
+  --surface-2: #505b356b;
+  --surface-3: #bbce682b;
+  --glass: #1c2216b0;
+  --glass-heavy: #1b2116f5;
+  --border: #d5dfa52b;
+  --border-strong: #d5dfa54a;
+  --text: #f6f8e9;
+  --text-soft: #d9e0c4;
+  --text-muted: #b3bd9a;
+  --accent: #d0da83;
+  --accent-strong: #b4c45c;
+  --accent-soft: #d0da8326;
+  --cyan: #b0cab4;
+  --theme-primary-ink: #242c11;
+  --theme-wallpaper: url("../assets/toad-bullfrog.webp");
+  --theme-wallpaper-position: center 55%;
+}
+:root[data-theme="honey"], [data-theme-preview="honey"] {
+  color-scheme: light;
+  --bg-deep: #f3e7cd;
+  --bg-base: #fff5e1;
+  --surface-1: #fff9eaf0;
+  --surface-2: #e4cfa699;
+  --surface-3: #ab77332b;
+  --glass: #fff5e1d4;
+  --glass-heavy: #fff5e1f7;
+  --border: #73501c2b;
+  --border-strong: #73501c4a;
+  --text: #352a16;
+  --text-soft: #624d2c;
+  --text-muted: #78623e;
+  --accent: #8f551b;
+  --accent-strong: #75420c;
+  --accent-soft: #8f551b20;
+  --cyan: #517349;
+  --theme-primary-ink: #fff8e9;
+  --theme-wallpaper: url("../assets/toad-honey.jpg");
+  --theme-wallpaper-position: center 62%;
+  --success: #3b6b3a; --danger: #aa342a; --warning: #835316; --shadow-lg: 0 18px 55px #74502524; --shadow-soft: 0 8px 28px #74502516;
+}
+:root[data-theme="chorus"], [data-theme-preview="chorus"] {
+  color-scheme: dark;
+  --bg-deep: #10151a;
+  --bg-base: #202830;
+  --surface-1: #2b3540e0;
+  --surface-2: #5062726b;
+  --surface-3: #b4c6e02b;
+  --glass: #1a252fb0;
+  --glass-heavy: #19232cf5;
+  --border: #c9d8e32b;
+  --border-strong: #c9d8e34a;
+  --text: #f1f6fb;
+  --text-soft: #d0dce5;
+  --text-muted: #a6b9c7;
+  --accent: #c2d7ef;
+  --accent-strong: #9fbce0;
+  --accent-soft: #c2d7ef26;
+  --cyan: #becd9b;
+  --theme-primary-ink: #1b2c3b;
+  --theme-wallpaper: url("../assets/toad-chorus.webp");
+  --theme-wallpaper-position: center 55%;
+}
+:root[data-theme="cocoa"], [data-theme-preview="cocoa"] {
+  color-scheme: dark;
+  --bg-deep: #211812;
+  --bg-base: #30251c;
+  --surface-1: #443429e0;
+  --surface-2: #76563b6b;
+  --surface-3: #ddb07b2b;
+  --glass: #2b2019b0;
+  --glass-heavy: #291f18f5;
+  --border: #e5cab02b;
+  --border-strong: #e5cab04a;
+  --text: #fff4e9;
+  --text-soft: #e6d1ba;
+  --text-muted: #c7ae93;
+  --accent: #e4bd8f;
+  --accent-strong: #cca16d;
+  --accent-soft: #e4bd8f26;
+  --cyan: #c5cc9c;
+  --theme-primary-ink: #342317;
+  --theme-wallpaper: url("../assets/toad-cocoa.webp");
+  --theme-wallpaper-position: center 72%;
+}
+:root[data-theme="black-rain"], [data-theme-preview="black-rain"] {
+  color-scheme: dark;
+  --bg-deep: #070908;
+  --bg-base: #101512;
+  --surface-1: #18201be0;
+  --surface-2: #2b3c316b;
+  --surface-3: #b3c7b32b;
+  --glass: #0d1510b0;
+  --glass-heavy: #0d1510f5;
+  --border: #c7d5c72b;
+  --border-strong: #c7d5c74a;
+  --text: #f0f5f0;
+  --text-soft: #c8d5ca;
+  --text-muted: #9fb2a3;
+  --accent: #b9d0ac;
+  --accent-strong: #96b686;
+  --accent-soft: #b9d0ac26;
+  --cyan: #a6c2c9;
+  --theme-primary-ink: #152111;
+  --theme-wallpaper: url("../assets/toad-black-rain.webp");
+  --theme-wallpaper-position: center 24%;
+}
+/* Photo themes use bundled images, so they work offline. */
+:root[data-theme="golden-pond"], [data-theme-preview="golden-pond"] {
+  color-scheme: dark;
+  --bg-deep: #21170c;
+  --bg-base: #302214;
+  --surface-1: #41311de0;
+  --surface-2: #755c356b;
+  --surface-3: #e8c8752b;
+  --glass: #2b2014b0;
+  --glass-heavy: #291f14f5;
+  --border: #e9d6a72b;
+  --border-strong: #e9d6a74a;
+  --text: #fff6df;
+  --text-soft: #e6d7b7;
+  --text-muted: #c6b797;
+  --accent: #e8cb78;
+  --accent-strong: #cfad57;
+  --accent-soft: #e8cb7826;
+  --cyan: #bdce91;
+  --theme-primary-ink: #30230c;
+  --theme-wallpaper: url("../assets/toad-golden-pond.jpg");
+}
+:root[data-theme="savanna"], [data-theme-preview="savanna"] {
+  color-scheme: dark;
+  --bg-deep: #1d1c17;
+  --bg-base: #2c2a22;
+  --surface-1: #3b392ee0;
+  --surface-2: #6d69546b;
+  --surface-3: #d9ce9e2b;
+  --glass: #25251fb0;
+  --glass-heavy: #25251ff5;
+  --border: #e1d9b62b;
+  --border-strong: #e1d9b64a;
+  --text: #faf6e9;
+  --text-soft: #dcd8c6;
+  --text-muted: #bcb9a6;
+  --accent: #d6c493;
+  --accent-strong: #bca56d;
+  --accent-soft: #d6c49326;
+  --cyan: #b4c6b4;
+  --theme-primary-ink: #292615;
+  --theme-wallpaper: url("../assets/toad-savanna.jpg");
+}
+:root[data-theme="reeds"], [data-theme-preview="reeds"] {
+  color-scheme: dark;
+  --bg-deep: #0d1d16;
+  --bg-base: #172b20;
+  --surface-1: #203e2de0;
+  --surface-2: #3d6b4a6b;
+  --surface-3: #a9d0842b;
+  --glass: #14291eb0;
+  --glass-heavy: #14291ef5;
+  --border: #c5e6b52b;
+  --border-strong: #c5e6b54a;
+  --text: #f1f9e9;
+  --text-soft: #d0e1c5;
+  --text-muted: #a6bda1;
+  --accent: #c2de8c;
+  --accent-strong: #a4c66a;
+  --accent-soft: #c2de8c26;
+  --cyan: #9ed2c0;
+  --theme-primary-ink: #1d3015;
+  --theme-wallpaper: url("../assets/toad-reeds.jpg");
+}
 /* Static procedural wallpapers stay sharp at every window size. */
 :root[data-theme="aurora"], [data-theme-preview="aurora"] {
   color-scheme: dark;
@@ -48,7 +291,7 @@
 }
 
 /* Retheme the full interface, including surfaces that predate theme tokens. */
-:root:is([data-theme="aurora"], [data-theme="orbit"], [data-theme="sundown"], [data-theme="rosewater"]) {
+:root:is([data-theme="aurora"], [data-theme="orbit"], [data-theme="sundown"], [data-theme="rosewater"], [data-theme="golden-pond"], [data-theme="savanna"], [data-theme="reeds"], [data-theme="bullfrog"], [data-theme="honey"], [data-theme="chorus"], [data-theme="cocoa"], [data-theme="black-rain"], [data-theme="amber-toad"], [data-theme="obsidian"], [data-theme="bronze"], [data-theme="puddle"], [data-theme="velvet"], [data-theme="toad-gaze"]) {
   --reaction-own-bg: var(--accent-soft); --reaction-own-hover: var(--surface-3);
   --reaction-own-border: var(--accent); --reaction-own-text: var(--accent);
   --mention-bg: var(--accent-soft); --mention-text: var(--accent);
@@ -56,33 +299,33 @@
   --theme-workspace: color-mix(in srgb, var(--bg-base) 62%, transparent);
   --theme-field: color-mix(in srgb, var(--bg-base) 88%, transparent);
 }
-:root:is([data-theme="aurora"], [data-theme="orbit"], [data-theme="sundown"], [data-theme="rosewater"]) body {
+:root:is([data-theme="aurora"], [data-theme="orbit"], [data-theme="sundown"], [data-theme="rosewater"], [data-theme="golden-pond"], [data-theme="savanna"], [data-theme="reeds"], [data-theme="bullfrog"], [data-theme="honey"], [data-theme="chorus"], [data-theme="cocoa"], [data-theme="black-rain"], [data-theme="amber-toad"], [data-theme="obsidian"], [data-theme="bronze"], [data-theme="puddle"], [data-theme="velvet"], [data-theme="toad-gaze"]) body {
   background-color: var(--bg-deep); background-image: var(--theme-wallpaper); background-size: var(--theme-wallpaper-size, cover); background-attachment: fixed; background-repeat: var(--theme-wallpaper-repeat, no-repeat);
 }
-:root:is([data-theme="aurora"], [data-theme="orbit"], [data-theme="sundown"], [data-theme="rosewater"]) :is(.app-shell, .login-screen, .splash-screen) { background: transparent; }
-:root:is([data-theme="aurora"], [data-theme="orbit"], [data-theme="sundown"], [data-theme="rosewater"]) :is(.workspace-rail, .room-sidebar, .room-header, .composer, .dm-tab, .account-strip, .login-panel, .voice-channel-chat, .room-members) { background: var(--theme-pane); border-color: var(--border-strong); }
-:root:is([data-theme="aurora"], [data-theme="orbit"], [data-theme="sundown"], [data-theme="rosewater"]) .chat-workspace { background: var(--theme-workspace); }
-:root:is([data-theme="aurora"], [data-theme="orbit"], [data-theme="sundown"], [data-theme="rosewater"]) :is(.room-header, .chat-workspace, .login-panel) { backdrop-filter: blur(18px); }
-:root:is([data-theme="aurora"], [data-theme="orbit"], [data-theme="sundown"], [data-theme="rosewater"]) :is(.settings-dialog, .room-settings-dialog, .people-dialog, .identity-dialog, .gif-picker, .emoji-picker, .call-panel, .direct-call, .active-calls, .call-options > div, .voice-dock) { background: var(--glass-heavy); color: var(--text); border-color: var(--border-strong); }
-:root:is([data-theme="aurora"], [data-theme="orbit"], [data-theme="sundown"], [data-theme="rosewater"]) :is(.room-search, .auth-form input, .join-room input, .people-search input, .auth-mode, .registration-verification, .dm-add-button) { background: var(--theme-field); color: var(--text); }
-:root:is([data-theme="aurora"], [data-theme="orbit"], [data-theme="sundown"], [data-theme="rosewater"]) :is(.room-row, .channel-row, .rail-button).is-selected,
-:root:is([data-theme="aurora"], [data-theme="orbit"], [data-theme="sundown"], [data-theme="rosewater"]) :is(.dm-tab.is-selected, .rail-button.is-active) { background: var(--accent-soft); border-color: var(--border-strong); }
-:root:is([data-theme="aurora"], [data-theme="orbit"], [data-theme="sundown"], [data-theme="rosewater"]) :is(.message-row:hover, .dm-tab:hover) { background: var(--surface-3); }
-:root:is([data-theme="aurora"], [data-theme="orbit"], [data-theme="sundown"], [data-theme="rosewater"]) :is(.message-row__content p, .message-row__content header strong) { color: var(--text); text-shadow: none; }
-:root:is([data-theme="aurora"], [data-theme="orbit"], [data-theme="sundown"], [data-theme="rosewater"]) :is(.empty-chat, .timeline__inner) { text-shadow: none; }
-:root:is([data-theme="aurora"], [data-theme="orbit"], [data-theme="sundown"], [data-theme="rosewater"]) .composer-region { background: linear-gradient(transparent, var(--theme-pane)); }
-:root:is([data-theme="aurora"], [data-theme="orbit"], [data-theme="sundown"], [data-theme="rosewater"]) :is(.button--primary, .composer__send, .direct-call__answer) { color: var(--theme-primary-ink); background: var(--accent); border-color: var(--accent); }
-:root:is([data-theme="aurora"], [data-theme="orbit"], [data-theme="sundown"], [data-theme="rosewater"]) .button--secondary { color: var(--text); background: var(--surface-2); border-color: var(--border-strong); }
-:root:is([data-theme="aurora"], [data-theme="orbit"], [data-theme="sundown"], [data-theme="rosewater"]) .avatar { background: linear-gradient(145deg, var(--surface-3), var(--bg-base)); color: var(--text); }
-:root:is([data-theme="aurora"], [data-theme="orbit"], [data-theme="sundown"], [data-theme="rosewater"]) .desktop-titlebar { background: var(--bg-deep); color: var(--text-muted); }
-:root:is([data-theme="aurora"], [data-theme="orbit"], [data-theme="sundown"], [data-theme="rosewater"]) :is(.conversation-call, .conversation-call--voice) { background: radial-gradient(ellipse at center, var(--accent-soft), transparent 70%); }
+:root:is([data-theme="aurora"], [data-theme="orbit"], [data-theme="sundown"], [data-theme="rosewater"], [data-theme="golden-pond"], [data-theme="savanna"], [data-theme="reeds"], [data-theme="bullfrog"], [data-theme="honey"], [data-theme="chorus"], [data-theme="cocoa"], [data-theme="black-rain"], [data-theme="amber-toad"], [data-theme="obsidian"], [data-theme="bronze"], [data-theme="puddle"], [data-theme="velvet"], [data-theme="toad-gaze"]) :is(.app-shell, .login-screen, .splash-screen) { background: transparent; }
+:root:is([data-theme="aurora"], [data-theme="orbit"], [data-theme="sundown"], [data-theme="rosewater"], [data-theme="golden-pond"], [data-theme="savanna"], [data-theme="reeds"], [data-theme="bullfrog"], [data-theme="honey"], [data-theme="chorus"], [data-theme="cocoa"], [data-theme="black-rain"], [data-theme="amber-toad"], [data-theme="obsidian"], [data-theme="bronze"], [data-theme="puddle"], [data-theme="velvet"], [data-theme="toad-gaze"]) :is(.workspace-rail, .room-sidebar, .room-header, .composer, .dm-tab, .account-strip, .login-panel, .voice-channel-chat, .room-members) { background: var(--theme-pane); border-color: var(--border-strong); }
+:root:is([data-theme="aurora"], [data-theme="orbit"], [data-theme="sundown"], [data-theme="rosewater"], [data-theme="golden-pond"], [data-theme="savanna"], [data-theme="reeds"], [data-theme="bullfrog"], [data-theme="honey"], [data-theme="chorus"], [data-theme="cocoa"], [data-theme="black-rain"], [data-theme="amber-toad"], [data-theme="obsidian"], [data-theme="bronze"], [data-theme="puddle"], [data-theme="velvet"], [data-theme="toad-gaze"]) .chat-workspace { background: var(--theme-workspace); }
+:root:is([data-theme="aurora"], [data-theme="orbit"], [data-theme="sundown"], [data-theme="rosewater"], [data-theme="golden-pond"], [data-theme="savanna"], [data-theme="reeds"], [data-theme="bullfrog"], [data-theme="honey"], [data-theme="chorus"], [data-theme="cocoa"], [data-theme="black-rain"], [data-theme="amber-toad"], [data-theme="obsidian"], [data-theme="bronze"], [data-theme="puddle"], [data-theme="velvet"], [data-theme="toad-gaze"]) :is(.room-header, .chat-workspace, .login-panel) { backdrop-filter: blur(18px); }
+:root:is([data-theme="aurora"], [data-theme="orbit"], [data-theme="sundown"], [data-theme="rosewater"], [data-theme="golden-pond"], [data-theme="savanna"], [data-theme="reeds"], [data-theme="bullfrog"], [data-theme="honey"], [data-theme="chorus"], [data-theme="cocoa"], [data-theme="black-rain"], [data-theme="amber-toad"], [data-theme="obsidian"], [data-theme="bronze"], [data-theme="puddle"], [data-theme="velvet"], [data-theme="toad-gaze"]) :is(.settings-dialog, .room-settings-dialog, .people-dialog, .identity-dialog, .gif-picker, .emoji-picker, .call-panel, .direct-call, .active-calls, .call-options > div, .voice-dock) { background: var(--glass-heavy); color: var(--text); border-color: var(--border-strong); }
+:root:is([data-theme="aurora"], [data-theme="orbit"], [data-theme="sundown"], [data-theme="rosewater"], [data-theme="golden-pond"], [data-theme="savanna"], [data-theme="reeds"], [data-theme="bullfrog"], [data-theme="honey"], [data-theme="chorus"], [data-theme="cocoa"], [data-theme="black-rain"], [data-theme="amber-toad"], [data-theme="obsidian"], [data-theme="bronze"], [data-theme="puddle"], [data-theme="velvet"], [data-theme="toad-gaze"]) :is(.room-search, .auth-form input, .join-room input, .people-search input, .auth-mode, .registration-verification, .dm-add-button) { background: var(--theme-field); color: var(--text); }
+:root:is([data-theme="aurora"], [data-theme="orbit"], [data-theme="sundown"], [data-theme="rosewater"], [data-theme="golden-pond"], [data-theme="savanna"], [data-theme="reeds"], [data-theme="bullfrog"], [data-theme="honey"], [data-theme="chorus"], [data-theme="cocoa"], [data-theme="black-rain"], [data-theme="amber-toad"], [data-theme="obsidian"], [data-theme="bronze"], [data-theme="puddle"], [data-theme="velvet"], [data-theme="toad-gaze"]) :is(.room-row, .rail-button).is-selected,
+:root:is([data-theme="aurora"], [data-theme="orbit"], [data-theme="sundown"], [data-theme="rosewater"], [data-theme="golden-pond"], [data-theme="savanna"], [data-theme="reeds"], [data-theme="bullfrog"], [data-theme="honey"], [data-theme="chorus"], [data-theme="cocoa"], [data-theme="black-rain"], [data-theme="amber-toad"], [data-theme="obsidian"], [data-theme="bronze"], [data-theme="puddle"], [data-theme="velvet"], [data-theme="toad-gaze"]) :is(.dm-tab.is-selected, .rail-button.is-active) { background: var(--accent-soft); border-color: var(--border-strong); }
+:root:is([data-theme="aurora"], [data-theme="orbit"], [data-theme="sundown"], [data-theme="rosewater"], [data-theme="golden-pond"], [data-theme="savanna"], [data-theme="reeds"], [data-theme="bullfrog"], [data-theme="honey"], [data-theme="chorus"], [data-theme="cocoa"], [data-theme="black-rain"], [data-theme="amber-toad"], [data-theme="obsidian"], [data-theme="bronze"], [data-theme="puddle"], [data-theme="velvet"], [data-theme="toad-gaze"]) :is(.message-row:hover, .dm-tab:hover) { background: var(--surface-3); }
+:root:is([data-theme="aurora"], [data-theme="orbit"], [data-theme="sundown"], [data-theme="rosewater"], [data-theme="golden-pond"], [data-theme="savanna"], [data-theme="reeds"], [data-theme="bullfrog"], [data-theme="honey"], [data-theme="chorus"], [data-theme="cocoa"], [data-theme="black-rain"], [data-theme="amber-toad"], [data-theme="obsidian"], [data-theme="bronze"], [data-theme="puddle"], [data-theme="velvet"], [data-theme="toad-gaze"]) :is(.message-row__content p, .message-row__content header strong) { color: var(--text); text-shadow: none; }
+:root:is([data-theme="aurora"], [data-theme="orbit"], [data-theme="sundown"], [data-theme="rosewater"], [data-theme="golden-pond"], [data-theme="savanna"], [data-theme="reeds"], [data-theme="bullfrog"], [data-theme="honey"], [data-theme="chorus"], [data-theme="cocoa"], [data-theme="black-rain"], [data-theme="amber-toad"], [data-theme="obsidian"], [data-theme="bronze"], [data-theme="puddle"], [data-theme="velvet"], [data-theme="toad-gaze"]) :is(.empty-chat, .timeline__inner) { text-shadow: none; }
+:root:is([data-theme="aurora"], [data-theme="orbit"], [data-theme="sundown"], [data-theme="rosewater"], [data-theme="golden-pond"], [data-theme="savanna"], [data-theme="reeds"], [data-theme="bullfrog"], [data-theme="honey"], [data-theme="chorus"], [data-theme="cocoa"], [data-theme="black-rain"], [data-theme="amber-toad"], [data-theme="obsidian"], [data-theme="bronze"], [data-theme="puddle"], [data-theme="velvet"], [data-theme="toad-gaze"]) .composer-region { background: linear-gradient(transparent, var(--theme-pane)); }
+:root:is([data-theme="aurora"], [data-theme="orbit"], [data-theme="sundown"], [data-theme="rosewater"], [data-theme="golden-pond"], [data-theme="savanna"], [data-theme="reeds"], [data-theme="bullfrog"], [data-theme="honey"], [data-theme="chorus"], [data-theme="cocoa"], [data-theme="black-rain"], [data-theme="amber-toad"], [data-theme="obsidian"], [data-theme="bronze"], [data-theme="puddle"], [data-theme="velvet"], [data-theme="toad-gaze"]) :is(.button--primary, .composer__send, .direct-call__answer) { color: var(--theme-primary-ink); background: var(--accent); border-color: var(--accent); }
+:root:is([data-theme="aurora"], [data-theme="orbit"], [data-theme="sundown"], [data-theme="rosewater"], [data-theme="golden-pond"], [data-theme="savanna"], [data-theme="reeds"], [data-theme="bullfrog"], [data-theme="honey"], [data-theme="chorus"], [data-theme="cocoa"], [data-theme="black-rain"], [data-theme="amber-toad"], [data-theme="obsidian"], [data-theme="bronze"], [data-theme="puddle"], [data-theme="velvet"], [data-theme="toad-gaze"]) .button--secondary { color: var(--text); background: var(--surface-2); border-color: var(--border-strong); }
+:root:is([data-theme="aurora"], [data-theme="orbit"], [data-theme="sundown"], [data-theme="rosewater"], [data-theme="golden-pond"], [data-theme="savanna"], [data-theme="reeds"], [data-theme="bullfrog"], [data-theme="honey"], [data-theme="chorus"], [data-theme="cocoa"], [data-theme="black-rain"], [data-theme="amber-toad"], [data-theme="obsidian"], [data-theme="bronze"], [data-theme="puddle"], [data-theme="velvet"], [data-theme="toad-gaze"]) .avatar { background: linear-gradient(145deg, var(--surface-3), var(--bg-base)); color: var(--text); }
+:root:is([data-theme="aurora"], [data-theme="orbit"], [data-theme="sundown"], [data-theme="rosewater"], [data-theme="golden-pond"], [data-theme="savanna"], [data-theme="reeds"], [data-theme="bullfrog"], [data-theme="honey"], [data-theme="chorus"], [data-theme="cocoa"], [data-theme="black-rain"], [data-theme="amber-toad"], [data-theme="obsidian"], [data-theme="bronze"], [data-theme="puddle"], [data-theme="velvet"], [data-theme="toad-gaze"]) .desktop-titlebar { background: var(--bg-deep); color: var(--text-muted); }
+:root:is([data-theme="aurora"], [data-theme="orbit"], [data-theme="sundown"], [data-theme="rosewater"], [data-theme="golden-pond"], [data-theme="savanna"], [data-theme="reeds"], [data-theme="bullfrog"], [data-theme="honey"], [data-theme="chorus"], [data-theme="cocoa"], [data-theme="black-rain"], [data-theme="amber-toad"], [data-theme="obsidian"], [data-theme="bronze"], [data-theme="puddle"], [data-theme="velvet"], [data-theme="toad-gaze"]) :is(.conversation-call, .conversation-call--voice) { background: radial-gradient(ellipse at center, var(--accent-soft), transparent 70%); }
 :root[data-theme="rosewater"] :is(.themed-select__trigger, .settings-content .themed-select__trigger) { color-scheme: light; }
 :root[data-theme="rosewater"] :is(.call-panel small, .voice-dock__status small, .voice-dock__identity small) { color: var(--text-muted); }
 
 /* Theme cards show the actual wallpaper and an interface sample. */
 .settings-theme-options { grid-template-columns: repeat(auto-fit, minmax(min(100%, 175px), 1fr)); }
 .settings-theme { min-width: 0; }
-.settings-theme > .theme-preview { display: flex; position: relative; gap: 5px; height: 92px; padding: 10px; overflow: hidden; background-image: var(--theme-wallpaper); background-size: var(--theme-wallpaper-size, cover); background-position: center; border: 1px solid var(--border); }
+.settings-theme > .theme-preview { display: flex; position: relative; gap: 5px; height: 92px; padding: 10px; overflow: hidden; background-image: var(--theme-wallpaper); background-size: var(--theme-wallpaper-size, cover); background-position: var(--theme-wallpaper-position, center); border: 1px solid var(--border); }
 [data-theme-preview="forest"] { --theme-wallpaper: url("../assets/toad-forest.png"); --glass: #10273099; --accent: #b1dbce; }
 [data-theme-preview="dark"] { --theme-wallpaper: linear-gradient(135deg, #252c35, #10151c); --glass: #1b2536d9; --accent: #b1dbce; }
 [data-theme-preview="light"] { --theme-wallpaper: linear-gradient(135deg, #fff, #cfdcd8); --glass: #ffffffd9; --accent: #34745f; }
@@ -96,3 +339,7 @@
 .theme-preview__check { position: absolute; right: 6px; bottom: 6px; padding: 3px; width: 22px; height: 22px; border-radius: 50%; background: var(--accent); color: var(--bg-base); }
 .settings-theme strong { display: block; font-size: 12px; }
 .settings-theme small { display: block; min-height: 30px; margin-top: 5px; color: var(--text-muted); font-size: 10px; line-height: 1.5; }
+
+:root:is([data-theme="golden-pond"], [data-theme="savanna"], [data-theme="reeds"], [data-theme="bullfrog"], [data-theme="honey"], [data-theme="chorus"], [data-theme="cocoa"], [data-theme="black-rain"], [data-theme="amber-toad"], [data-theme="obsidian"], [data-theme="bronze"], [data-theme="puddle"], [data-theme="velvet"], [data-theme="toad-gaze"]) body { background-position: var(--theme-wallpaper-position, center); }
+
+:root[data-theme="honey"] :is(.themed-select__trigger, .settings-content .themed-select__trigger) { color-scheme: light; }

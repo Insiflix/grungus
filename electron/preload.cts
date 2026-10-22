@@ -24,7 +24,7 @@ const bridge: DesktopBridge = {
       return () => { ipcRenderer.removeListener("window:state-changed", callback); };
     },
   },
-  clipboard: { writeText: (text: string) => ipcRenderer.invoke("clipboard:write-text", text) },
+  clipboard: { writeText: (text: string) => ipcRenderer.invoke("clipboard:write-text", text), writeImage: (png: Uint8Array) => ipcRenderer.invoke("clipboard:write-image", png) },
   session: {
     load: () => ipcRenderer.invoke("matrix-session:load"),
     save: (value: PersistedMatrixSession) =>

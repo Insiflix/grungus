@@ -73,3 +73,43 @@ describe("attachment drafts", () => {
     expect(onUpload).toHaveBeenCalledTimes(3);
   });
 });
+
+describe("clipboard attachments", () => {
+  it("stages pasted images and files once, keeps the caption, and uploads only on Send", async () => {
+    const { onSend, onUpload } = setup();
+    const input = screen.getByRole("combobox");
+    fireEvent.change(input, { target: { value: "My caption" } });
+    const image = new File(["image"], "clipboard.png", { type: "image/png" });
+    const document = new File(["PDF"], "document.pdf", { type: "application/pdf" });
+    const files = [image, document];
+    expect(fireEvent.paste(input, { clipboardData: { files, items: files.map(file => ({ kind: "file", getAsFile: () => file })) } })).toBe(false);
+    expect(screen.getByAltText("Preview of clipboard.png")).toBeTruthy();
+    expect(screen.getByText("document.pdf")).toBeTruthy();
+    expect(screen.getAllByRole("button", { name: /^Remove / })).toHaveLength(2);
+    expect((input as HTMLTextAreaElement).value).toBe("My caption");
+    expect(onUpload).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("button", { name: "Send message" }));
+    await waitFor(() => expect(onUpload).toHaveBeenCalledTimes(2));
+    expect(onSend).toHaveBeenCalledWith("My caption");
+    expect(onUpload).toHaveBeenNthCalledWith(1, image, expect.any(Function));
+    expect(onUpload).toHaveBeenNthCalledWith(2, document, expect.any(Function));
+  });
+  it("accepts image clipboard items even if the file list is empty", () => {
+    setup();
+    const image = new File(["image"], "screenshot.png", { type: "image/png" });
+    fireEvent.paste(screen.getByRole("combobox"), { clipboardData: { files: [], items: [{ kind: "string", getAsFile: () => null }, { kind: "file", getAsFile: () => image }] } });
+    expect(screen.getByAltText("Preview of screenshot.png")).toBeTruthy();
+  });
+  it("preserves normal text pasting and ignores paste outside the composer", () => {
+    setup();
+    const clipboardData = { files: [], items: [{ kind: "string" }], getData: () => "Normal text" };
+    expect(fireEvent.paste(screen.getByRole("combobox"), { clipboardData })).toBe(true);
+    expect(fireEvent.paste(screen.getByTestId("history"), { clipboardData: { files: [new File(["pdf"], "outside.pdf")] } })).toBe(true);
+    expect(screen.queryByText("outside.pdf")).toBeNull();
+  });
+  it("does not add attachments when uploads are unavailable", () => {
+    render(<MessageComposer roomName="Room" onTyping={vi.fn()} onSend={vi.fn()} />);
+    expect(fireEvent.paste(screen.getByRole("combobox"), { clipboardData: { files: [new File(["file"], "blocked.txt")] } })).toBe(true);
+    expect(screen.queryByText("blocked.txt")).toBeNull();
+  });
+});

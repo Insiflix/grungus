@@ -68,3 +68,13 @@ it("shows a themed tooltip on hover or focus and dismisses it on Escape", () => 
   fireEvent.focusIn(button);act(() => vi.advanceTimersByTime(1));expect(screen.getByRole("tooltip")).toBeTruthy();
   expect(button.hasAttribute("title")).toBe(false);
 });
+
+it("refreshes a visible connection tooltip when latency changes", async () => {
+  vi.useFakeTimers();
+  const view = render(<><ThemedTooltips /><button data-tooltip="Ping unavailable">Connection</button></>);
+  fireEvent.pointerOver(screen.getByRole("button"));
+  act(() => vi.advanceTimersByTime(450));
+  view.rerender(<><ThemedTooltips /><button data-tooltip="Ping: 37 ms">Connection</button></>);
+  await act(async () => {});
+  expect(screen.getByRole("tooltip").textContent).toBe("Ping: 37 ms");
+});

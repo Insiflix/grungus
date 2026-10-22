@@ -1,3 +1,4 @@
+import { membershipNotices } from "../../domain/matrix/MembershipNotices";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { IMatrixAuthProvider } from "../../domain/matrix/IMatrixAuthProvider";
 import type { IMatrixClient } from "../../domain/matrix/IMatrixClient";
@@ -14,6 +15,7 @@ import type {
 import { MatrixRuntime } from "./MatrixRuntime";
 
 class FakeClient implements IMatrixClient {
+  observeUserVerification = vi.fn(() => () => {});
   createPoll = vi.fn();
   observePoll = vi.fn(() => () => {});
   votePoll = vi.fn();
@@ -354,6 +356,7 @@ describe("MatrixRuntime event bridge", () => {
   };
 
   it("keeps invitation selection out of the timeline until acceptance succeeds", async () => {
+    membershipNotices.clear();
     const client = new FakeClient();
     const runtime = new MatrixRuntime(client, auth);
     client.rooms = [invite]; client.emit("roomsChanged", client.rooms);
@@ -365,6 +368,8 @@ describe("MatrixRuntime event bridge", () => {
     expect(await runtime.joinRoom(invite.id)).toBe(true);
     expect(runtime.getSnapshot().selectedRoomId).toBe(invite.id);
     expect(runtime.getSnapshot().rooms[0].membership).toBe("join");
+    expect(membershipNotices.getSnapshot()).toMatchObject({ action: "join", kind: "room", name: invite.name });
+    membershipNotices.clear();
   });
 
   it("preserves invitations on network failure and removes successful declines", async () => {

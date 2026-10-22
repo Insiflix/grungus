@@ -1,3 +1,4 @@
+import { Blob as NodeBlob } from "node:buffer";
 import { StrictMode } from "react";
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
@@ -143,4 +144,51 @@ it("keeps a usable play button when autoplay is blocked", async () => {
   const view = render(<AttachmentMediaContext.Provider value={vi.fn().mockResolvedValue(new Blob(["video"], { type: "video/mp4" }))}><AttachmentMessage attachment={{ name: "clip.mp4", url: "mxc://example/video", mimeType: "video/mp4" }} inline /></AttachmentMediaContext.Provider>);
   fireEvent.click(screen.getByRole("button", { name: "Play video" })); await waitFor(() => expect(view.container.querySelector("video")).toBeTruthy());
   expect(screen.getByRole("button", { name: "Play video" })).toBeTruthy(); expect(screen.queryByRole("alert")).toBeNull();
+});
+
+it("copies decrypted attachment pixels from thumbnail and viewer menus without downloading twice", async () => {
+  const png = new NodeBlob([new Uint8Array([1, 2, 3])], { type: "image/png" });
+  const load = vi.fn().mockResolvedValue(png);
+  const writeImage = vi.fn().mockResolvedValue(undefined);
+  vi.stubGlobal("desktop", { clipboard: { writeImage } });
+  render(<AttachmentMediaContext.Provider value={load}><AttachmentMessage attachment={attachment} inline /></AttachmentMediaContext.Provider>);
+  const thumbnail = await screen.findByRole("button", { name: "View photo.png" });
+  fireEvent.contextMenu(thumbnail);
+  fireEvent.click(screen.getByRole("menuitem", { name: "Copy image" }));
+  await waitFor(() => expect(writeImage).toHaveBeenCalledWith(new Uint8Array([1, 2, 3])));
+  fireEvent.click(thumbnail);
+  fireEvent.contextMenu(screen.getByRole("dialog"));
+  fireEvent.click(screen.getByRole("menuitem", { name: "Copy image" }));
+  await waitFor(() => expect(writeImage).toHaveBeenCalledTimes(2));
+  expect(load).toHaveBeenCalledOnce();
+  writeImage.mockRejectedValueOnce(new Error("Unavailable"));
+  fireEvent.contextMenu(screen.getByRole("dialog"));
+  fireEvent.click(screen.getByRole("menuitem", { name: "Copy image" }));
+  await waitFor(() => expect(screen.getAllByRole("alert")[0].textContent).toContain("Image could not be copied"));
+});
+
+describe("image layout reservation", () => {
+  it.each([
+    [1600, 900, 400, "400 / 225"],
+    [600, 1200, 190, "190 / 380"],
+    [80, 60, 80, "80 / 60"],
+    [0, -1, 320, "320 / 240"],
+  ])("reserves %sx%s image space before fetch and through decode", async (width, height, expectedWidth, ratio) => {
+    let resolve!: (blob: Blob) => void;
+    const load = vi.fn(() => new Promise<Blob>(done => { resolve = done; }));
+    const view = render(<AttachmentMediaContext.Provider value={load}><AttachmentMessage attachment={{ ...attachment, url: `mxc://sizes/${width}`, width, height }} inline /></AttachmentMediaContext.Provider>);
+    const frame = view.container.querySelector<HTMLElement>('.message-attachment__frame')!;
+    expect(frame.style.width).toBe(`${expectedWidth}px`);
+    expect(frame.style.aspectRatio).toBe(ratio);
+    expect(screen.getByRole('status').getAttribute('aria-label')).toBe('Loading photo.png');
+    const style = frame.getAttribute('style');
+    resolve(new Blob(['image']));
+    const image = await screen.findByAltText('photo.png');
+    expect(screen.getByRole('status')).toBeTruthy();
+    expect((image as HTMLElement).style.opacity).toBe('0');
+    fireEvent.load(image);
+    expect(screen.queryByRole('status')).toBeNull();
+    expect(frame.getAttribute('style')).toBe(style);
+    expect((image as HTMLElement).style.opacity).toBe('1');
+  });
 });

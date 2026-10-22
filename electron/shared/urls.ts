@@ -11,3 +11,10 @@ export function secureExternalUrl(value: string): string {
   if (url.protocol !== "https:" || url.username || url.password) throw new Error("Only HTTPS URLs without embedded credentials may be opened.");
   return url.href;
 }
+
+/** Message links may open ordinary web pages or an email draft. Auth URLs remain HTTPS-only. */
+export function secureMessageUrl(value: string): string {
+  const url = new URL(value);
+  if (!["https:", "http:", "mailto:"].includes(url.protocol) || url.username || url.password) throw new Error("Unsupported message link.");
+  return url.href;
+}

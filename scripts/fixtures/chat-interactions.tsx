@@ -75,6 +75,25 @@ Object.assign(window, { async checkChatInteractions() {
   await painted();
   if (uploads.join(",") !== "grungus.png,notes.txt,report.pdf" || text.length || document.querySelector(".attachment-draft")) throw new Error("Attachment send did not complete cleanly");
   return { uploaded: uploads };
+}, async checkClipboardPaste() {
+  for (let i = 0; i < 100 && !document.querySelector('.attachment-draft img'); i++) await new Promise(resolve => setTimeout(resolve, 20));
+  const image = document.querySelector<HTMLImageElement>('.attachment-draft img');
+  if (!image) throw new Error('Native clipboard image was not staged');
+  await image.decode();
+  if (uploads.length !== 3 || document.querySelectorAll('.attachment-draft__card').length !== 1) throw new Error('Clipboard image must stage exactly once without upload');
+  document.querySelector<HTMLButtonElement>('.attachment-draft__remove')!.click();
+  await painted();
+  const data = new DataTransfer();
+  data.items.add(new File(['PDF'], 'pasted.pdf', { type: 'application/pdf' }));
+  data.items.add(new File([await (await fetch('/grungus.png')).blob()], 'pasted.png', { type: 'image/png' }));
+  const input = document.querySelector<HTMLTextAreaElement>('textarea')!;
+  const event = new ClipboardEvent('paste', { bubbles: true, cancelable: true, clipboardData: data });
+  input.dispatchEvent(event);
+  await painted();
+  if (!event.defaultPrevented || document.querySelectorAll('.attachment-draft__card').length !== 2 || uploads.length !== 3) throw new Error('Pasted files must use the attachment draft queue');
+  for (const button of document.querySelectorAll<HTMLButtonElement>('.attachment-draft__remove')) button.click();
+  await painted();
+  return { nativeImage: true, files: true, previewOnly: true, duplicateFree: true };
 }, async checkUploadLimit() {
   const input = document.querySelector<HTMLInputElement>('input[type="file"]')!;
   const selection = new DataTransfer(); selection.items.add(new File([new Uint8Array(2 * 1024 * 1024 + 1)], "too-large.bin"));
@@ -86,6 +105,31 @@ Object.assign(window, { async checkChatInteractions() {
   await painted();
   if (uploads.length !== 3) throw new Error("Oversized file reached upload handler");
   return { oversizedBlocked: true };
+}, async checkImageSkeletons() {
+  const blob = await (await fetch('/grungus.png')).blob();
+  const checks: { width: number; height: number; narrow: boolean }[] = [];
+  for (const [width, height] of [[1600, 900], [600, 1200], [80, 60], [0, 0]]) {
+    for (const narrow of [false, true]) {
+      let release!: (blob: Blob) => void;
+      const load = () => new Promise<Blob>(resolve => { release = resolve; });
+      flushSync(() => root.render(<AttachmentMediaContext.Provider value={load}><div style={{ width: narrow ? 180 : 600 }}><AttachmentMessage key={`${width}-${narrow}`} attachment={{ url: `mxc://skeleton/${width}-${narrow}`, name: 'delayed.png', mimeType: 'image/png', width, height }} inline /><p id="following-text">Text after image</p></div></AttachmentMediaContext.Provider>));
+      await painted();
+      const frame = document.querySelector('.message-attachment__frame')!;
+      const before = frame.getBoundingClientRect();
+      const textTop = document.querySelector('#following-text')!.getBoundingClientRect().top;
+      if (!document.querySelector('.message-attachment__skeleton') || before.height < 1 || before.width > (narrow ? 180 : 400)) throw new Error('Image skeleton does not reserve usable space');
+      const ratio = width && height ? width / height : 4 / 3;
+      if (Math.abs(before.width / before.height - ratio) > .02) throw new Error('Skeleton has wrong aspect ratio');
+      release(blob);
+      await painted();
+      const image = document.querySelector<HTMLImageElement>('.message-attachment__image img')!;
+      await image.decode(); await painted();
+      const after = frame.getBoundingClientRect();
+      if (Math.abs(after.height - before.height) > .1 || Math.abs(document.querySelector('#following-text')!.getBoundingClientRect().top - textTop) > .1 || document.querySelector('.message-attachment__skeleton')) throw new Error('Image decoding shifted following text');
+      checks.push({ width, height, narrow });
+    }
+  }
+  return { layouts: checks.length, correctAspectRatios: true, textShift: 0 };
 }, async checkImageViewer() {
   const blob = await (await fetch(forestUrl)).blob();
   const load = async () => blob;
@@ -100,7 +144,9 @@ Object.assign(window, { async checkChatInteractions() {
   thumbnail.dispatchEvent(new MouseEvent("contextmenu", { bubbles: true, cancelable: true, clientX: 150, clientY: 180 }));
   await painted();
   if (!document.querySelector('[role="menu"]')) throw new Error("Right-click image actions missing");
-  document.querySelector('[role="menu"]')!.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
+  const copyThumbnail = [...document.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].find(button => button.textContent?.startsWith("Copy image "))!;
+  if (!copyThumbnail) throw new Error("Copy image missing from thumbnail menu");
+  copyThumbnail.click(); await painted();
   thumbnail.focus(); thumbnail.click();
   await painted();
   const viewer = document.querySelector<HTMLDialogElement>(".image-viewer[open]")!;
@@ -129,11 +175,15 @@ Object.assign(window, { async checkChatInteractions() {
   viewer.querySelector<HTMLButtonElement>('[aria-label="More image options"]')!.click();
   await painted();
   if (!viewer.querySelector('[role="menu"]')) throw new Error("Image menu rendered outside the modal top layer");
-  viewer.querySelector('[role="menu"]')!.dispatchEvent(new KeyboardEvent("keydown", { key: "Escape", bubbles: true, cancelable: true }));
+  const copyViewer = [...viewer.querySelectorAll<HTMLButtonElement>('[role="menuitem"]')].find(button => button.textContent?.startsWith("Copy image "))!;
+  if (!copyViewer) throw new Error("Copy image missing from viewer menu");
+  copyViewer.click();
+  await new Promise(resolve => setTimeout(resolve, 200));
+  if (viewer.querySelector('[role="alert"]')) throw new Error("Image copy failed");
   await painted();
   return { imageWidth: Math.round(bounds.width), imageHeight: Math.round(bounds.height), viewer: true, zoomRatio, animated: true };
 }, async checkSmallImageZoom() {
-  flushSync(() => root.render(<ImageViewer src="/grungus.png" name="small.png" onClose={() => {}} onDownload={() => {}} onCopyLink={() => {}} downloading={false} error="" />));
+  flushSync(() => root.render(<ImageViewer src="/grungus.png" name="small.png" onClose={() => {}} onDownload={() => {}} onCopy={() => {}} onCopyLink={() => {}} downloading={false} error="" />));
   await painted();
   const image = document.querySelector<HTMLImageElement>(".image-viewer__image img")!;
   await image.decode();
@@ -236,6 +286,7 @@ Object.assign(window, { async checkInlineSearch() {
 Object.assign(window, {
   async showTheme(theme: Theme = "aurora") {
     preferences.update({theme}); flushSync(() => root.render(<ThemeFixture />));await painted();
+    document.querySelector(`.settings-theme--${theme}`)?.scrollIntoView({ block: "nearest" }); await painted();
     await Promise.all(document.getAnimations().filter(animation => animation.effect?.getTiming().iterations !== Infinity).map(animation => animation.finished.catch(() => {})));
   },
   async checkThemes() {
@@ -252,7 +303,7 @@ Object.assign(window, {
       const cards=[...document.querySelectorAll<HTMLElement>(".settings-theme")];
       for(const card of cards) {const rect=card.getBoundingClientRect();if(rect.width < 100 || rect.right > innerWidth || card.scrollWidth > rect.width+1) throw new Error("Theme card overflow: "+theme.id);}
       const popupColor=style.getPropertyValue("--glass-heavy").trim();if(!popupColor) throw new Error("Missing overlay surface");
-      if(["aurora","orbit","sundown","rosewater"].includes(theme.id)) {
+      if(["aurora","orbit","sundown","rosewater","golden-pond","savanna","reeds","bullfrog","honey","chorus","cocoa","black-rain"].includes(theme.id)) {
         if(getComputedStyle(document.body).backgroundImage.includes("toad-forest")) throw new Error("Forest wallpaper leaked into "+theme.id);
         if(!style.getPropertyValue("--theme-wallpaper").trim()) throw new Error("Missing theme wallpaper");
       }
@@ -319,5 +370,24 @@ Object.assign(window, {
     if(document.querySelector('select,datalist,input[type="date"],input[type="time"],button[title]')) throw new Error("Native controls remain");
     document.querySelector<HTMLButtonElement>('[aria-label="Choose demo date"]')!.click();await painted();
     return {modalDropdown:true,modalCalendar:true,nestedMonthPicker:true,escape:true,tooltip:true,lightTheme:true,noNativeControls:true};
+  }
+});
+
+Object.assign(window, {
+  async checkMessageLinks() {
+    const message: MatrixMessage = { id: "$links", roomId: "!links", sender: { id: "@alice:test", displayName: "Alice", avatarUrl: null }, timestamp: 1, type: "text", body: "Visit https://example.org/path?q=1 or www.example.com. Email alice@example.org. `https://literal.example.org`", edited: false, replyTo: null, reactions: [], sendState: "sent", isOwn: false, isRedacted: false };
+    flushSync(() => root.render(<DesktopFrame><PreferenceEffects /><article className="message-row"><div className="message-row__content"><MessageText message={message} convertEmoji /></div></article></DesktopFrame>));
+    await painted();
+    const links = [...document.querySelectorAll<HTMLAnchorElement>(".message-body-text a")];
+    if (links.length !== 3 || links[0].href !== "https://example.org/path?q=1" || links[1].href !== "https://www.example.com/" || links[2].href !== "mailto:alice@example.org") throw new Error("Bare links did not become clickable");
+    if (document.querySelector("code a")) throw new Error("Code must remain literal");
+    for (const theme of themes) {
+      document.documentElement.dataset.theme = theme.id; await painted();
+      const style = getComputedStyle(links[0]);
+      if (!style.textDecorationLine.includes("underline") || style.color === getComputedStyle(links[0].parentElement!).color) throw new Error("Link is not visibly distinct in " + theme.id);
+    }
+    document.documentElement.dataset.theme = "forest"; await painted();
+    const rect = links[0].getBoundingClientRect();
+    return { links: links.length, themes: themes.length, x: Math.round(rect.left + 10), y: Math.round(rect.top + rect.height / 2) };
   }
 });

@@ -1,9 +1,9 @@
 import { useLayoutEffect, useRef } from "react";
 import { createPortal } from "react-dom";
-import { Download, Expand, Link } from "lucide-react";
+import { Copy, Download, Expand, Link } from "lucide-react";
 
-export function ImageActionsMenu({ position, onClose, onDownload, onView, onCopyLink, downloading, portalTarget }: {
-  position: { x: number; y: number }; onClose(): void; onDownload(): void; onView(): void; onCopyLink(): void; downloading: boolean; portalTarget?: HTMLElement;
+export function ImageActionsMenu({ position, onClose, onDownload, onView, onCopy, onCopyLink, downloading, portalTarget }: {
+  position: { x: number; y: number }; onClose(): void; onDownload(): void; onView(): void; onCopy(): void; onCopyLink(): void; downloading: boolean; portalTarget?: HTMLElement;
 }) {
   const menu = useRef<HTMLDivElement>(null);
   useLayoutEffect(() => {
@@ -31,6 +31,7 @@ export function ImageActionsMenu({ position, onClose, onDownload, onView, onCopy
   }}>
     <button role="menuitem" type="button" onClick={() => run(onView)}>View full size <Expand size={17} /></button>
     <button role="menuitem" type="button" disabled={downloading} onClick={() => run(onDownload)}>Download image <Download size={17} /></button>
+    <button role="menuitem" type="button" onClick={() => run(onCopy)}>Copy image <Copy size={17} /></button>
     <button role="menuitem" type="button" onClick={() => run(onCopyLink)}>Copy image link <Link size={17} /></button>
   </div>, portalTarget ?? document.body);
 }

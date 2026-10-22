@@ -97,3 +97,10 @@ describe("MatrixRoomMapper", () => {
     });
   });
 });
+
+it.each([[100, "join", true], [50, "join", false], [0, "join", false], [100, "leave", false]] as const)("maps channel admin level %s and membership %s to management=%s", (level, membership, expected) => {
+  const state = { getStateEvents: (type: string) => type === "m.room.power_levels" ? { getContent: () => ({ users: { "@me:test": level } }) } : undefined };
+  const room = { roomId: "!channel:test", name: "Channel", getLiveTimeline: () => ({ getState: () => state }), getMxcAvatarUrl: () => null, getUnreadNotificationCount: () => 0, hasEncryptionStateEvent: () => true, getMyMembership: () => membership, getJoinedMemberCount: () => 2, getMember: () => ({ powerLevel: 100 }) } as unknown as Room;
+  const client = { getUserId: () => "@me:test" } as unknown as MatrixClient;
+  expect(new MatrixRoomMapper(client).map(room).canManage).toBe(expected);
+});
