@@ -65,6 +65,7 @@ export function ChatShell() {
     return () => { disposed = true; clearInterval(timer); };
   }, [spaceSignature, refreshSpace]);
   useEffect(() => { matrixNotifications.viewedRoom = selectedRoomId && !hiddenVoiceChats.has(selectedRoomId) ? selectedRoomId : null; return () => { matrixNotifications.viewedRoom = null; }; }, [selectedRoomId, hiddenVoiceChats]);
+  useEffect(() => window.desktop?.notifications?.onOpenRoom(selectRoom), [selectRoom]);
   useEffect(() => {
     const open = (event: Event) => { const id: unknown = (event as CustomEvent).detail; if (typeof id === "string") selectRoom(id); };
     window.addEventListener("grungus:open-room", open);

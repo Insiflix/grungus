@@ -13,6 +13,15 @@ ipcRenderer.on("matrix-auth:callback", (_event, url: string) => {
 });
 
 const bridge: DesktopBridge = {
+  notifications: {
+    isSupported: () => ipcRenderer.invoke("notifications:supported"),
+    show: value => ipcRenderer.invoke("notifications:show", value),
+    onOpenRoom: listener => {
+      const callback = (_event: Electron.IpcRendererEvent, roomId: string) => listener(roomId);
+      ipcRenderer.on("notifications:open-room", callback);
+      return () => { ipcRenderer.removeListener("notifications:open-room", callback); };
+    },
+  },
   windowControls: {
     getState: () => ipcRenderer.invoke("window:state"),
     minimize: () => ipcRenderer.invoke("window:minimize"),

@@ -1,4 +1,5 @@
 import { writeClipboardImage } from "./imageClipboard.js";
+import { registerNotifications } from "./notifications.js";
 import { registerWindowControls } from "./windowControls.js";
 import { DesktopCaptureBroker } from "./desktopCapture.js";
 import { configureAppPermissions, allowsAppPermission } from "./permissions.js";
@@ -168,6 +169,7 @@ function createWindow(): void {
 }
 
 function registerIpc(): void {
+  registerNotifications(ipcMain, () => mainWindow, isTrustedRendererUrl, path.join(app.getAppPath(), app.isPackaged ? "dist" : "public", "grungus.png"));
   registerWindowControls(ipcMain, () => mainWindow, isTrustedRendererUrl);
   ipcMain.handle("clipboard:write-text", (event, text: unknown) => {
     if (event.sender !== mainWindow?.webContents || event.senderFrame !== mainWindow.webContents.mainFrame || !isTrustedRendererUrl(event.senderFrame.url)) throw new Error("Untrusted clipboard request");
@@ -215,6 +217,16 @@ if (!app.requestSingleInstanceLock()) {
 
   consumeProtocolArg(process.argv);
   void app.whenReady().then(() => {
+    if (process.platform === "win32" && !app.isPackaged) {
+      // Windows toast delivery requires a Start Menu shortcut matching the AUMID.
+      const shortcut = path.join(app.getPath("appData"), "Microsoft", "Windows", "Start Menu", "Programs", "Grungus Matrix Development.lnk");
+      if (!shell.writeShortcutLink(shortcut, "create", {
+        target: process.execPath, args: `"${app.getAppPath()}"`, cwd: app.getAppPath(),
+        description: "Grungus Matrix development", appUserModelId: APP_ID,
+        toastActivatorClsid: app.toastActivatorCLSID,
+        icon: path.join(app.getAppPath(), "public", "grungus.ico"), iconIndex: 0,
+      })) console.warn("Unable to register the development notification shortcut");
+    }
     protocol.handle("grungus-app", async (request) => {
       const url = new URL(request.url);
       const root = path.resolve(__dirname, "../dist");
