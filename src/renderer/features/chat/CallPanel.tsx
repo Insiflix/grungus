@@ -2,11 +2,11 @@ import type { ICallProvider, CallHandle } from "../../../domain/calls/ICallProvi
 import { CameraQualitySelect } from "./CameraQualitySelect";
 import { isCameraQuality, loadCameraQuality, saveCameraQuality, type CameraQuality } from "../../../domain/calls/CameraQuality";
 import { useEffect, useRef, useState, type ReactNode } from "react";
-import { Headphones, HeadphoneOff, Maximize2, Minimize2, PhoneOff, Mic, MicOff, Video, VideoOff, MonitorUp, Settings, Signal } from "lucide-react";
+import { Headphones, HeadphoneOff, Maximize2, Minimize2, PhoneOff, Mic, MicOff, Video, VideoOff, MonitorUp, Signal } from "lucide-react";
 import { createPortal } from "react-dom";
 import { mountCall } from "../../app/providers/MatrixProvider";
 import { VoiceChatToggle } from "./VoiceChatToggle";
-export function CallPanel({ roomId, name, video, mode = "group", autoJoin = mode === "voice" && !video, chat, search, chatVisible = true, chatUnreadCount = 0, onToggleChat, dock, visible = true, onOpen, onSettings, onClose, mount = mountCall }: { roomId: string; name: string; video: boolean; mode?: "voice" | "group"; autoJoin?: boolean; chat?: ReactNode; search?: ReactNode; chatVisible?: boolean; chatUnreadCount?: number; onToggleChat?: () => void; dock?: HTMLElement | null; visible?: boolean; onOpen?: () => void; onSettings?: () => void; onClose: () => void; mount?: ICallProvider["mountCall"] }) {
+export function CallPanel({ roomId, name, video, mode = "group", autoJoin = mode === "voice" && !video, chat, search, chatVisible = true, chatUnreadCount = 0, onToggleChat, dock, visible = true, onOpen, onClose, mount = mountCall }: { roomId: string; name: string; video: boolean; mode?: "voice" | "group"; autoJoin?: boolean; chat?: ReactNode; search?: ReactNode; chatVisible?: boolean; chatUnreadCount?: number; onToggleChat?: () => void; dock?: HTMLElement | null; visible?: boolean; onOpen?: () => void; onClose: () => void; mount?: ICallProvider["mountCall"] }) {
   const callHandle = useRef<CallHandle | null>(null);
   const [quality, setQuality] = useState(loadCameraQuality);
   const [qualityPending, setQualityPending] = useState(false);
@@ -15,6 +15,20 @@ export function CallPanel({ roomId, name, video, mode = "group", autoJoin = mode
   const [leaving, setLeaving] = useState(false);
   const frame = useRef<HTMLIFrameElement>(null);
   const [joined, setJoined] = useState(false);
+  const [ping, setPing] = useState<number | null>(null);
+  const connectionTooltip = !joined ? "Connecting to voice..." : ping === null ? "Ping unavailable" : `Ping: ${ping} ms`;
+  useEffect(() => {
+    setPing(null);
+    if (!joined) return;
+    const poll = () => {
+      if (!frame.current?.src) return;
+      const url = new URL(frame.current.src);
+      frame.current.contentWindow?.postMessage({ type: "grungus:connection-stats", widgetId: new URLSearchParams(url.hash.slice(2)).get("widgetId") }, url.origin);
+    };
+    poll();
+    const timer = setInterval(poll, 5000);
+    return () => clearInterval(timer);
+  }, [joined, roomId]);
   const [minimized, setMinimized] = useState(false);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -68,6 +82,7 @@ export function CallPanel({ roomId, name, video, mode = "group", autoJoin = mode
       const data = event.data;
       const widgetId = frame.current ? new URLSearchParams(new URL(frame.current.src).hash.slice(2)).get("widgetId") : null;
       if (!frame.current || event.source !== frame.current.contentWindow || event.origin !== new URL(frame.current.src).origin || data?.type !== "grungus:media-status" || data.widgetId !== widgetId) return;
+      if (Object.hasOwn(data, "pingMs")) setPing(typeof data.pingMs === "number" && Number.isFinite(data.pingMs) && data.pingMs >= 0 ? Math.round(data.pingMs) : null);
       if (isCameraQuality(data.quality)) { clearTimeout(qualityTimeout.current); setQualityPending(false); setQuality(data.quality); if (!data.qualityError) saveCameraQuality(data.quality); setError(data.qualityError ?? null); }
       if (typeof data.fullscreenError === "string") setError(data.fullscreenError);
       if (typeof data.sharing === "boolean") setSharing({ active: data.sharing, audio: Boolean(data.systemAudio) });
@@ -133,7 +148,7 @@ export function CallPanel({ roomId, name, video, mode = "group", autoJoin = mode
     qualityTimeout.current = setTimeout(() => { setQualityPending(false); setError("Kamera-Einstellung konnte nicht angewendet werden."); }, 5000);
   };
   return <>{docked && createPortal(<section className="voice-dock" aria-label="Voice controls">
-    <div className="voice-dock__connection"><Signal size={21} /><button className="voice-dock__room" onClick={open} data-tooltip="Open voice channel"><strong>{error ? "Connection problem" : joined ? "Voice Connected" : "Connecting…"}</strong><small>{name}</small></button><button className="icon-button voice-dock__disconnect" data-tooltip="Disconnect" aria-label="Disconnect from voice" disabled={leaving} onClick={leave}><PhoneOff size={18} /></button></div>
+    <div className="voice-dock__connection"><Signal size={21} aria-label={connectionTooltip} data-tooltip={connectionTooltip} /><button className="voice-dock__room" onClick={open} data-tooltip={connectionTooltip}><strong>{error ? "Connection problem" : joined ? "Voice Connected" : "Connecting…"}</strong><small>{name}</small></button><button className="icon-button voice-dock__disconnect" data-tooltip="Disconnect" aria-label="Disconnect from voice" disabled={leaving} onClick={leave}><PhoneOff size={18} /></button></div>
     <div className="voice-dock__actions">
       <button aria-label={devices.video_enabled ? "Turn camera off" : "Turn camera on"} data-tooltip={devices.video_enabled ? "Turn camera off" : "Turn camera on"} aria-pressed={devices.video_enabled} disabled={pending || !joined} onClick={() => void setDevice({ video_enabled: !devices.video_enabled })}>{devices.video_enabled ? <Video size={19} /> : <VideoOff size={19} />}</button>
       <button aria-label={sharing.active ? "Stop sharing screen" : "Share screen"} data-tooltip={sharing.active ? "Stop sharing screen" : "Share screen"} aria-pressed={sharing.active} disabled={sharePending || leaving || !joined} onClick={toggleScreenshare}><MonitorUp size={19} /><span>{sharing.active ? "Stop sharing" : "Share screen"}</span></button>
@@ -141,13 +156,12 @@ export function CallPanel({ roomId, name, video, mode = "group", autoJoin = mode
     <div className="voice-dock__user"><span className="voice-dock__status">{!joined ? "Connecting…" : deafened ? "Deafened" : devices.audio_enabled ? "In voice" : "Mic muted"}</span>
       <button className={`icon-button ${!devices.audio_enabled ? "is-off" : ""}`} aria-label={devices.audio_enabled ? "Mute microphone" : "Unmute microphone"} data-tooltip={deafened ? "Undeafen to unmute" : devices.audio_enabled ? "Mute microphone" : "Unmute microphone"} aria-pressed={!devices.audio_enabled} disabled={pending || deafened || !joined} onClick={() => void setDevice({ audio_enabled: !devices.audio_enabled })}>{devices.audio_enabled ? <Mic size={19} /> : <MicOff size={19} />}</button>
       <button className={`icon-button ${deafened ? "is-off" : ""}`} aria-label={deafened ? "Undeafen" : "Deafen"} data-tooltip={deafened ? "Undeafen" : "Deafen"} aria-pressed={deafened} disabled={pending || !joined} onClick={() => void toggleDeafen()}>{deafened ? <HeadphoneOff size={19} /> : <Headphones size={19} />}</button>
-      {onSettings && <button className="icon-button" aria-label="Voice settings" data-tooltip="Voice settings" onClick={onSettings}><Settings size={18} /></button>}
     </div>
     {error && <p className="voice-dock__error" role="alert">{error}</p>}
   </section>, dock!)}<section className={`call-panel call-panel--${mode} ${!joined && !autoJoin ? "call-panel--preview" : ""} ${docked || (mode === "voice" && autoJoin) ? "call-panel--docked" : ""} ${docked && (!visible || minimized) ? "call-panel--away" : ""} ${joined && minimized && !docked ? "call-panel--minimized" : ""}`} aria-label={`${mode === "voice" ? "Voice channel" : "Group call"}: ${name}`}>
     <div className="call-panel__kind">{mode === "voice" ? "VOICE CHANNEL" : "GROUP CALL"}</div>
     <header>
-      <div><strong>{name}</strong><small>{!joined ? autoJoin ? "Connecting to voice…" : "Check your microphone and camera before joining" : mode === "voice" ? "Connected to voice" : "Group call connected"}{sharing.active ? sharing.audio ? " · Sharing screen and audio" : " · Sharing screen" : ""}</small></div>
+      <div><strong>{name}</strong><small data-tooltip={connectionTooltip}>{!joined ? autoJoin ? "Connecting to voice…" : "Check your microphone and camera before joining" : mode === "voice" ? "Connected to voice" : "Group call connected"}{sharing.active ? sharing.audio ? " · Sharing screen and audio" : " · Sharing screen" : ""}</small></div>
       <CameraQualitySelect value={quality} onChange={changeQuality} disabled={loading || qualityPending} />
       {joined && <button className="icon-button" aria-label={minimized ? "Expand call" : "Minimize call"} onClick={() => setMinimized(!minimized)}>{minimized ? <Maximize2 /> : <Minimize2 />}</button>}
       <button className="call-hangup" disabled={leaving} onClick={leave} aria-label={joined ? "Leave call" : "Cancel call"}><PhoneOff size={18} /> {joined ? "Leave" : "Cancel"}</button>

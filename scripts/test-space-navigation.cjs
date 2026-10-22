@@ -14,6 +14,37 @@ app.whenReady().then(async () => {
     await evaluate(`document.querySelector('.dm-tabs .dm-tab[aria-label^="Alice,"]').click()`);
     await waitFor('!!document.querySelector(".conversation-surface.has-connected-tab")');
     await evaluate('new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))');
+    await evaluate(`(() => {
+      const first = document.querySelector('.dm-tabs .dm-tab').getBoundingClientRect();
+      const chat = document.querySelector('.chat-workspace').getBoundingClientRect();
+      const surface = document.querySelector('.conversation-surface');
+      const glass = surface.querySelector('.conversation-surface__pane-glass');
+      if (!surface.classList.contains('has-flush-tab') || getComputedStyle(glass).borderTopLeftRadius !== '0px') throw new Error('First tab left corner must connect continuously');
+      if (!document.querySelector('.room-header__title .avatar') || !document.querySelector('.peer-verification--verified')) throw new Error('DM peer avatar or verification missing');
+      if (Math.abs(first.left - chat.left) > 1) throw new Error('First DM tab must align with chat left edge');
+      if (document.querySelector('.room-header__title .lucide-lock-keyhole')) throw new Error('Redundant DM title lock remains');
+      if (document.querySelector('.encrypted-pill')?.textContent.trim()) throw new Error('Encryption indicator must be icon only');
+    })()`);
+    const themeIds = await evaluate(`(async () => (await import('/src/domain/settings/Themes.ts')).themes.map(theme => theme.id))()`);
+    for (const theme of themeIds) {
+      await evaluate(`document.documentElement.dataset.theme = ${JSON.stringify(theme)}`);
+      for (const name of ['Alice', 'Bob']) {
+        await evaluate(`document.querySelector('.dm-tabs .dm-tab[aria-label^="${name},"]').click()`);
+        await evaluate('new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))');
+        const rect = await evaluate(`(() => { const bounds = document.querySelector('.dm-tab.is-selected').getBoundingClientRect(); return { x: Math.round(bounds.left + bounds.width / 2), y: Math.round(bounds.top + bounds.height / 2) }; })()`);
+        window.webContents.sendInputEvent({ type: 'mouseMove', ...rect });
+        await evaluate('new Promise(resolve => requestAnimationFrame(resolve))');
+        await evaluate(`(() => {
+          const tab = document.querySelector('.dm-tab.is-selected');
+          const style = getComputedStyle(tab);
+          if (style.backgroundColor !== 'rgba(0, 0, 0, 0)' || style.backgroundImage !== 'none' || style.borderBottomColor !== 'rgba(0, 0, 0, 0)' || style.boxShadow !== 'none' || style.backdropFilter !== 'none') throw new Error('Active tab has a separate surface in ${theme}: ' + JSON.stringify({ background: style.backgroundColor, border: style.borderBottomColor, shadow: style.boxShadow, blur: style.backdropFilter }));
+        })()`);
+        if (['cocoa', 'honey', 'savanna', 'dark'].includes(theme)) await screenshot(`joined-${theme}-${name.toLowerCase()}`);
+      }
+    }
+    window.webContents.sendInputEvent({ type: 'mouseMove', x: 1, y: 1 });
+    await evaluate(`delete document.documentElement.dataset.theme; document.querySelector('.dm-tabs .dm-tab[aria-label^="Alice,"]').click()`);
+    console.log(JSON.stringify({ seamlessTabThemes: themeIds.length, checkedPositions: ['first', 'middle'], hoverChecked: true }));
     await evaluate("window.navigationFixture.populateDm()");
     await waitFor('document.querySelectorAll(".timeline .message-row").length === 40');
     await evaluate(`(async () => {
@@ -105,6 +136,51 @@ app.whenReady().then(async () => {
     await evaluate(`if (!document.querySelector('[aria-label="My server"][aria-pressed="true"]')) throw new Error('Created server was not selected')`);
     await evaluate(`document.querySelector('[aria-label="The Forest"]').click()`);
     await waitFor('!!document.querySelector(\'[aria-label="Open text channel introductions"]\')');
+    window.webContents.sendInputEvent({ type: 'mouseMove', x: 1, y: 1 });
+    await evaluate('new Promise(resolve => requestAnimationFrame(resolve))');
+    const hoverPoint = await evaluate(`(() => {
+      const row = document.querySelector('[aria-label="Open text channel general"]').closest('.channel-row-actions');
+      const actions = row.querySelector('.channel-inline-actions');
+      if (getComputedStyle(actions).opacity !== '0') throw new Error('Channel actions must be hidden before hover');
+      if (!row.querySelector('[aria-label="Settings for general"]')) throw new Error('Admin settings gear missing');
+      const voice = document.querySelector('[aria-label="Join voice channel Lounge"]').closest('.channel-row-actions');
+      if (voice.querySelector('.channel-settings')) throw new Error('Non-admin channel shows settings');
+      const bounds = row.getBoundingClientRect(); return { x: Math.round(bounds.left + 20), y: Math.round(bounds.top + bounds.height / 2) };
+    })()`);
+    window.webContents.sendInputEvent({ type: 'mouseMove', ...hoverPoint });
+    await evaluate('new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))');
+    await evaluate(`(() => {
+      const row = document.querySelector('[aria-label="Open text channel general"]').closest('.channel-row-actions');
+      if (getComputedStyle(row.querySelector('.channel-inline-actions')).opacity !== '1') throw new Error('Channel actions did not appear on hover');
+      if (getComputedStyle(row).backgroundColor === 'rgba(0, 0, 0, 0)') throw new Error('Channel wrapper lacks hover background');
+      if (getComputedStyle(row.querySelector('.channel-row')).backgroundColor !== 'rgba(0, 0, 0, 0)') throw new Error('Channel button masks full-width hover');
+    })()`);
+    const gearPoint = await evaluate(`(() => { const b = document.querySelector('[aria-label="Settings for general"]').getBoundingClientRect(); return { x: Math.round(b.left + b.width / 2), y: Math.round(b.top + b.height / 2) }; })()`);
+    window.webContents.sendInputEvent({ type: 'mouseMove', ...gearPoint });
+    await evaluate('new Promise(resolve => requestAnimationFrame(resolve))');
+    await evaluate(`(() => {
+      const row = document.querySelector('[aria-label="Settings for general"]').closest('.channel-row-actions');
+      if (!row.matches(':hover') || getComputedStyle(row).backgroundColor === 'rgba(0, 0, 0, 0)') throw new Error('Hover background must extend under channel icons');
+    })()`);
+    await evaluate(`document.querySelector('[aria-label="Open text channel general"]').click()`);
+    await waitFor('!!document.querySelector(".channel-row.is-selected")');
+    for (const theme of themeIds) {
+      await evaluate(`document.documentElement.dataset.theme = ${JSON.stringify(theme)}`);
+      await evaluate('new Promise(resolve => requestAnimationFrame(resolve))');
+      await evaluate(`(() => {
+        const row = document.querySelector('[aria-label="Settings for general"]').closest('.channel-row-actions');
+        const button = row.querySelector('.channel-row');
+        if (!button.classList.contains('is-selected')) throw new Error('Selected channel regression needs actual selection');
+        if (getComputedStyle(row).backgroundColor === 'rgba(0, 0, 0, 0)' || getComputedStyle(button).backgroundColor !== 'rgba(0, 0, 0, 0)') throw new Error('Split selected channel background in ${theme}');
+        const icon = row.querySelector('.channel-inline-actions').getBoundingClientRect(), bounds = row.getBoundingClientRect();
+        if (icon.right > bounds.right || icon.top < bounds.top || icon.bottom > bounds.bottom) throw new Error('Hover surface must contain all channel icons');
+      })()`);
+    }
+    await screenshot('channel-hover-icons');
+    await evaluate(`delete document.documentElement.dataset.theme; document.querySelector('[aria-label="Settings for general"]').click()`);
+    await waitFor('!!document.querySelector(".settings-dialog[open]")');
+    await evaluate(`if (document.querySelector('#room-settings-title').textContent !== 'general') throw new Error('Gear did not open the channel settings'); document.querySelector('[aria-label="Close room settings"]').click()`);
+    console.log(JSON.stringify({ channelActions: { hoverOnly: true, adminGear: true, settingsOpen: true } }));
     await evaluate(`(() => { const create = document.querySelector('[aria-label="Create channel"]'); const sidebar = document.querySelector('.room-sidebar').getBoundingClientRect(); if (create.getBoundingClientRect().right > sidebar.right) throw new Error('Create channel button is clipped'); create.click(); })()`);
     await waitFor('!!document.querySelector(".create-channel-dialog[open]")');
     await evaluate(`(() => { const rect = document.querySelector('.create-channel-dialog').getBoundingClientRect(); if (Math.abs(rect.left + rect.width / 2 - innerWidth / 2) > 2 || Math.abs(rect.top + rect.height / 2 - innerHeight / 2) > 2) throw new Error('Create channel dialog must be centered'); })()`);
@@ -131,6 +207,16 @@ app.whenReady().then(async () => {
     await waitFor('!!document.querySelector(".call-panel--group")');
     await screenshot("group-call");
     await evaluate(`document.querySelector('.call-hangup').click()`);
+    await evaluate('window.navigationFixture.showMembershipNotices()');
+    await waitFor('document.querySelectorAll(".membership-notice").length === 2 && !!document.querySelector(".membership-toast")');
+    await evaluate(`(() => {
+      if (!document.querySelector('.membership-toast').textContent.includes('Joined space The Forest')) throw new Error('Own membership popup missing');
+      if (![...document.querySelectorAll('.membership-notice')].some(row => row.textContent.includes('Bob left the room.'))) throw new Error('Leave chat notice missing');
+      if (document.querySelector('.membership-notice .message-actions')) throw new Error('Membership notice has message actions');
+    })()`);
+    await screenshot("membership-notices");
+    await evaluate(`document.querySelector('[aria-label="Dismiss membership notification"]').click()`);
+    await waitFor('!document.querySelector(".membership-toast")');
     window.setSize(760, 700);
     await screenshot("groups-narrow");
     console.log(JSON.stringify({ passed: true, checks: ["DM initial/reopen/delayed-media bottom positioning", "manual history scrolling", "compact DM gap", "full-height sidebar", "compact chat rows", "channel tab hide/reopen/new message", "dashboard cleanup", "create/vote/end poll", "separate group chats", "create and open server", "public channel discovery and join", "voice participants", "send text during voice call", "voice channel view", "group call view"], screenshots: path.join(app.getPath("temp"), "grungus-*.png") }));

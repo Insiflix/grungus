@@ -8,7 +8,7 @@ import { Avatar } from "../../components/common/Avatar";
 import { LockKeyhole as LockIcon } from "lucide-react";
 import { usePreferences } from "../../hooks/usePreferences";
 import { useCallback, useState } from "react";
-import { MoreHorizontal, Pin, Reply, SmilePlus } from "lucide-react";
+import { LogIn, LogOut, MoreHorizontal, Pin, Reply, SmilePlus } from "lucide-react";
 import { MessageContextMenu, type MessageAction } from "./MessageContextMenu";
 import { EmojiPicker } from "./EmojiPicker";
 
@@ -40,6 +40,10 @@ export function MessageRow({ message, grouped, onReact, onMediaLoad, onAction, o
   const special = message.type === "encrypted" || message.type === "unsupported";
   const gif = prefs.showInlineMedia && message.type === "text" && !message.isRedacted ? parseGifMessage(message.body) : null;
   const mentioned = Boolean(message.mentionsOwnUser && !message.isRedacted);
+  if (message.type === "membership") return <article id={`message-${message.id}`} className="membership-notice">
+    {message.membershipChange === "join" ? <LogIn size={15} aria-hidden="true" /> : <LogOut size={15} aria-hidden="true" />}
+    <span>{message.body}</span><time dateTime={new Date(timestamp).toISOString()}>{timeFormatter.format(timestamp)}</time>
+  </article>;
   return (
     <article id={`message-${message.id}`} aria-label={mentioned ? "Message mentioning you" : undefined} className={`message-row ${grouped ? "is-grouped" : ""} ${message.sendState === "failed" ? "is-failed" : ""} ${mentioned ? "is-mentioned" : ""}`} onContextMenu={event => { if (actionable) { event.preventDefault(); setMenu({ x: event.clientX, y: event.clientY }); } }}>
       <div className="message-row__avatar">

@@ -1,6 +1,7 @@
 import type { PollDefinition } from "../messaging/Polls";
 import type { MessageAttachment } from "../messaging/Attachments";
 export type MatrixMembership = "join" | "invite" | "leave" | "ban" | "knock";
+export type MatrixPeerVerification = "verified" | "unverified" | "changed" | "unavailable";
 export type MatrixPresence = "online" | "unavailable" | "offline" | "unknown";
 
 export function matrixPresence(value: unknown): MatrixPresence {
@@ -54,9 +55,11 @@ export interface MatrixRoom {
   roomType?: string;
   joinRule?: string;
   viaServers?: string[];
+  canManage?: boolean;
 }
 
 export type MatrixMessageType =
+  | "membership"
   | "poll"
   | "text"
   | "notice"
@@ -89,6 +92,7 @@ export interface MatrixMessage {
   type: MatrixMessageType;
   body: string;
   poll?: PollDefinition;
+  membershipChange?: "join" | "leave";
   attachment?: MessageAttachment;
   edited: boolean;
   replyTo: string | null;

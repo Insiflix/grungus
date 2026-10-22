@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
 import type { BrowserWindow, IpcMainInvokeEvent } from "electron";
 import { assertTrustedAppSender } from "../../../electron/ipcSecurity";
 import { isPersistedSession, secureStorageAvailable, SessionOperationQueue } from "../../../electron/sessionSecurity";
-import { secureExternalUrl, secureHomeserverUrl } from "../../../electron/shared/urls";
+import { secureMessageUrl, secureExternalUrl, secureHomeserverUrl } from "../../../electron/shared/urls";
 
 describe("desktop security boundaries", () => {
   it("orders credential writes and logout removal, including after a failed write", async () => {
@@ -57,4 +57,15 @@ describe("desktop security boundaries", () => {
     expect(() => secureExternalUrl("https://me:secret@example.org/login")).toThrow();
     expect(() => secureExternalUrl("file:///private.txt")).toThrow();
   });
+});
+
+it.each(["https://example.org/path", "http://example.org/path", "mailto:alice@example.org"])("allows ordinary message destinations: %s", url => {
+  expect(secureMessageUrl(url)).toBe(url);
+});
+it.each(["javascript:alert(1)", "file:///private", "data:text/html,test", "https://user:pass@example.org", "ftp://example.org", "grungus-app://client/index.html"])("rejects unsupported message destinations: %s", url => {
+  expect(() => secureMessageUrl(url)).toThrow();
+});
+it("keeps authentication URL restrictions separate from message links", () => {
+  expect(() => secureExternalUrl("http://example.org/login")).toThrow();
+  expect(() => secureExternalUrl("mailto:alice@example.org")).toThrow();
 });

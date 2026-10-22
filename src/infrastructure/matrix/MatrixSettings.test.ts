@@ -1,3 +1,4 @@
+import { membershipNotices } from "../../domain/matrix/MembershipNotices";
 import { describe, expect, it, vi } from "vitest";
 import { EventType, MatrixError, PushRuleKind, Visibility, type MatrixClient } from "matrix-js-sdk";
 import { MatrixSettings, SettingsAuthRequired } from "./MatrixSettings";
@@ -51,6 +52,19 @@ describe("Matrix account settings", () => {
       { type: "m.room.encryption", state_key: "", content: { algorithm: "m.megolm.v1.aes-sha2" } },
     ]) }));
     expect(sdk.sendStateEvent).toHaveBeenCalledWith("!server:example.org", "m.space.child", { via: ["example.org"], suggested: true }, "!new:example.org");
+  });
+  it.each(["public", "private", "invite"] as const)("creates text and voice channels with %s access", async access => {
+    const { sdk, settings } = fixture();
+    Object.assign(sdk, { getDomain: () => "example.org", getRoom: () => ({ currentState: { maySendStateEvent: () => true } }) });
+    for (const voice of [false, true]) {
+      await settings.createSpaceChannel("!server:example.org", "Channel", voice, access);
+      const options = vi.mocked(sdk.createRoom).mock.calls.at(-1) as unknown as [Record<string, unknown>];
+      expect(options[0]).toMatchObject({
+        visibility: access === "public" ? Visibility.Public : Visibility.Private,
+        creation_content: voice ? { type: "org.matrix.msc3417.call" } : {},
+        initial_state: expect.arrayContaining([{ type: "m.room.join_rules", state_key: "", content: access === "private" ? { join_rule: "restricted", allow: [{ type: "m.room_membership", room_id: "!server:example.org" }] } : { join_rule: access } }]),
+      });
+    }
   });
   it("checks server permissions before creating a room and preserves recovery details if linking fails", async () => {
     const { sdk, settings } = fixture();
@@ -203,5 +217,26 @@ describe("Matrix room and space administration", () => {
     await expect(settings.roomAlias("!room:example.org", "#forest:example.org", "remove")).rejects.toThrow("Offline");
     expect(sdk.sendStateEvent).not.toHaveBeenCalled();
     expect(sdk.deleteAlias).not.toHaveBeenCalled();
+  });
+});
+
+describe("membership leave notifications", () => {
+  it.each([false, true])("publishes successful departures with space=%s", async isSpace => {
+    membershipNotices.clear();
+    const { sdk, settings } = fixture();
+    Object.assign(sdk, { leave: vi.fn().mockResolvedValue({}), getRoom: () => ({ name: "The Pond", getMyMembership: () => "join", isSpaceRoom: () => isSpace }) });
+    await settings.leaveRoom("!pond:example.org");
+    expect(membershipNotices.getSnapshot()).toMatchObject({ action: "leave", kind: isSpace ? "space" : "room", name: "The Pond" });
+    membershipNotices.clear();
+  });
+  it("does not announce failed departures or declined invitations", async () => {
+    membershipNotices.clear();
+    const { sdk, settings } = fixture();
+    const leave = vi.fn().mockRejectedValueOnce(new Error("Offline")).mockResolvedValue({});
+    Object.assign(sdk, { leave, getRoom: () => ({ name: "Invitation", getMyMembership: () => "invite", isSpaceRoom: () => false }) });
+    await expect(settings.leaveRoom("!room:example.org")).rejects.toThrow("Offline");
+    expect(membershipNotices.getSnapshot()).toBeNull();
+    await settings.leaveRoom("!room:example.org");
+    expect(membershipNotices.getSnapshot()).toBeNull();
   });
 });

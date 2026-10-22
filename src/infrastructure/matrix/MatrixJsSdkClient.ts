@@ -1,3 +1,4 @@
+import { observePeerVerification } from "./MatrixPeerVerification";
 import type { TimelineEvents } from "matrix-js-sdk";
 import { createPollEvent, observeMatrixPoll, sendPollVote, closeMatrixPoll } from "./MatrixPolls";
 import type { PollInput, PollSnapshot } from "../../domain/messaging/Polls";
@@ -98,6 +99,10 @@ export class MatrixJsSdkClient implements IMatrixClient, ICallProvider {
     return { id, displayName: profile.displayname || id, avatarUrl: this.resolveMediaUrl(profile.avatar_url ?? null, 96, 96) };
   }
   private readonly identity = new MatrixIdentityManager((state) => this.emit("identityChanged", state));
+  observeUserVerification = (userId: string, listener: (status: import("../../domain/matrix/MatrixTypes").MatrixPeerVerification) => void) => {
+    const client = this.requireClient();
+    return observePeerVerification(client, userId, listener, () => this.client === client);
+  };
   getIdentityState = () => this.identity.getSnapshot();
   refreshIdentity = () => this.identity.refresh();
   requestIdentityVerification = () => this.identity.requestVerification();

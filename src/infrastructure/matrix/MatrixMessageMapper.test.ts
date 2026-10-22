@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { describe, expect, it, vi } from "vitest";
 import {
   createClient,
   MatrixEvent,
@@ -120,4 +120,30 @@ it("maps encrypted video previews and native audio duration/waveforms without ac
   expect(mapper.map(audio, room)?.attachment).toMatchObject({ durationMs: 5000, voice: true, waveform: [0, 500, 1024, 0] });
   Object.assign(video.event.content!, { info: { thumbnail_url: "https://external.example/poster", thumbnail_info: { mimetype: "image/jpeg" } } });
   expect(mapper.map(video, room)?.attachment?.thumbnail).toBeUndefined();
+});
+
+
+describe("membership timeline notices", () => {
+  function member(membership: string, previous: string, sender = "@alice:example") {
+    return new MatrixEvent({ event_id: "$member", room_id: room.roomId, type: "m.room.member", state_key: "@alice:example", sender, origin_server_ts: 1,
+      content: { membership, displayname: "Alice" }, unsigned: { prev_content: { membership: previous, displayname: "Alice" } } });
+  }
+  it.each([
+    ["join", "invite", "Alice joined the room.", "join"],
+    ["leave", "join", "Alice left the room.", "leave"],
+  ])("maps %s transitions", (membership, previous, body, change) => {
+    expect(mapper.map(member(membership, previous), room)).toMatchObject({ type: "membership", body, membershipChange: change });
+  });
+  it.each([["join", "join"], ["leave", "invite"], ["invite", "leave"], ["leave", "leave"]])("ignores %s after %s", (membership, previous) => {
+    expect(mapper.map(member(membership, previous), room)).toBeNull();
+  });
+  it("distinguishes removal and banning from voluntary departure", () => {
+    expect(mapper.map(member("leave", "join", "@moderator:example"), room)?.body).toBe("Alice was removed from the room by moderator.");
+    expect(mapper.map(member("ban", "join", "@moderator:example"), room)?.body).toBe("Alice was banned from the room by moderator.");
+  });
+  it("labels space membership accurately", () => {
+    const space = new Room("!space:example", client, "@me:example");
+    vi.spyOn(space, "isSpaceRoom").mockReturnValue(true);
+    expect(mapper.map(member("join", "leave"), space)?.body).toBe("Alice joined the space.");
+  });
 });

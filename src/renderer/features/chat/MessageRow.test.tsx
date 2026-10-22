@@ -40,3 +40,11 @@ describe("inline GIF messages", () => {
     expect(render({ body: "hello" })).not.toContain("message-gif");
   });
 });
+
+it("renders membership changes as safe compact notices without message actions", () => {
+  const html = render({ type: "membership", membershipChange: "join", body: "<script>Alice</script> joined the room." });
+  expect(html).toContain('class="membership-notice"');
+  expect(html).toContain("&lt;script&gt;Alice&lt;/script&gt; joined the room.");
+  expect(html).not.toContain("message-toolbar");
+  expect(html).not.toContain("message-avatar");
+});

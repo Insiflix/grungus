@@ -4,8 +4,8 @@ import type { MatrixUser } from "../../../domain/matrix/MatrixTypes";
 import { Avatar } from "../../components/common/Avatar";
 import { ImageActionsMenu } from "./ImageActionsMenu";
 
-export function ImageViewer({ src, name, sender, timestamp, onClose, onDownload, onCopyLink, downloading, error }: {
-  src: string; name: string; sender?: MatrixUser; timestamp?: number; onClose(): void; onDownload(): void; onCopyLink(): void; downloading: boolean; error: string;
+export function ImageViewer({ src, name, sender, timestamp, onClose, onDownload, onCopy, onCopyLink, downloading, error }: {
+  src: string; name: string; sender?: MatrixUser; timestamp?: number; onClose(): void; onDownload(): void; onCopy(): void; onCopyLink(): void; downloading: boolean; error: string;
 }) {
   const dialog = useRef<HTMLDialogElement>(null);
   const stage = useRef<HTMLDivElement>(null);
@@ -51,6 +51,6 @@ export function ImageViewer({ src, name, sender, timestamp, onClose, onDownload,
       <button ref={image} type="button" className="image-viewer__image" style={{ transform: `translate(${zoomed ? pan.x : 0}px, ${zoomed ? pan.y : 0}px) scale(${zoomed ? magnification : 1})` }} aria-label={zoomed ? "Fit image to window" : "Zoom into image"} aria-pressed={zoomed} onClick={toggleZoom}><img src={src} alt={name} draggable={false} /></button>
     </div>
     {error && <p className="image-viewer__error" role="alert">{error}</p>}
-    {menu && <ImageActionsMenu position={menu} onClose={closeMenu} onDownload={onDownload} onView={() => { setPan({ x: 0, y: 0 }); setZoomed(true); }} onCopyLink={onCopyLink} downloading={downloading} portalTarget={dialog.current!} />}
+    {menu && <ImageActionsMenu position={menu} onClose={closeMenu} onDownload={onDownload} onView={() => { setPan({ x: 0, y: 0 }); setZoomed(true); }} onCopy={onCopy} onCopyLink={onCopyLink} downloading={downloading} portalTarget={dialog.current!} />}
   </dialog>;
 }

@@ -29,6 +29,20 @@ function fixture() {
 }
 
 describe("voice channel controls", () => {
+  it("shows real latency in the connection tooltip and clears unavailable samples", () => {
+    const f = fixture();
+    const connection = screen.getByRole("button", { name: /Voice Connected/ });
+    expect(connection.getAttribute("data-tooltip")).toBe("Ping unavailable");
+    f.status({ pingMs: 42.4 });
+    expect(connection.getAttribute("data-tooltip")).toBe("Ping: 42 ms");
+    act(() => window.dispatchEvent(new MessageEvent("message", { source: f.frame.contentWindow, origin: "https://evil.test", data: { type: "grungus:media-status", widgetId: "test", pingMs: 1 } })));
+    expect(connection.getAttribute("data-tooltip")).toBe("Ping: 42 ms");
+    f.status({ pingMs: null });
+    expect(connection.getAttribute("data-tooltip")).toBe("Ping unavailable");
+    expect(screen.queryByRole("button", { name: "Voice settings" })).toBeNull();
+    f.unmount(); f.dock.remove();
+  });
+
   it("joins voice immediately and shows connecting inline without a preview or second Join button", () => {
     let joined = () => {};
     const dock = document.createElement("div"); document.body.append(dock);

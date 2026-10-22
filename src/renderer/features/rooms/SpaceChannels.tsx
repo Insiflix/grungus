@@ -1,14 +1,16 @@
 import { useState } from "react";
-import { ChevronDown, Hash, LockKeyhole, Volume2 } from "lucide-react";
+import { ChevronDown, Hash, LockKeyhole, Volume2, UserPlus, Settings } from "lucide-react";
 import type { MatrixRoom } from "../../../domain/matrix/MatrixTypes";
 import type { RoomCall } from "../../../domain/calls/ICallProvider";
 import { canJoinChannel, isVoiceRoom } from "../../../domain/matrix/RoomNavigation";
+import { PeopleDialog } from "./PeopleDialog";
 import { Avatar } from "../../components/common/Avatar";
 
-export function SpaceChannels({ rooms, selectedRoomId, calls, onOpen, callActive }: {
+export function SpaceChannels({ rooms, selectedRoomId, calls, onOpen, callActive, onSettings }: {
   rooms: MatrixRoom[]; selectedRoomId: string | null; calls: RoomCall[];
-  onOpen: (room: MatrixRoom, voice: boolean) => Promise<void>; callActive: boolean;
+  onOpen: (room: MatrixRoom, voice: boolean) => Promise<void>; callActive: boolean; onSettings?: (roomId: string) => void;
 }) {
+  const [inviting, setInviting] = useState<MatrixRoom | null>(null);
   const [pending, setPending] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const open = async (room: MatrixRoom, voice: boolean) => {
@@ -26,6 +28,7 @@ export function SpaceChannels({ rooms, selectedRoomId, calls, onOpen, callActive
           const call = calls.find(call => call.roomId === room.id);
           const locked = !canJoinChannel(room);
           return <div key={room.id} role="listitem">
+            <div className="channel-row-actions">
             <button type="button" className={`channel-row ${selectedRoomId === room.id ? "is-selected" : ""} ${room.unreadCount ? "has-unread" : ""}`}
               aria-current={selectedRoomId === room.id ? "page" : undefined}
               aria-label={`${voice ? "Join voice channel" : "Open text channel"} ${room.name}${locked ? ", invitation required" : ""}`}
@@ -36,6 +39,11 @@ export function SpaceChannels({ rooms, selectedRoomId, calls, onOpen, callActive
               {pending === room.id ? <small>Joining…</small> : room.highlightCount > 0 ? <b className="mention-badge">{room.highlightCount}</b> : !voice && room.unreadCount > 0 ? <i className="unread-badge" /> : null}
               {voice && call && <small>{call.participants}</small>}
             </button>
+            {room.membership === "join" && <div className="channel-inline-actions">
+              <button type="button" className="icon-button channel-invite" aria-label={`Invite people to ${room.name}`} data-tooltip={`Invite people to ${room.name}`} onClick={() => setInviting(room)}><UserPlus size={15} /></button>
+              {room.canManage && onSettings && <button type="button" className="icon-button channel-settings" aria-label={`Settings for ${room.name}`} data-tooltip={`Settings for ${room.name}`} onClick={() => onSettings(room.id)}><Settings size={15} /></button>}
+            </div>}
+            </div>
             {voice && call && <ul className="voice-members" aria-label={`People in ${room.name}`}>
               {call.members?.map(member => <li key={member.id}><Avatar name={member.displayName} url={member.avatarUrl} size="small" /><span>{member.displayName}</span></li>)}
               {!call.members?.length && <li>{call.participants} in voice</li>}
@@ -45,5 +53,6 @@ export function SpaceChannels({ rooms, selectedRoomId, calls, onOpen, callActive
         {!rooms.some(room => isVoiceRoom(room) === voice) && <p className="channel-empty">No {voice ? "voice" : "text"} channels</p>}
       </div>
     </details>)}
+    {inviting && <PeopleDialog room={inviting} onClose={() => setInviting(null)} />}
   </>;
 }

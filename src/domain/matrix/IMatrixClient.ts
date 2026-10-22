@@ -15,6 +15,7 @@ import type {
 } from "./MatrixTypes";
 
 export interface IMatrixClient extends MatrixEventSource {
+  observeUserVerification(userId: string, listener: (status: import("./MatrixTypes").MatrixPeerVerification) => void): () => void;
   getIdentityState(): MatrixIdentityState;
   refreshIdentity(): Promise<void>;
   requestIdentityVerification(): Promise<void>;

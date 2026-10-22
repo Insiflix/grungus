@@ -1,3 +1,4 @@
+import { membershipNotices } from "../../domain/matrix/MembershipNotices";
 import type { PollInput, PollSnapshot } from "../../domain/messaging/Polls";
 import { hiddenTopChannels } from "../../domain/settings/HiddenTopChannels";
 import type { MessageAttachment } from "../../domain/messaging/Attachments";
@@ -248,6 +249,7 @@ export class MatrixRuntime {
 
   async logout(): Promise<void> {
     this.hiddenRoomChats.clear();
+    membershipNotices.clear();
     this.spaceDiscoveries.clear();
     this.reactionQueues.clear();
     this.update({ phase: "restoring", session: null });
@@ -336,6 +338,7 @@ export class MatrixRuntime {
       if (this.snapshot.session !== session) return false;
       this.update({ rooms: this.client.getRooms() });
       this.selectRoom(room.id);
+      membershipNotices.publish("join", room);
       return true;
     } catch (error) {
       if (this.snapshot.session === session) this.update({ error: messageOf(error) });
@@ -377,6 +380,7 @@ export class MatrixRuntime {
     }
   }
 
+  observeUserVerification = (userId: string, listener: (status: import("../../domain/matrix/MatrixTypes").MatrixPeerVerification) => void) => this.client.observeUserVerification(userId, listener);
   searchUsers(term: string) {
     return this.client.searchUsers(term);
   }

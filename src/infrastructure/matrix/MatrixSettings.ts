@@ -1,4 +1,5 @@
 import { ConditionKind, EventType, MatrixError, MatrixEvent, Preset, PushRuleKind, PushRuleActionName, RoomState, TweakName, Visibility, type AuthDict, type MatrixClient, type IContent } from "matrix-js-sdk";
+import { membershipNotices } from "../../domain/matrix/MembershipNotices";
 import { blockedUsers } from "../../domain/settings/BlockedUsers";
 
 export interface SettingsAuthentication {
@@ -175,15 +176,17 @@ export class MatrixSettings {
     this.assertCurrent(client);
     return response.room_id;
   }
-  async createSpaceChannel(spaceId: string, name: string, voice: boolean) {
+  async createSpaceChannel(spaceId: string, name: string, voice: boolean, access: "public" | "private" | "invite" = "private") {
+    if (!["public", "private", "invite"].includes(access)) throw new Error("Unsupported channel access.");
+    if (!name.trim()) throw new Error("Enter a channel name.");
     const client = this.client();
     const space = client.getRoom(spaceId);
     if (!space?.currentState.maySendStateEvent(EventType.SpaceChild, client.getUserId() ?? "")) throw new Error("Your role cannot create channels in this server.");
     const response = await client.createRoom({
-      name: name.trim(), preset: Preset.PrivateChat, visibility: Visibility.Private,
+      name: name.trim(), preset: access === "public" ? Preset.PublicChat : Preset.PrivateChat, visibility: access === "public" ? Visibility.Public : Visibility.Private,
       room_version: "10", creation_content: voice ? { type: "org.matrix.msc3417.call" } : {},
       initial_state: [
-        { type: EventType.RoomJoinRules, state_key: "", content: { join_rule: "restricted", allow: [{ type: "m.room_membership", room_id: spaceId }] } },
+        { type: EventType.RoomJoinRules, state_key: "", content: access === "private" ? { join_rule: "restricted", allow: [{ type: "m.room_membership", room_id: spaceId }] } : { join_rule: access } },
         { type: EventType.SpaceParent, state_key: spaceId, content: { via: [client.getDomain()!], canonical: true } },
         { type: EventType.RoomEncryption, state_key: "", content: { algorithm: "m.megolm.v1.aes-sha2" } },
       ],
@@ -311,7 +314,15 @@ export class MatrixSettings {
     const via = child.slice(child.indexOf(":") + 1);
     await this.roomState(id, EventType.SpaceChild, remove ? {} : { via: [via], suggested: true }, child);
   }
-  async leaveRoom(id: string) { await this.client().leave(id); }
+  async leaveRoom(id: string) {
+    const client = this.client();
+    const room = client.getRoom(id);
+    const previous = room?.getMyMembership();
+    const details = { name: room?.name || id, isSpace: room?.isSpaceRoom() ?? false };
+    await client.leave(id);
+    this.assertCurrent(client);
+    if (previous === "join") membershipNotices.publish("leave", details);
+  }
   async upgradeRoom(id: string, version: string) { return (await this.client().upgradeRoom(id, version)).replacement_room; }
   async roomNotificationMode(id: string): Promise<"default" | "all" | "mentions" | "off"> {
     const rules = await this.pushRules();

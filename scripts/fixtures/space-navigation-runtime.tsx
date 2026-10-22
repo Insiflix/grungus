@@ -1,3 +1,4 @@
+import { membershipNotices } from "../../src/domain/matrix/MembershipNotices";
 import { preferences } from "../../src/domain/settings/Preferences";
 import { hiddenTopChannels } from "../../src/domain/settings/HiddenTopChannels";
 import type { PollInput, PollSnapshot } from "../../src/domain/messaging/Polls";
@@ -6,7 +7,7 @@ import type { MatrixRoom, MatrixMessage } from "../../src/domain/matrix/MatrixTy
 
 const base = { avatarUrl: null, topic: null, unreadCount: 0, highlightCount: 0, isEncrypted: false, membership: "join" as const, memberCount: 3 };
 const space: MatrixRoom = { ...base, id: "!server:example", name: "The Forest", isSpace: true, childRoomIds: ["!general", "!voice"] };
-const general: MatrixRoom = { ...base, lastMessageTimestamp: 100, id: "!general", name: "general", topic: "Welcome to the forest" };
+const general: MatrixRoom = { ...base, lastMessageTimestamp: 100, id: "!general", name: "general", canManage: true, topic: "Welcome to the forest" };
 const voice: MatrixRoom = { ...base, id: "!voice", name: "Lounge", roomType: "org.matrix.msc3417.call" };
 const group: MatrixRoom = { ...base, id: "!group", name: "Weekend crew", isEncrypted: true, memberCount: 4 };
 const dm: MatrixRoom = { ...base, lastMessageTimestamp: 200, id: "!dm", name: "Alice", isDirect: true, memberCount: 2, directUserId: "@alice:example" };
@@ -23,8 +24,14 @@ const calls = [{ roomId: voice.id, name: voice.name, participants: 2, members },
 const pollListeners = new Set<(snapshot: PollSnapshot) => void>();
 let pollState: PollSnapshot = { counts: {}, totalVoters: 0, ownAnswers: [], ended: false, canEnd: true, loading: false, incomplete: false };
 const publishPoll = () => { for (const listener of pollListeners) listener(pollState); };
-Object.assign(window, { navigationFixture: { populateDm: () => update({ timelines: { ...snapshot.timelines, [dm.id]: Array.from({ length: 40 }, (_, index): MatrixMessage => ({ id: 'dm-message-' + index, roomId: dm.id, sender: { id: '@alice:example', displayName: 'Alice', avatarUrl: null }, timestamp: index * 60_000, type: 'text', body: 'Message ' + index, edited: false, replyTo: null, reactions: [], sendState: 'sent', isOwn: false, isRedacted: false })) } }), incomingChannelMessage: () => update({ rooms: snapshot.rooms.map(room => room.id === general.id ? { ...room, lastMessageTimestamp: 300 } : room) }) } });
+Object.assign(window, { navigationFixture: { showMembershipNotices: () => {
+  const roomId = snapshot.selectedRoomId!;
+  const message: MatrixMessage = { id: "$joined", roomId, sender: members[0], timestamp: Date.now(), type: "membership", membershipChange: "join", body: "Alice joined the room.", edited: false, replyTo: null, reactions: [], sendState: "sent", isOwn: false, isRedacted: false };
+  update({ timelines: { ...snapshot.timelines, [roomId]: [message, { ...message, id: "$left", membershipChange: "leave", body: "Bob left the room." }] } });
+  membershipNotices.publish("join", { name: "The Forest", isSpace: true });
+}, populateDm: () => update({ timelines: { ...snapshot.timelines, [dm.id]: Array.from({ length: 40 }, (_, index): MatrixMessage => ({ id: 'dm-message-' + index, roomId: dm.id, sender: { id: '@alice:example', displayName: 'Alice', avatarUrl: null }, timestamp: index * 60_000, type: 'text', body: 'Message ' + index, edited: false, replyTo: null, reactions: [], sendState: 'sent', isOwn: false, isRedacted: false })) } }), incomingChannelMessage: () => update({ rooms: snapshot.rooms.map(room => room.id === general.id ? { ...room, lastMessageTimestamp: 300 } : room) }) } });
 export const runtime = {
+  observeUserVerification: (_id: string, listener: (status: string) => void) => { listener("verified"); return () => {}; },
   subscribe: (listener: () => void) => { listeners.add(listener); return () => listeners.delete(listener); },
   getSnapshot: () => snapshot,
   selectRoom: (id: string) => { hiddenTopChannels.reopen(id); update({ selectedRoomId: id }); },
@@ -55,7 +62,7 @@ export const useMatrixTimeline = (id: string) => ({ messages: useMatrixSnapshot(
 export const observeCalls = (listener: (calls: unknown[]) => void) => { listener(calls); return () => {}; };
 export const directCalls = { subscribe: (listener: (state: null) => void) => { listener(null); return () => {}; } };
 export const matrixNotifications = { viewedRoom: null };
-export const matrixSettings = { createSpaceChannel: async () => "!new", room: async () => ({}), createRoom: async (name: string) => { const server = { ...space, id: "!created-server", name, childRoomIds: [] }; update({ rooms: [...snapshot.rooms, server] }); return server.id; } };
+export const matrixSettings = { createSpaceChannel: async () => "!new", room: async () => ({ id: general.id, name: general.name, topic: general.topic, space: false, avatar: "", members: [], power: {}, canDetails: true, allowedSpaces: [], joinRule: "invite", history: "shared", guestAccess: "forbidden", directory: "private", aliases: [], children: [] }), createRoom: async (name: string) => { const server = { ...space, id: "!created-server", name, childRoomIds: [] }; update({ rooms: [...snapshot.rooms, server] }); return server.id; } };
 export function mountCall(frame: HTMLIFrameElement, _roomId: string, _video: boolean, onClose: () => void, onReady: () => void, onJoined: () => void) {
   frame.srcdoc = '<body style="margin:0;display:grid;place-items:center;height:100vh;background:#102b30;color:#cde2da;font:20px system-ui"><div style="text-align:center">Alice &nbsp; · &nbsp; Bob<p style="font-size:13px">Call media preview</p></div></body>';
   onReady(); onJoined(); return { dispose() {}, hangup: async () => onClose() };

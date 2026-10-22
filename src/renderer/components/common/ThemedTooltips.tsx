@@ -22,6 +22,16 @@ export function ThemedTooltips() {
     return () => { hide(); document.removeEventListener("pointerover",show); document.removeEventListener("focusin",show); document.removeEventListener("pointerout",leave); document.removeEventListener("focusout",hide); document.removeEventListener("pointerdown",hide); document.removeEventListener("keydown",key); window.removeEventListener("scroll",hide,true); window.removeEventListener("blur",hide); window.removeEventListener("resize",hide); };
   }, []);
   useEffect(() => {
+    const target = tip?.target;
+    if (!target) return;
+    const observer = new MutationObserver(() => {
+      const text = target.dataset.tooltip;
+      setTip(current => current?.target === target ? text ? { ...current, text } : null : current);
+    });
+    observer.observe(target, { attributes: true, attributeFilter: ["data-tooltip"] });
+    return () => observer.disconnect();
+  }, [tip?.target]);
+  useEffect(() => {
     if (!tip || !node.current) return;
     const tooltip = node.current; tooltip.showPopover?.();
     const rect = tooltip.getBoundingClientRect();

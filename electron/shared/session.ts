@@ -20,7 +20,7 @@ export interface DesktopBridge {
     close(): Promise<void>;
     onStateChange(listener: (state: { maximized: boolean }) => void): () => void;
   };
-  clipboard: { writeText(text: string): Promise<void> };
+  clipboard: { writeText(text: string): Promise<void>; writeImage(png: Uint8Array): Promise<void> };
   session: {
     load(): Promise<PersistedMatrixSession | null>;
     save(session: PersistedMatrixSession): Promise<SessionStoreResult>;
