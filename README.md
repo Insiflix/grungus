@@ -48,7 +48,7 @@ Element Call embedded / MatrixRTC
 - `src/renderer/features/` — login, room navigation, timeline, composer, and local-echo UI.
 - `src/renderer/styles/` — Tailwind CSS 4 entry point plus reusable frozen-glass design tokens and desktop layout.
 
-On Windows, `npm run dev` creates a separate Grungus-branded development executable beside the installed Electron runtime. Its embedded product name and icon ensure the taskbar and Windows notification header show Grungus. The original Electron executable is preserved. Recreate the development executable automatically by restarting development after regenerating icons.
+On Windows, `npm run dev` creates a separate Grungus-branded development executable beside the installed Electron runtime. Its embedded product name and icon ensure the taskbar and Windows notification header show Grungus. The original Electron executable is preserved. `public/grungus.png` is the icon source; `npm run icons` rebuilds the ICO without modifying the PNG. Restart development after regenerating icons to refresh the branded executable.
 
 With the development app running, `npm run test:notification -- --examples` sends real Windows test notifications, including labeled DM and channel examples. Message notifications use the sender's name/avatar for DMs and the channel name/server avatar for channels; missing avatars use initials.
 

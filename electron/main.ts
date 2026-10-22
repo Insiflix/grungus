@@ -120,7 +120,10 @@ function createWindow(): void {
     minWidth: 980,
     minHeight: 640,
     backgroundColor: "#090d18",
-    icon: path.join(assetDirectory, "grungus.png"),
+    // On Windows, use the branded executable's icon like VS Code does.
+    // An explicit ICO installs a 16px ICON_SMALL override that the taskbar
+    // can display at its native size instead of using the 32px class icon.
+    icon: process.platform === "win32" ? undefined : path.join(assetDirectory, "grungus.png"),
     frame: false,
     autoHideMenuBar: true,
     show: false,

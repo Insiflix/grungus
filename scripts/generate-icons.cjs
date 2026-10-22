@@ -1,7 +1,7 @@
 ﻿const fs = require('node:fs/promises');
 const path = require('node:path');
 
-// Run with Node; the Electron renderer decodes WebP without extra dependencies.
+// Keep grungus.png as the source of truth; only generate the Windows ICO.
 if (!process.versions.electron) {
   const { spawnSync } = require('node:child_process');
   const env = { ...process.env };
@@ -13,45 +13,24 @@ if (!process.versions.electron) {
   const { app, BrowserWindow, nativeImage } = require('electron');
   app.whenReady().then(async () => {
     const root = path.resolve(__dirname, '..');
-    const source = await fs.readFile(path.join(root, 'public/grungus-full.webp'));
-    const dataUrl = 'data:image/webp;base64,' + source.toString('base64');
+    const source = await fs.readFile(path.join(root, 'public/grungus.png'));
+    const dataUrl = 'data:image/png;base64,' + source.toString('base64');
     const window = new BrowserWindow({ show: false, webPreferences: { sandbox: true, contextIsolation: true, nodeIntegration: false } });
     await window.loadURL('data:text/html,<html></html>');
     const png = await window.webContents.executeJavaScript(`
       new Promise((resolve, reject) => {
         const image = new Image();
         image.onload = () => {
-          const source = document.createElement('canvas');
-          source.width = image.naturalWidth;
-          source.height = image.naturalHeight;
-          const sourceContext = source.getContext('2d');
-          sourceContext.drawImage(image, 0, 0);
-          const { data } = sourceContext.getImageData(0, 0, source.width, source.height);
-          let left = source.width, top = source.height, right = -1, bottom = -1;
-          for (let y = 0; y < source.height; y++) {
-            for (let x = 0; x < source.width; x++) {
-              if (data[(y * source.width + x) * 4 + 3] === 0) continue;
-              left = Math.min(left, x);
-              right = Math.max(right, x);
-              top = Math.min(top, y);
-              bottom = Math.max(bottom, y);
-            }
-          }
-          if (right < left) return reject(new Error('Empty logo'));
-
-          // Fit the visible artwork, rather than its padded source canvas, into
-          // a square. Preserve its proportions and center it for every usage.
-          const width = right - left + 1;
-          const height = bottom - top + 1;
-          // Leave a balanced 5% inset so the frog has room inside buttons.
-          const scale = (512 * 0.9) / Math.max(width, height);
+          // ICO entries are square. Fit the supplied PNG without cropping,
+          // stretching, or changing the source artwork/padding.
+          const scale = 512 / Math.max(image.naturalWidth, image.naturalHeight);
+          const width = image.naturalWidth * scale;
+          const height = image.naturalHeight * scale;
           const canvas = document.createElement('canvas');
           canvas.width = canvas.height = 512;
           const context = canvas.getContext('2d');
           context.imageSmoothingQuality = 'high';
-          context.drawImage(source, left, top, width, height,
-            (512 - width * scale) / 2, (512 - height * scale) / 2,
-            width * scale, height * scale);
+          context.drawImage(image, (512 - width) / 2, (512 - height) / 2, width, height);
           resolve(canvas.toDataURL('image/png'));
         };
         image.onerror = () => reject(new Error('Cannot decode logo'));
@@ -60,7 +39,6 @@ if (!process.versions.electron) {
     `);
     const icon = nativeImage.createFromDataURL(png);
     if (icon.isEmpty()) throw new Error('Empty logo');
-    await fs.writeFile(path.join(root, 'public/grungus.png'), icon.toPNG());
     const sizes = [16, 24, 32, 48, 64, 128, 256];
     const images = sizes.map(size => icon.resize({ width: size, height: size, quality: 'best' }).toPNG());
     const header = Buffer.alloc(6 + sizes.length * 16);
@@ -77,7 +55,7 @@ if (!process.versions.electron) {
       offset += images[index].length;
     });
     await fs.writeFile(path.join(root, 'public/grungus.ico'), Buffer.concat([header, ...images]));
-    console.log('Generated centered, trimmed PNG and multi-resolution Windows ICO from grungus-full.webp');
+    console.log('Generated multi-resolution Windows ICO from grungus.png (source PNG preserved)');
     window.destroy();
     app.quit();
   }).catch(error => { console.error(error); app.exit(1); });
