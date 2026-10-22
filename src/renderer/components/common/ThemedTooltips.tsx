@@ -1,4 +1,4 @@
-import { useEffect, useId, useRef, useState } from "react";
+import { useEffect, useLayoutEffect, useId, useRef, useState } from "react";
 import { createPortal } from "react-dom";
 
 // Delegation covers virtualized messages and disabled controls without wrappers.
@@ -31,7 +31,7 @@ export function ThemedTooltips() {
     observer.observe(target, { attributes: true, attributeFilter: ["data-tooltip"] });
     return () => observer.disconnect();
   }, [tip?.target]);
-  useEffect(() => {
+  useLayoutEffect(() => {
     if (!tip || !node.current) return;
     const tooltip = node.current; tooltip.showPopover?.();
     const rect = tooltip.getBoundingClientRect();
