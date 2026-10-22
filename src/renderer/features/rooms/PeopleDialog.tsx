@@ -73,7 +73,7 @@ export function PeopleDialog({ room, onClose }: { room?: MatrixRoom; onClose: ()
       {success && <p className="success-banner" role="status">{success}</p>}
       <div className="people-results" aria-busy={busy}>
         {users.map((user) => (
-          <div className="people-result" key={user.id}>
+          <div className="people-result" key={user.id} data-profile-user-id={user.id} tabIndex={0}>
             <Avatar name={user.displayName} url={user.avatarUrl} />
             <span><strong>{user.displayName}</strong><small>{user.id}</small></span>
             <button type="button" className="button button--secondary button--compact" disabled={busy || invited.includes(user.id)} onClick={() => void add(user)}>

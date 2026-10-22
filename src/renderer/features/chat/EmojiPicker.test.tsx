@@ -36,12 +36,12 @@ describe("emoji tab interactions", () => {
   it("switches synchronously without remounting the viewport and resets a scrolled category", () => {
     const view = render(<EmojiPicker onPick={vi.fn()} onClose={vi.fn()} />);
     const viewport = view.container.querySelector(".emoji-picker__scroll")!;
-    fireEvent.click(screen.getByRole("button", { name: "Smileys & Menschen" }));
+    fireEvent.click(screen.getByRole("button", { name: "Smileys & people" }));
     fireEvent.scroll(viewport, { target: { scrollTop: 800 } });
-    fireEvent.click(screen.getByRole("button", { name: "Tiere & Natur" }));
+    fireEvent.click(screen.getByRole("button", { name: "Animals & nature" }));
     expect(view.container.querySelector(".emoji-picker__scroll")).toBe(viewport);
     expect(viewport.scrollTop).toBe(0);
-    expect(view.container.querySelector(".gif-picker__section")?.textContent).toBe("Tiere & Natur");
+    expect(view.container.querySelector(".gif-picker__section")?.textContent).toBe("Animals & nature");
     expect(view.container.querySelectorAll(".emoji-grid button").length).toBeLessThanOrEqual(88);
   });
 

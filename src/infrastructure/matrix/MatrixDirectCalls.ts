@@ -25,7 +25,7 @@ export class MatrixDirectCalls {
       feeds: call.getFeeds().map(feed => ({ id: feed.stream.id, stream: feed.stream, local: feed.isLocal(), screenshare: feed.purpose === "m.screenshare" })) };
   }
   private publish = () => {
-    for (const track of this.call?.localUsermediaStream?.getVideoTracks() ?? []) if (!this.constrainedTracks.has(track)) { this.constrainedTracks.add(track); void track.applyConstraints(cameraConstraints(this.cameraQuality)).catch(() => { this.error = "Kameraqualitaet konnte nicht angewendet werden"; this.publish(); }); }
+    for (const track of this.call?.localUsermediaStream?.getVideoTracks() ?? []) if (!this.constrainedTracks.has(track)) { this.constrainedTracks.add(track); void track.applyConstraints(cameraConstraints(this.cameraQuality)).catch(() => { this.error = "Unable to apply camera quality"; this.publish(); }); }
     const state = this.snapshot(); for (const listener of this.listeners) listener(state); };
   private incoming = (call: MatrixCall) => {
     if (call.groupCallId) return;
@@ -45,37 +45,37 @@ export class MatrixDirectCalls {
   start = async (roomId: string, video: boolean) => {
     if (!this.client) throw new Error("Nicht verbunden");
     const client = this.client;
-    if (this.call && this.call.state !== CallState.Ended) throw new Error("Es läuft bereits ein Anruf");
+    if (this.call && this.call.state !== CallState.Ended) throw new Error("A call is already in progress");
     const room = this.client.getRoom(roomId);
-    if (room?.getMyMembership() !== "join" || room.getJoinedMemberCount() !== 2) throw new Error("Klassische Anrufe benötigen einen Raum mit genau zwei Mitgliedern");
+    if (room?.getMyMembership() !== "join" || room.getJoinedMemberCount() !== 2) throw new Error("Classic calls require a room with exactly two members");
     await this.applyMediaPreferences();
     if (this.client !== client) throw new Error("The call session ended.");
     const call = createNewMatrixCall(client, roomId);
-    if (!call) throw new Error("WebRTC ist auf diesem Gerät nicht verfügbar");
+    if (!call) throw new Error("WebRTC is unavailable on this device");
     this.track(call);
     try { await (video ? call.placeVideoCall() : call.placeVoiceCall()); }
-    catch (error) { this.error = error instanceof Error ? error.message : "Anruf fehlgeschlagen"; call.hangup(CallErrorCode.UserHangup, false); this.publish(); }
+    catch (error) { this.error = error instanceof Error ? error.message : "Call failed"; call.hangup(CallErrorCode.UserHangup, false); this.publish(); }
   };
   answer = async () => {
     const call = this.call;
     if (!call || call.state !== CallState.Ringing) return;
     try { await this.applyMediaPreferences(); if (this.call !== call || !this.client || call.state !== CallState.Ringing) return; await call.answer(true, call.type === CallType.Video); }
-    catch (error) { this.error = error instanceof Error ? error.message : "Anruf konnte nicht angenommen werden"; this.publish(); }
+    catch (error) { this.error = error instanceof Error ? error.message : "Unable to answer call"; this.publish(); }
   };
   reject = () => { this.call?.reject(); this.publish(); };
   hangup = () => { this.call?.hangup(CallErrorCode.UserHangup, false); this.publish(); };
   close = () => { if (this.call && this.call.state !== CallState.Ended) this.hangup(); this.unsubscribeCall?.(); this.unsubscribeCall = null; this.call = null; this.publish(); };
   setCameraQuality = async (quality: CameraQuality) => {
-    if (!isCameraQuality(quality)) throw new Error("Ungueltige Kameraqualitaet");
+    if (!isCameraQuality(quality)) throw new Error("Ungueltige Cameraqualitaet");
     for (const track of this.call?.localUsermediaStream?.getVideoTracks() ?? []) await track.applyConstraints(cameraConstraints(quality));
     this.cameraQuality = quality; saveCameraQuality(quality); this.publish();
   };
   toggleScreenshare = async () => {
     const call = this.call;
-    if (!call || call.state !== CallState.Connected) throw new Error("Verbinde den Anruf, bevor du deinen Bildschirm teilst");
+    if (!call || call.state !== CallState.Connected) throw new Error("Connect the call before sharing your screen");
     const enabled = !call.isScreensharing();
     const result = await call.setScreensharingEnabled(enabled, { audio: call.opponentSupportsSDPStreamMetadata(), throwOnFail: true });
-    if (enabled && !result) throw new Error("Bildschirmfreigabe abgebrochen oder fehlgeschlagen");
+    if (enabled && !result) throw new Error("Screen sharing cancelled or failed");
     if (enabled) for (const track of call.localScreensharingStream?.getVideoTracks() ?? []) track.addEventListener("ended", () => { if (this.call === call && call.isScreensharing()) void call.setScreensharingEnabled(false).finally(this.publish); }, { once: true });
     this.publish();
   };

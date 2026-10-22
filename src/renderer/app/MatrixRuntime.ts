@@ -37,6 +37,7 @@ export interface MatrixRuntimeSnapshot {
   typing: Readonly<Record<string, MatrixRoomMember[]>>;
   discovery: MatrixAuthCapabilities | null;
   discoveryPending: boolean;
+  browserLoginPending: boolean;
   error: string | null;
   persistenceWarning: string | null;
   registrationChallenge: MatrixRegistrationChallenge | null;
@@ -61,6 +62,7 @@ export class MatrixRuntime {
     typing: {},
     discovery: null,
     discoveryPending: false,
+    browserLoginPending: false,
     error: null,
     persistenceWarning: null,
     registrationChallenge: null,
@@ -70,6 +72,7 @@ export class MatrixRuntime {
   };
   private listeners = new Set<() => void>();
   private bootstrapPromise: Promise<void> | null = null;
+  private browserAttempt = 0;
   private authCallbackCleanup: (() => void) | null = null;
   private readonly spaceDiscoveries = new Map<string, Promise<void>>();
   private readonly hiddenRoomChats = new Set<string>();
@@ -207,21 +210,35 @@ export class MatrixRuntime {
 
   async startBrowserLogin(identityProviderId?: string, register = false): Promise<void> {
     const discovery = this.snapshot.discovery;
-    if (!discovery) return;
-    this.update({ phase: "authenticating", error: null });
+    if (!discovery || this.snapshot.phase === "authenticating") return;
+    const attempt = ++this.browserAttempt;
+    this.update({ phase: "authenticating", browserLoginPending: true, error: null });
     try {
       await this.auth.startBrowserLogin(discovery, { identityProviderId, register });
     } catch (error) {
-      this.update({ phase: "signed-out", error: messageOf(error) });
+      if (attempt !== this.browserAttempt) return;
+      this.update({ phase: "signed-out", browserLoginPending: false, error: messageOf(error) });
     }
   }
 
+  async cancelBrowserLogin(): Promise<void> {
+    if (!this.snapshot.browserLoginPending) return;
+    this.browserAttempt++;
+    try { await this.auth.cancelBrowserLogin(); }
+    catch (error) { this.update({ error: messageOf(error) }); }
+    this.update({ phase: "signed-out", browserLoginPending: false });
+  }
+
   private async finishBrowserLogin(url: string): Promise<void> {
+    const attempt = this.browserAttempt;
     try {
       const session = await this.auth.completeBrowserLogin(url);
+      if (attempt !== this.browserAttempt) return;
+      this.update({ browserLoginPending: false });
       await this.connect(session);
     } catch (error) {
-      this.update({ phase: "signed-out", error: messageOf(error) });
+      if (attempt !== this.browserAttempt) return;
+      this.update({ phase: "signed-out", browserLoginPending: false, error: messageOf(error) });
     }
   }
 
@@ -380,6 +397,7 @@ export class MatrixRuntime {
     }
   }
 
+  acceptUserIdentity = (userId: string) => this.client.acceptUserIdentity(userId);
   observeUserVerification = (userId: string, listener: (status: import("../../domain/matrix/MatrixTypes").MatrixPeerVerification) => void) => this.client.observeUserVerification(userId, listener);
   searchUsers(term: string) {
     return this.client.searchUsers(term);
@@ -388,6 +406,8 @@ export class MatrixRuntime {
     const session = this.snapshot.session;
     return this.client.searchMessages(query, signal, result => { if (this.snapshot.session === session) onProgress?.(result); });
   };
+  getPinnedMessages = (roomId: string) => this.client.getPinnedMessages(roomId);
+
   async openSearchResult(message: MatrixMessage): Promise<void> {
     const session = this.snapshot.session;
     const context = await this.client.getMessageContext(message.roomId, message.id);
@@ -506,6 +526,7 @@ export class MatrixRuntime {
 
   refreshIdentity = () => this.client.refreshIdentity();
   requestIdentityVerification = () => this.client.requestIdentityVerification();
+  requestUserVerification = (userId: string) => this.client.requestUserVerification(userId);
   acceptIdentityVerification = () => this.client.acceptIdentityVerification();
   startIdentityComparison = () => this.client.startIdentityComparison();
   confirmIdentityComparison = (matches: boolean) => this.client.confirmIdentityComparison(matches);

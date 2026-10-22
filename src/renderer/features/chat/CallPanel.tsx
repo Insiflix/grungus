@@ -69,13 +69,13 @@ export function CallPanel({ roomId, name, video, mode = "group", autoJoin = mode
   }, [deafened, devices.audio_enabled]);
   useEffect(() => {
     if (!frame.current) return;
-    const timeout = setTimeout(() => { setLoading(false); setError(autoJoin ? "Could not connect to voice. Cancel and try joining again." : "Element Call antwortet nicht. Bitte erneut öffnen; Details stehen in der Entwicklerkonsole."); }, 20000);
+    const timeout = setTimeout(() => { setLoading(false); setError(autoJoin ? "Could not connect to voice. Cancel and try joining again." : "Element Call is not responding. Please reopen it; details are in the developer console."); }, 20000);
     try {
       const handle = mount(frame.current, roomId, video, onClose, () => { if (!autoJoin) clearTimeout(timeout); setLoading(false); }, () => { clearTimeout(timeout); setLoading(false); setJoined(true); }, { skipLobby: autoJoin });
       callHandle.current = handle;
       return () => { clearTimeout(timeout); handle.dispose(); callHandle.current = null; };
     }
-    catch (error) { clearTimeout(timeout); setLoading(false); setError(error instanceof Error ? error.message : "Anruf konnte nicht gestartet werden"); }
+    catch (error) { clearTimeout(timeout); setLoading(false); setError(error instanceof Error ? error.message : "Unable to start call"); }
   }, [roomId, video, onClose, mount, autoJoin]);
   useEffect(() => {
     const listener = (event: MessageEvent) => {
@@ -145,7 +145,7 @@ export function CallPanel({ roomId, name, video, mode = "group", autoJoin = mode
     const widgetId = new URLSearchParams(new URL(frame.current.src).hash.slice(2)).get("widgetId");
     frame.current.contentWindow?.postMessage({ type: "grungus:camera-quality", quality: next, widgetId }, new URL(frame.current.src).origin);
     clearTimeout(qualityTimeout.current);
-    qualityTimeout.current = setTimeout(() => { setQualityPending(false); setError("Kamera-Einstellung konnte nicht angewendet werden."); }, 5000);
+    qualityTimeout.current = setTimeout(() => { setQualityPending(false); setError("Unable to apply camera setting."); }, 5000);
   };
   return <>{docked && createPortal(<section className="voice-dock" aria-label="Voice controls">
     <div className="voice-dock__connection"><Signal size={21} aria-label={connectionTooltip} data-tooltip={connectionTooltip} /><button className="voice-dock__room" onClick={open} data-tooltip={connectionTooltip}><strong>{error ? "Connection problem" : joined ? "Voice Connected" : "Connecting…"}</strong><small>{name}</small></button><button className="icon-button voice-dock__disconnect" data-tooltip="Disconnect" aria-label="Disconnect from voice" disabled={leaving} onClick={leave}><PhoneOff size={18} /></button></div>

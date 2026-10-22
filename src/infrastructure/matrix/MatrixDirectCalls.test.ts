@@ -80,7 +80,7 @@ it("requests screen audio and rejects capture failures", async () => {
  await controller.toggleScreenshare();
  expect(call.setScreensharingEnabled).toHaveBeenCalledWith(true, { audio: true, throwOnFail: true });
  call.setScreensharingEnabled.mockResolvedValueOnce(false);
- await expect(controller.toggleScreenshare()).rejects.toThrow("abgebrochen");
+ await expect(controller.toggleScreenshare()).rejects.toThrow("cancelled");
  controller.dispose();
 });
 

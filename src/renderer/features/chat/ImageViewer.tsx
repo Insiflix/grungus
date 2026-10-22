@@ -37,7 +37,7 @@ export function ImageViewer({ src, name, sender, timestamp, onClose, onDownload,
   }, []);
   return <dialog ref={dialog} className="image-viewer" aria-label={`Image viewer: ${name}`} onCancel={event => { event.preventDefault(); if (menu) closeMenu(); else onClose(); }} onClick={event => { event.stopPropagation(); if (event.target === event.currentTarget) onClose(); }} onContextMenu={event => { event.preventDefault(); event.stopPropagation(); setMenu({ x: event.clientX, y: event.clientY }); }}>
     <header className="image-viewer__header">
-      <div className="image-viewer__sender">{sender && <Avatar name={sender.displayName} url={sender.avatarUrl} />}<span><strong>{sender?.displayName ?? "Image"}</strong>{timestamp !== undefined && <time dateTime={new Date(timestamp).toISOString()}>{new Date(timestamp).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })}</time>}</span></div>
+      <div className="image-viewer__sender">{sender && <Avatar name={sender.displayName} url={sender.avatarUrl} />}<span><strong>{sender?.displayName ?? "Image"}</strong>{timestamp !== undefined && <time dateTime={new Date(timestamp).toISOString()}>{new Date(timestamp).toLocaleString("en-US", { dateStyle: "medium", timeStyle: "short" })}</time>}</span></div>
       <div className="image-viewer__controls">
         <div className="image-viewer__toolbar">
           <button type="button" aria-label={zoomed ? "Fit image to window" : "Zoom image"} aria-pressed={zoomed} data-tooltip={zoomed ? "Zoom out" : "Zoom in (250%)"} onClick={toggleZoom}>{zoomed ? <ZoomOut size={19} /> : <ZoomIn size={19} />}</button>

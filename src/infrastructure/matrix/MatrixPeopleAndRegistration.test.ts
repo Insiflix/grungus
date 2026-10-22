@@ -4,6 +4,8 @@ import type { MatrixAuthCapabilities, MatrixSession } from "../../domain/matrix/
 import { MatrixAuthProvider } from "./MatrixAuthProvider";
 import { MatrixJsSdkClient } from "./MatrixJsSdkClient";
 import { closedDirectRoomsEvent } from "./MatrixClosedDirectRooms";
+import * as oauthSessions from "./MatrixOAuth";
+import { OAuth2 } from "matrix-js-sdk/lib/oauth/index.js";
 
 vi.mock("matrix-js-sdk", async (importOriginal) => ({
   ...await importOriginal<typeof import("matrix-js-sdk")>(), createClient: vi.fn(),
@@ -68,6 +70,31 @@ function setup() {
 
 beforeEach(() => vi.clearAllMocks());
 
+describe("OAuth session lifecycle", () => {
+  it("persists rotated OAuth tokens and revokes both tokens on logout", async () => {
+    const { sdk } = setup();
+    const oauth = new OAuth2({ issuer: "https://issuer.example.org" } as never, { clientId: "public-client", redirectUri: "" });
+    const discovery = vi.spyOn(oauthSessions, "oauthForSession").mockResolvedValue(oauth);
+    const refresh = vi.spyOn(oauth, "performRefreshTokenGrant").mockResolvedValue({ access_token: "new-access", refresh_token: "new-refresh", token_type: "Bearer" });
+    const revoke = vi.spyOn(oauth, "revokeToken").mockResolvedValue();
+    try {
+      const onSessionUpdated = vi.fn();
+      const client = new MatrixJsSdkClient({ onSessionUpdated });
+      const saved = { ...session, refreshToken: "old-refresh", oauth: { issuer: oauth.metadata.issuer, clientId: "public-client" } };
+      await client.start(saved);
+      const options = vi.mocked(createClient).mock.calls.at(-1)![0];
+      await options.tokenRefreshFunction!("old-refresh");
+      expect(refresh).toHaveBeenCalledExactlyOnceWith("old-refresh");
+      expect(onSessionUpdated).toHaveBeenCalledWith({ ...saved, accessToken: "new-access", refreshToken: "new-refresh" });
+      await client.logout();
+      expect(revoke).toHaveBeenCalledWith("new-access", "access_token");
+      expect(revoke).toHaveBeenCalledWith("new-refresh", "refresh_token");
+      expect(sdk.logout).not.toHaveBeenCalled();
+      expect(sdk.initRustCrypto).toHaveBeenCalledOnce();
+    } finally { discovery.mockRestore(); refresh.mockRestore(); revoke.mockRestore(); }
+  });
+});
+
 it("allows contact reads before a room is stored, then returns members when sync stores it", async () => {
   const { rooms } = setup();
   const client = new MatrixJsSdkClient(); await client.start(session);
@@ -96,7 +123,7 @@ describe("authentication security", () => {
   });
   it("rejects forged, mismatched and replayed browser callbacks before exchanging tokens", async () => {
     const { sdk } = setup();
-    vi.stubGlobal("window", { desktop: { auth: { openExternal: vi.fn() } } });
+    vi.stubGlobal("window", { desktop: { auth: { openExternal: vi.fn(), prepareSso: vi.fn(async () => "http://127.0.0.1:12345/matrix-sso/callback?state=test-state"), cancelSso: vi.fn() } } });
     try {
       const provider = new MatrixAuthProvider();
       await provider.startBrowserLogin({ ...capabilities, browser: true });
@@ -115,7 +142,7 @@ describe("authentication security", () => {
   it("expires browser login attempts", async () => {
     const { sdk } = setup();
     const now = vi.spyOn(Date, "now").mockReturnValue(0);
-    vi.stubGlobal("window", { desktop: { auth: { openExternal: vi.fn() } } });
+    vi.stubGlobal("window", { desktop: { auth: { openExternal: vi.fn(), prepareSso: vi.fn(async () => "http://127.0.0.1:12345/matrix-sso/callback?state=test-state"), cancelSso: vi.fn() } } });
     try {
       const provider = new MatrixAuthProvider();
       await provider.startBrowserLogin({ ...capabilities, browser: true });
@@ -150,10 +177,10 @@ describe("registration", () => {
   it("requests browser registration rather than login for SSO signup", async () => {
     const { sdk } = setup();
     const openExternal = vi.fn();
-    vi.stubGlobal("window", { desktop: { auth: { openExternal } } });
+    vi.stubGlobal("window", { desktop: { auth: { openExternal, prepareSso: vi.fn(async () => "http://127.0.0.1:12345/matrix-sso/callback?state=test-state"), cancelSso: vi.fn() } } });
     try {
       await new MatrixAuthProvider().startBrowserLogin({ ...capabilities, browser: true }, { register: true });
-      expect(sdk.getSsoLoginUrl).toHaveBeenCalledWith(expect.stringMatching(/^grungus-matrix:\/\/auth\/callback\?state=[\da-f-]+$/), "sso", undefined, SSOAction.REGISTER);
+      expect(sdk.getSsoLoginUrl).toHaveBeenCalledWith("http://127.0.0.1:12345/matrix-sso/callback?state=test-state", "sso", undefined, SSOAction.REGISTER);
       expect(openExternal).toHaveBeenCalledWith("https://matrix.example.org/sso");
     } finally { vi.unstubAllGlobals(); }
   });
@@ -484,4 +511,22 @@ it("refreshes message avatars after the SDK applies a membership state event", a
   expect(updated).not.toHaveBeenCalled();
   await vi.waitFor(() => expect(updated).toHaveBeenCalled());
   expect(updated.mock.calls[0][0].sender.avatarUrl).toContain("/thumbnail/example.org/new");
+});
+
+
+it("loads and decrypts remote pinned events outside the live timeline", async () => {
+  const { sdk, rooms } = setup();
+  const room = sdkRoom("!room:example.org");
+  const pinned = new MatrixEvent({ type: EventType.RoomPinnedEvents, state_key: "", content: { pinned: ["$old", "$old", 12] } });
+  const state = { getStateEvents: (type: string) => type === EventType.RoomPinnedEvents ? pinned : undefined };
+  room.getLiveTimeline = () => ({ getEvents: () => [], getState: () => state }) as never;
+  rooms.push(room);
+  const fetchRoomEvent = vi.fn().mockResolvedValue({ event_id: "$old", type: EventType.RoomMessage, sender: session.userId, content: { msgtype: "m.text", body: "An old pin" }, origin_server_ts: 1 });
+  const decryptEventIfNeeded = vi.fn().mockResolvedValue(undefined);
+  Object.assign(sdk, { fetchRoomEvent, decryptEventIfNeeded, getEventMapper: () => (raw: ConstructorParameters<typeof MatrixEvent>[0]) => new MatrixEvent(raw) });
+  const client = new MatrixJsSdkClient(); await client.start(session);
+  expect(client.getRoom(room.roomId)?.pinnedEventIds).toEqual(["$old"]);
+  expect(await client.getPinnedMessages(room.roomId)).toEqual([expect.objectContaining({ id: "$old", body: "An old pin" })]);
+  expect(fetchRoomEvent).toHaveBeenCalledExactlyOnceWith(room.roomId, "$old");
+  expect(decryptEventIfNeeded).toHaveBeenCalledOnce();
 });

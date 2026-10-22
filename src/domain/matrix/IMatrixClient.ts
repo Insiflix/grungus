@@ -15,10 +15,12 @@ import type {
 } from "./MatrixTypes";
 
 export interface IMatrixClient extends MatrixEventSource {
+  acceptUserIdentity(userId: string): Promise<void>;
   observeUserVerification(userId: string, listener: (status: import("./MatrixTypes").MatrixPeerVerification) => void): () => void;
   getIdentityState(): MatrixIdentityState;
   refreshIdentity(): Promise<void>;
   requestIdentityVerification(): Promise<void>;
+  requestUserVerification(userId: string): Promise<void>;
   acceptIdentityVerification(): Promise<void>;
   startIdentityComparison(): Promise<void>;
   confirmIdentityComparison(matches: boolean): Promise<void>;
@@ -47,6 +49,7 @@ export interface IMatrixClient extends MatrixEventSource {
   setDirectMessageClosed(roomId: string, closed: boolean): Promise<void>;
 
   getTimeline(roomId: string): MatrixMessage[];
+  getPinnedMessages(roomId: string): Promise<MatrixMessage[]>;
   searchMessages(query: MessageSearchQuery, signal?: AbortSignal, onProgress?: (result: MessageSearchResults) => void): Promise<MessageSearchResults>;
   getMessageContext(roomId: string, eventId: string): Promise<MatrixMessage[]>;
   refreshTimeline(roomId: string): Promise<MatrixMessage[]>;

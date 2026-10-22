@@ -22,6 +22,7 @@ export interface IMatrixAuthProvider {
     capabilities: MatrixAuthCapabilities,
     request?: BrowserLoginRequest,
   ): Promise<void>;
+  cancelBrowserLogin(): Promise<void>;
   completeBrowserLogin(callbackUrl: string): Promise<MatrixSession>;
   restoreSession(): Promise<MatrixSession | null>;
   persistSession(session: MatrixSession): Promise<string | null>;

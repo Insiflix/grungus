@@ -38,11 +38,11 @@ describe("GIF picker responsiveness", () => {
     const first = open();
     expect(mocks.search).toHaveBeenCalledTimes(1);
     await act(async () => {});
-    expect(screen.getByRole("button", { name: "trending senden" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Send trending" })).toBeTruthy();
     expect(screen.getByAltText("trending").getAttribute("loading")).toBe("eager");
     first.unmount();
     open();
-    expect(screen.getByRole("button", { name: "trending senden" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Send trending" })).toBeTruthy();
     expect(screen.queryByRole("status")).toBeNull();
     expect(mocks.search).toHaveBeenCalledTimes(1);
   });
@@ -60,7 +60,7 @@ describe("GIF picker responsiveness", () => {
     mocks.search.mockResolvedValueOnce(page("frog"));
     await act(async () => { await vi.advanceTimersByTimeAsync(1); });
     expect(mocks.search).toHaveBeenLastCalledWith("frog", undefined, expect.any(AbortSignal));
-    expect(screen.getByRole("button", { name: "frog senden" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Send frog" })).toBeTruthy();
     fireEvent.change(input, { target: { value: "" } });
     expect(screen.getByAltText("trending")).toBeTruthy();
     fireEvent.change(input, { target: { value: "frog" } });

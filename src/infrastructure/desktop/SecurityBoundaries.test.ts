@@ -5,6 +5,14 @@ import { isPersistedSession, secureStorageAvailable, SessionOperationQueue } fro
 import { secureMessageUrl, secureExternalUrl, secureHomeserverUrl } from "../../../electron/shared/urls";
 
 describe("desktop security boundaries", () => {
+  it("validates persisted OAuth issuer and public client identity", () => {
+    const session = { homeserverUrl: "https://matrix.example.org", serverName: "example.org", accessToken: "access", userId: "@me:example.org", deviceId: "DEVICE" };
+    expect(isPersistedSession({ ...session, oauth: { issuer: "https://issuer.example.org/", clientId: "public-client" } })).toBe(true);
+    for (const oauth of [null, {}, { issuer: "https://issuer.example.org/", clientId: "" }, { issuer: "http://issuer.example.org", clientId: "client" }, { issuer: "https://user:pass@issuer.example.org/", clientId: "client" }]) {
+      expect(isPersistedSession({ ...session, oauth })).toBe(false);
+    }
+  });
+
   it("orders credential writes and logout removal, including after a failed write", async () => {
     const queue = new SessionOperationQueue();
     let finish!: () => void;

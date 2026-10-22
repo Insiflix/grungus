@@ -80,7 +80,7 @@ export function GrungusHome({ rooms, calls, channelServers, onOpen, onJoinVoice,
         {messageError && <p className="settings-inline-error" role="alert">{messageError}</p>}
         <div className="home-contact-count">{onlineOnly ? "Online" : "All contacts"} · {contacts.length}</div>
         <div className="home-contact-list">
-          {contacts.map(user => <button type="button" className="home-contact" key={user.id} disabled={opening !== null} onClick={() => void message(user)} aria-label={`Message ${user.displayName}`}>
+          {contacts.map(user => <button type="button" data-profile-user-id={user.id} className="home-contact" key={user.id} disabled={opening !== null} onClick={() => void message(user)} aria-label={`Message ${user.displayName}`}>
             <Avatar name={user.displayName} url={user.avatarUrl} presence={presences[user.id] ?? user.presence ?? "unknown"} />
             <span><strong>{user.displayName}<BlockedUserBadge userId={user.id} /></strong><small>{presenceLabels[presences[user.id] ?? user.presence ?? "unknown"]} · {user.id}</small></span>
             <MessageCircle size={19} />

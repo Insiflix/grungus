@@ -44,6 +44,7 @@ export interface MatrixRoom {
   lastMessageTimestamp?: number;
   unreadCount: number;
   highlightCount: number;
+  pinnedEventIds?: string[];
   isEncrypted: boolean;
   membership: MatrixMembership;
   memberCount: number;
@@ -125,6 +126,7 @@ export interface MatrixSyncStatus {
 }
 
 export interface MatrixSession {
+  oauth?: import("../../../electron/shared/session").MatrixOAuthSession;
   homeserverUrl: string;
   serverName: string;
   accessToken: string;

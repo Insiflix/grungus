@@ -21,7 +21,7 @@ export class KlipyClient {
   constructor(private readonly key: string, private readonly http: IHttpClient = new ConventionalApiClient("https://api.klipy.com/v2")) {}
 
   async search(query: string, position?: string, signal?: AbortSignal): Promise<GifPage> {
-    if (!this.key.trim()) throw new Error("Bitte zuerst einen KLIPY API-Key hinterlegen.");
+    if (!this.key.trim()) throw new Error("Enter a KLIPY API key first.");
     try {
       const response = await this.http.get<Response>(query.trim() ? "/search" : "/featured", {
         signal,
@@ -45,9 +45,9 @@ export class KlipyClient {
     } catch (cause) {
       if (signal?.aborted) throw cause;
       const status = (cause as { response?: { status?: number } }).response?.status;
-      if (status === 401 || status === 403) throw new Error("KLIPY hat den API-Key abgelehnt. Bitte den Key und seine Freigaben prüfen.");
-      if (status === 429) throw new Error("Zu viele GIF-Anfragen. Bitte gleich noch einmal versuchen.");
-      throw new Error("GIFs konnten nicht geladen werden. Bitte Verbindung und KLIPY API-Key prüfen.");
+      if (status === 401 || status === 403) throw new Error("KLIPY rejected the API key. Check the key and its permissions.");
+      if (status === 429) throw new Error("Too many GIF requests. Please try again shortly.");
+      throw new Error("Unable to load GIFs. Check your connection and KLIPY API key.");
     }
   }
 

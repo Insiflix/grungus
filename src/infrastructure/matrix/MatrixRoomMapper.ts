@@ -61,6 +61,11 @@ export class MatrixRoomMapper {
     const ownLevel = power ? Number(power.users?.[ownId] ?? power.users_default ?? 0) : room.getMember?.(ownId)?.powerLevel ?? 0;
     return {
       id: room.roomId,
+      pinnedEventIds: (() => {
+        const event = state?.getStateEvents(EventType.RoomPinnedEvents, "");
+        const ids: unknown = !Array.isArray(event) ? event?.getContent().pinned : undefined;
+        return Array.isArray(ids) ? [...new Set(ids.filter((id): id is string => typeof id === "string"))] : [];
+      })(),
       canManage: room.getMyMembership() === "join" && ownLevel >= 100,
       name: room.name || "Unnamed room",
       avatarUrl: this.media.resolve(roomAvatar || peerAvatar, 128, 128),

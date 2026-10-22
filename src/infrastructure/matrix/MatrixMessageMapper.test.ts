@@ -26,6 +26,26 @@ function messageEvent(msgtype: string, body: string): MatrixEvent {
 }
 
 describe("MatrixMessageMapper", () => {
+  it.each(["request", "ready", "start", "accept", "key", "mac", "done", "cancel"])("hides verification %s protocol events, including decrypted events", phase => {
+    const type = `m.key.verification.${phase}`;
+    const event = new MatrixEvent({ event_id: "$verification", room_id: room.roomId, sender: "@alice:example", type, content: {}, origin_server_ts: 1 });
+    expect(mapper.map(event, room)).toBeNull();
+    const encrypted = new MatrixEvent({ event_id: "$encrypted-verification", room_id: room.roomId, sender: "@alice:example", type: "m.room.encrypted", content: {}, origin_server_ts: 1 });
+    vi.spyOn(encrypted, "getType").mockReturnValue(type);
+    vi.spyOn(encrypted, "getContent").mockReturnValue({});
+    expect(mapper.map(encrypted, room)).toBeNull();
+  });
+
+  it("hides the verification request fallback without hiding ordinary messages about verification", () => {
+    const fallback = "This client does not support in-chat key verification.";
+    const event = messageEvent("m.key.verification.request", fallback);
+    expect(mapper.map(event, room)).toBeNull();
+    const encrypted = new MatrixEvent({ event_id: "$encrypted-request", type: "m.room.encrypted", room_id: room.roomId, content: {}, origin_server_ts: 1 });
+    vi.spyOn(encrypted, "getType").mockReturnValue("m.room.message");
+    vi.spyOn(encrypted, "getContent").mockReturnValue(event.getContent());
+    expect(mapper.map(encrypted, room)).toBeNull();
+    expect(mapper.map(messageEvent("m.text", fallback), room)?.body).toBe(fallback);
+  });
   it.each([["m.video", "video", "video/mp4"], ["m.audio", "audio", "audio/ogg"]])("maps native %s messages and encrypted media descriptors", (msgtype, type, mimeType) => {
     const event = messageEvent(msgtype, "media");
     const encrypted = { url: "mxc://example/encrypted", v: "v2", key: {}, iv: "iv", hashes: {} };

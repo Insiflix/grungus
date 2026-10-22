@@ -41,14 +41,14 @@ describe("KLIPY GIF integration", () => {
   });
   it("reports missing keys, rejected keys, rate limits, and network failures without exposing keys", async () => {
     const { client, get } = setup();
-    await expect(new KlipyClient("", { get } as IHttpClient).search("frog")).rejects.toThrow("API-Key");
+    await expect(new KlipyClient("", { get } as IHttpClient).search("frog")).rejects.toThrow("API key");
     expect(get).not.toHaveBeenCalled();
     get.mockRejectedValueOnce({ response: { status: 403 } });
-    await expect(client.search("frog")).rejects.toThrow("abgelehnt");
+    await expect(client.search("frog")).rejects.toThrow("rejected");
     get.mockRejectedValueOnce({ response: { status: 429 } });
-    await expect(client.search("frog")).rejects.toThrow("Zu viele");
+    await expect(client.search("frog")).rejects.toThrow("Too many");
     get.mockRejectedValueOnce(new Error("key=test-klipy-key"));
-    await expect(client.search("frog")).rejects.toThrow("Verbindung");
+    await expect(client.search("frog")).rejects.toThrow("connection");
   });
   it("registers a successful share with KLIPY", async () => {
     const { client, get } = setup();

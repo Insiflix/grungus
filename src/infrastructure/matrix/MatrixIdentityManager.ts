@@ -36,7 +36,7 @@ export class MatrixIdentityManager {
         const key = this.keys.get(id);
         if (key) return [id, key];
       }
-      throw new Error("Bitte den Wiederherstellungsschlüssel unter Identität & Verschlüsselung eingeben.");
+      throw new Error("Enter your recovery key under Identity & encryption.");
     },
     cacheSecretStorageKey: (id, _info, key) => { if (this.generation === generation) this.keys.set(id, key); },
     };
@@ -66,14 +66,14 @@ export class MatrixIdentityManager {
 
   private crypto() {
     const crypto = this.client?.getCrypto();
-    if (!crypto) throw new Error("Verschlüsselung ist noch nicht bereit. Bitte auf die Synchronisierung warten.");
+    if (!crypto) throw new Error("Encryption is not ready yet. Please wait for synchronization.");
     return crypto;
   }
   private update(patch: Partial<MatrixIdentityState>) {
     this.state = { ...this.state, ...patch }; this.changed(this.state);
   }
   private refreshQuietly = () => { const generation = this.generation; void this.refresh().catch((error) => { if (generation === this.generation) this.update({ error: this.message(error) }); }); };
-  private message(error: unknown) { return error instanceof Error ? error.message : "Die Identitätsprüfung ist fehlgeschlagen."; }
+  private message(error: unknown) { return error instanceof Error ? error.message : "Identity verification failed."; }
 
   async refresh() {
     const client = this.client;
@@ -90,7 +90,7 @@ export class MatrixIdentityManager {
 
   private async operation(action: () => Promise<void>) {
     const generation = this.generation;
-    if (this.state.busy) throw new Error("Ein anderer Vorgang läuft bereits.");
+    if (this.state.busy) throw new Error("Another operation is already in progress.");
     this.update({ busy: true, error: null, notice: null });
     try { await action(); if (generation === this.generation) await this.refresh(); }
     catch (error) { if (generation === this.generation) this.update({ error: this.message(error) }); throw error; }
@@ -105,16 +105,16 @@ export class MatrixIdentityManager {
       try {
         const id = await client.secretStorage.getDefaultKeyId();
         const entry = id ? await client.secretStorage.getKey(id) : null;
-        if (!id || !entry) throw new Error("Es ist kein Wiederherstellungsschlüssel eingerichtet.");
+        if (!id || !entry) throw new Error("No recovery key has been set up.");
         if (entry[1].algorithm !== "m.secret_storage.v1.aes-hmac-sha2" ||
           !await client.secretStorage.checkKey(key, entry[1] as SecretStorageKeyDescriptionAesV1)) {
-          throw new Error("Dieser Wiederherstellungsschlüssel gehört nicht zu deiner aktuellen Identität.");
+          throw new Error("This recovery key does not belong to your current identity.");
         }
         if (this.client !== client) throw new Error("The identity session changed.");
         this.keys.set(id, key);
         const secrets = await Promise.all(["m.cross_signing.master", "m.cross_signing.self_signing", "m.cross_signing.user_signing"].map((name) => client.secretStorage.get(name)));
         if (this.client !== client) throw new Error("The identity session changed.");
-        if (!secrets.every(Boolean)) throw new Error("Die gespeicherten Identitätsschlüssel fehlen. Bitte ein bestätigtes Gerät verwenden oder die Identität ausdrücklich neu einrichten.");
+        if (!secrets.every(Boolean)) throw new Error("Stored identity keys are missing. Use a verified device or explicitly set up a new identity.");
         await crypto.bootstrapCrossSigning({});
         if (this.client !== client) throw new Error("The identity session changed.");
         if (await crypto.getKeyBackupInfo()) {
@@ -123,25 +123,25 @@ export class MatrixIdentityManager {
           if (this.client !== client) throw new Error("The identity session changed.");
           const result = await crypto.restoreKeyBackup();
           if (this.client !== client) throw new Error("The identity session changed.");
-          this.update({ notice: `Identität wiederhergestellt. ${result.imported} Nachrichtenschlüssel geladen.` });
-        } else if (this.client === client) this.update({ notice: "Identität wiederhergestellt. Auf dem Server ist kein Nachrichten-Backup vorhanden." });
+          this.update({ notice: `Identity recovered. ${result.imported} message keys loaded.` });
+        } else if (this.client === client) this.update({ notice: "Identity recovered. No message backup is available on the server." });
       } finally { if (this.client === client) this.keys.clear(); key.fill(0); }
     });
   }
 
   async prepareReset() {
     const client = this.client;
-    if (this.state.busy || this.request?.pending) throw new Error("Bitte den laufenden Vorgang zuerst abschließen oder abbrechen.");
+    if (this.state.busy || this.request?.pending) throw new Error("Complete or cancel the current operation first.");
     this.clearSecrets();
     const recovery = await this.crypto().createRecoveryKeyFromPassphrase();
     if (this.client !== client) { recovery.privateKey.fill(0); throw new Error("The identity session changed."); }
     this.recovery = recovery;
-    if (!this.recovery.encodedPrivateKey) throw new Error("Es konnte kein Wiederherstellungsschlüssel erzeugt werden.");
+    if (!this.recovery.encodedPrivateKey) throw new Error("Unable to generate a recovery key.");
     this.update({ newRecoveryKey: this.recovery.encodedPrivateKey, error: null, notice: null });
   }
 
   async reset(confirmed: boolean) {
-    if (!confirmed || !this.recovery) throw new Error("Bitte zuerst den neuen Schlüssel sichern und das Ersetzen bestätigen.");
+    if (!confirmed || !this.recovery) throw new Error("Save the new key and confirm the replacement first.");
     const recovery = this.recovery;
     return this.operation(async () => {
       const client = this.client;
@@ -154,7 +154,7 @@ export class MatrixIdentityManager {
           createSecretStorageKey: async () => { if (this.client !== client) throw new Error("The identity session changed."); return recovery; },
         });
         if (this.client !== client) throw new Error("The identity session changed.");
-        this.update({ resetComplete: true, notice: "Neue Identität eingerichtet. Andere Geräte und Kontakte müssen sie erneut bestätigen." });
+        this.update({ resetComplete: true, notice: "New identity set up. Other devices and contacts need to verify it again." });
       } finally { if (this.client === client) this.keys.clear(); }
     });
   }
@@ -164,7 +164,8 @@ export class MatrixIdentityManager {
     const client = this.client;
     const generation = this.generation;
     const assertCurrent = () => { if (!client || this.client !== client || this.generation !== generation) throw new Error("The identity session changed."); };
-    let auth: AuthDict = {};
+    // Omit auth until the server issues a UIA session; an empty object can fail deserialization.
+    let auth: AuthDict | null = null;
     while (true) {
       assertCurrent();
       try { await makeRequest(auth); assertCurrent(); this.update({ auth: null }); return; }
@@ -176,7 +177,7 @@ export class MatrixIdentityManager {
         const flow = data.flows.find((item) => item.stages.every((stage) => stage === "m.login.password" || data.completed?.includes(stage))) ?? data.flows[0];
         const stage = flow.stages.find((item) => !data.completed?.includes(item)) ?? "m.login.dummy";
         if (stage === "m.login.dummy") {
-          if ("type" in auth && auth.type === stage) throw error;
+          if (auth && "type" in auth && auth.type === stage) throw error;
           auth = { session: data.session, type: stage }; continue;
         }
         const password = await new Promise<string | undefined>((resolve, reject) => {
@@ -193,7 +194,7 @@ export class MatrixIdentityManager {
     }
   };
   submitAuth(password?: string) { this.authInput?.resolve(password); }
-  cancelAuth() { this.authInput?.reject(new Error("Identitätseinrichtung abgebrochen. Falls bereits Änderungen erfolgt sind, bitte die Einrichtung erneut abschließen.")); this.authInput = null; this.update({ auth: null }); }
+  cancelAuth() { this.authInput?.reject(new Error("Identity setup cancelled. If changes have already been made, complete setup again.")); this.authInput = null; this.update({ auth: null }); }
   clearSecrets() {
     this.keys.forEach((key) => key.fill(0)); this.keys.clear();
     this.recovery?.privateKey.fill(0); this.recovery = null;
@@ -202,8 +203,27 @@ export class MatrixIdentityManager {
 
   async requestVerification() {
     const client = this.client;
-    if (this.request?.pending) throw new Error("Es läuft bereits eine Bestätigung.");
+    if (this.request?.pending) throw new Error("Verification is already in progress.");
     await this.operation(async () => { const request = await this.crypto().requestOwnUserVerification(); if (this.client !== client) { await request.cancel(); return; } this.bindRequest(request); });
+  }
+  async requestUserVerification(userId: string, getRoomId: () => Promise<string>) {
+    const client = this.client;
+    const generation = this.generation;
+    if (!client || userId === client.getUserId()) throw new Error("Choose someone other than yourself.");
+    if (this.request?.pending) throw new Error("Verification is already in progress.");
+    if (this.recovery) throw new Error("Complete or cancel identity setup first.");
+    return this.operation(async () => {
+      const crypto = this.crypto();
+      const roomId = await getRoomId();
+      if (this.client !== client || generation !== this.generation) throw new Error("The identity session changed.");
+      if (this.request?.pending) throw new Error("Verification is already in progress.");
+      const request = await crypto.requestVerificationDM(userId, roomId);
+      if (this.client !== client || generation !== this.generation || this.request?.pending) {
+        await request.cancel();
+        throw new Error("The verification session changed. Try again.");
+      }
+      this.bindRequest(request);
+    });
   }
   private receiveRequest = (request: VerificationRequest) => {
     // Never silently replace a comparison the user is already reviewing.
@@ -231,7 +251,7 @@ export class MatrixIdentityManager {
     if (request.verifier && this.verifier !== request.verifier) this.bindVerifier(request.verifier);
     if (phase === "done") {
       this.sas = null;
-      this.update({ notice: "Identität bestätigt." }); this.refreshQuietly();
+      this.update({ notice: "Identity verified." }); this.refreshQuietly();
       void this.crypto().checkKeyBackupAndEnable().catch(() => undefined);
     }
   };
@@ -246,10 +266,10 @@ export class MatrixIdentityManager {
     });
   }
   private showSas = (sas: ShowSasCallbacks) => { this.sas = sas; this.requestChanged(); };
-  async acceptVerification() { if (!this.request) throw new Error("Keine Bestätigungsanfrage vorhanden."); await this.request.accept(); }
-  async startComparison() { const request = this.request; if (!request) throw new Error("Keine Bestätigungsanfrage vorhanden."); const verifier = await request.startVerification("m.sas.v1"); if (this.request === request) this.bindVerifier(verifier); }
+  async acceptVerification() { if (!this.request) throw new Error("No verification request available."); await this.request.accept(); }
+  async startComparison() { const request = this.request; if (!request) throw new Error("No verification request available."); const verifier = await request.startVerification("m.sas.v1"); if (this.request === request) this.bindVerifier(verifier); }
   async confirmComparison(matches: boolean) {
-    if (!this.sas) throw new Error("Es gibt noch keinen Vergleichscode.");
+    if (!this.sas) throw new Error("No comparison code is available yet.");
     const sas = this.sas; this.sas = null;
     if (matches) await sas.confirm(); else sas.mismatch();
     this.requestChanged();

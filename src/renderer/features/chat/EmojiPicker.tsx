@@ -17,9 +17,9 @@ function EmojiGlyph({ emoji, skin }: { emoji: Emoji; skin: number }) {
 }
 
 const labels: Record<string, [string, string]> = {
-  frequent: ["✨", "Häufig verwendet"], people: ["😀", "Smileys & Menschen"], nature: ["🌿", "Tiere & Natur"],
-  foods: ["🍕", "Essen & Trinken"], activity: ["⚽", "Aktivitäten"], places: ["🚀", "Reisen & Orte"],
-  objects: ["💡", "Objekte"], symbols: ["❤️", "Symbole"], flags: ["🏳️", "Flaggen"],
+  frequent: ["✨", "Frequently used"], people: ["😀", "Smileys & people"], nature: ["🌿", "Animals & nature"],
+  foods: ["🍕", "Food & drink"], activity: ["⚽", "Activities"], places: ["🚀", "Travel & places"],
+  objects: ["💡", "Objects"], symbols: ["❤️", "Symbols"], flags: ["🏳️", "Flags"],
 };
 export function EmojiPicker({ onPick, onClose }: { onPick: (emoji: string) => void; onClose: () => void }) {
   const dialog = useRef<HTMLDialogElement>(null);
@@ -44,11 +44,11 @@ export function EmojiPicker({ onPick, onClose }: { onPick: (emoji: string) => vo
     if (startedOutside.current && outsideDialog(event)) onClose();
     startedOutside.current = false;
   }} onCancel={(event) => { event.preventDefault(); onClose(); }}>
-    <header className="gif-picker__header"><h2 id="emoji-picker-title">Emojis</h2><span>Mit :name: auch direkt tippen</span><button type="button" className="icon-button" aria-label="Emoji-Auswahl schließen" onClick={onClose}><X /></button></header>
-    <div className="gif-picker__search"><Search size={17} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Emojis suchen" aria-label="Emojis suchen" autoFocus /></div>
-    <nav className="emoji-categories" aria-label="Emoji-Kategorien">{["frequent", ...emojiCategories.map((item) => item.id)].map((id) => <button type="button" key={id} data-tooltip={labels[id]?.[1]} aria-label={labels[id]?.[1]} aria-pressed={category === id && !query} onClick={() => { setCategory(id); setQuery(""); }}>{labels[id]?.[0]}</button>)}</nav>
-    <EmojiGrid emojis={emojis} skin={skin} label={query ? "SUCHERGEBNISSE" : labels[category]?.[1]} onHover={setHovered} onPick={pick} />
-    <footer className="emoji-picker__footer"><span>{hovered ? `:${hovered.id}:` : "Wähle ein Emoji"}</span><label>Hautton <ThemedSelect value={skin} onChange={(event) => setSkin(Number(event.target.value))} aria-label="Emoji-Hautton">{["✋", "✋🏻", "✋🏼", "✋🏽", "✋🏾", "✋🏿"].map((label, index) => <option key={index} value={index}>{label}</option>)}</ThemedSelect></label></footer>
+    <header className="gif-picker__header"><h2 id="emoji-picker-title">Emojis</h2><span>You can also type :name: directly</span><button type="button" className="icon-button" aria-label="Close emoji picker" onClick={onClose}><X /></button></header>
+    <div className="gif-picker__search"><Search size={17} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Search emojis" aria-label="Search emojis" autoFocus /></div>
+    <nav className="emoji-categories" aria-label="Emoji categories">{["frequent", ...emojiCategories.map((item) => item.id)].map((id) => <button type="button" key={id} data-tooltip={labels[id]?.[1]} aria-label={labels[id]?.[1]} aria-pressed={category === id && !query} onClick={() => { setCategory(id); setQuery(""); }}>{labels[id]?.[0]}</button>)}</nav>
+    <EmojiGrid emojis={emojis} skin={skin} label={query ? "SEARCH RESULTS" : labels[category]?.[1]} onHover={setHovered} onPick={pick} />
+    <footer className="emoji-picker__footer"><span>{hovered ? `:${hovered.id}:` : "Choose an emoji"}</span><label>Skin tone <ThemedSelect value={skin} onChange={(event) => setSkin(Number(event.target.value))} aria-label="Emoji skin tone">{["✋", "✋🏻", "✋🏼", "✋🏽", "✋🏾", "✋🏿"].map((label, index) => <option key={index} value={index}>{label}</option>)}</ThemedSelect></label></footer>
   </dialog>;
 }
 
@@ -68,5 +68,5 @@ const EmojiGrid = memo(function EmojiGrid({ emojis, skin, label, onHover, onPick
     return () => observer.disconnect();
   }, []);
   const range = visibleEmojiRows(emojis.length, Math.max(0, scrollTop - 30), columns);
-  return <div ref={viewport} className="emoji-picker__scroll" onScroll={event => setScrollTop(event.currentTarget.scrollTop)}><div className="gif-picker__section">{label}</div><div className="emoji-grid" style={{ gridTemplateColumns: `repeat(${columns},minmax(0,1fr))`, paddingTop: range.top, paddingBottom: range.bottom }}>{emojis.slice(range.start, range.end).map((emoji, slot) => <button type="button" key={slot} data-tooltip={`:${emoji.id}:`} aria-label={`${emoji.name} :${emoji.id}:`} onMouseEnter={() => onHover(emoji)} onFocus={() => onHover(emoji)} onClick={() => onPick(emoji)}><EmojiGlyph emoji={emoji} skin={skin} /></button>)}</div>{!emojis.length && <p className="gif-picker__state">Keine Emojis gefunden.</p>}</div>;
+  return <div ref={viewport} className="emoji-picker__scroll" onScroll={event => setScrollTop(event.currentTarget.scrollTop)}><div className="gif-picker__section">{label}</div><div className="emoji-grid" style={{ gridTemplateColumns: `repeat(${columns},minmax(0,1fr))`, paddingTop: range.top, paddingBottom: range.bottom }}>{emojis.slice(range.start, range.end).map((emoji, slot) => <button type="button" key={slot} data-tooltip={`:${emoji.id}:`} aria-label={`${emoji.name} :${emoji.id}:`} onMouseEnter={() => onHover(emoji)} onFocus={() => onHover(emoji)} onClick={() => onPick(emoji)}><EmojiGlyph emoji={emoji} skin={skin} /></button>)}</div>{!emojis.length && <p className="gif-picker__state">No emojis found.</p>}</div>;
 });

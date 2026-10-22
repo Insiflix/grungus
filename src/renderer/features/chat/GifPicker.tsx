@@ -50,7 +50,7 @@ export function GifPicker({ onSend, onClose }: { onSend: (url: string) => Promis
           gifPageCache.set(apiKey, term, page);
           setResults(page.results); setNext(page.next); setActiveQuery(term);
         }
-      }).catch((cause) => { if (!controller.signal.aborted) { setResults([]); setError(cause instanceof Error ? cause.message : "GIF-Suche fehlgeschlagen."); } })
+      }).catch((cause) => { if (!controller.signal.aborted) { setResults([]); setError(cause instanceof Error ? cause.message : "GIF search failed."); } })
         .finally(() => { if (!controller.signal.aborted) setLoading(false); });
     };
     // Trending and cache hits are immediate; only network searches wait for typing to pause.
@@ -70,7 +70,7 @@ export function GifPicker({ onSend, onClose }: { onSend: (url: string) => Promis
         setResults((current) => [...current, ...page.results.filter((gif) => !current.some((existing) => existing.id === gif.id))]);
         setNext(page.next === position ? null : page.next);
       }
-    } catch (cause) { if (!controller.signal.aborted) setError(cause instanceof Error ? cause.message : "GIFs konnten nicht geladen werden."); }
+    } catch (cause) { if (!controller.signal.aborted) setError(cause instanceof Error ? cause.message : "Unable to load GIFs."); }
     finally { if (!controller.signal.aborted) setLoading(false); }
   };
   const choose = async (gif: GifResult) => {
@@ -80,7 +80,7 @@ export function GifPicker({ onSend, onClose }: { onSend: (url: string) => Promis
       await onSend(gif.url);
       if (apiKey && gif.id !== gif.url) void client.registerShare(gif.id, tab === "favorites" ? "" : activeQuery).catch(() => undefined);
       onClose();
-    } catch (cause) { setError(cause instanceof Error ? cause.message : "GIF konnte nicht gesendet werden. Bitte erneut versuchen."); }
+    } catch (cause) { setError(cause instanceof Error ? cause.message : "Unable to send GIF. Please try again."); }
     finally { sendLock.current = false; setSending(false); }
   };
   const configure = (event: FormEvent) => {
@@ -94,8 +94,8 @@ export function GifPicker({ onSend, onClose }: { onSend: (url: string) => Promis
     if (event.clientX < bounds.left || event.clientX > bounds.right || event.clientY < bounds.top || event.clientY > bounds.bottom) onClose();
   }} onCancel={(event) => { event.preventDefault(); if (!sending) onClose(); }}>
     <header className="gif-picker__header"><h2 id="gif-picker-title">GIFs</h2><span>Powered by KLIPY</span>
-      {!hasDefaultKlipyKey() && <button type="button" className="icon-button" aria-label="KLIPY einrichten" disabled={sending} onClick={() => setSettings((current) => !current)}><Settings2 /></button>}
-      <button type="button" className="icon-button" aria-label="GIF-Suche schließen" disabled={sending} onClick={onClose}><X /></button>
+      {!hasDefaultKlipyKey() && <button type="button" className="icon-button" aria-label="Set up KLIPY" disabled={sending} onClick={() => setSettings((current) => !current)}><Settings2 /></button>}
+      <button type="button" className="icon-button" aria-label="Close GIF search" disabled={sending} onClick={onClose}><X /></button>
     </header>
     <div className="gif-picker__tabs" role="tablist" aria-label="GIF categories" onKeyDown={event => {
       if (sending || !["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
@@ -110,34 +110,34 @@ export function GifPicker({ onSend, onClose }: { onSend: (url: string) => Promis
     {tab === "favorites" ? <div id="gif-favorites-panel" role="tabpanel" aria-labelledby="gif-favorites-tab" className="gif-picker__scroll">
       {error && <p className="gif-picker__state" role="alert">{error}</p>}
       <div className="gif-picker__grid">{favorites.map(gif => <GifFavoriteFrame key={gif.url} gif={gif} className="gif-picker__tile">
-        <button type="button" className="gif-picker__result" data-tooltip={`${gif.title} senden`} aria-label={`${gif.title} senden`} disabled={sending} onClick={() => void choose(gif)} style={{ aspectRatio: `${gif.width} / ${gif.height}` }}>
+        <button type="button" className="gif-picker__result" data-tooltip={`Send ${gif.title}`} aria-label={`Send ${gif.title}`} disabled={sending} onClick={() => void choose(gif)} style={{ aspectRatio: `${gif.width} / ${gif.height}` }}>
           <img src={gif.previewUrl} alt={gif.title} loading="lazy" decoding="async" referrerPolicy="no-referrer" /><span>{gif.title}</span>
         </button>
       </GifFavoriteFrame>)}</div>
       {favorites.length === 0 && <p className="gif-picker__state">No favourite GIFs yet. Hover over a GIF and click the star to save it here.</p>}
-      {sending && <p className="gif-picker__state" role="status">GIF wird gesendet…</p>}
+      {sending && <p className="gif-picker__state" role="status">Sending GIF…</p>}
     </div> : settings ? <form id="gif-search-panel" role="tabpanel" aria-labelledby="gif-search-tab" className="gif-picker__settings auth-form" onSubmit={configure}>
-      <h3>KLIPY verbinden</h3><p>Hinterlege deinen KLIPY API-Key, um GIFs direkt hier zu suchen.</p>
-      <label htmlFor="klipy-key">KLIPY API-Key</label><input id="klipy-key" type="password" value={keyInput} onChange={(event) => setKeyInput(event.target.value)} autoComplete="off" autoFocus placeholder={apiKey ? "Neuen API-Key eingeben" : "API-Key eingeben"} required />
-      <button type="submit" className="button button--compact" disabled={!keyInput.trim()}>Speichern & suchen</button>
-      <a href="https://partner.klipy.com" target="_blank" rel="noreferrer">API-Key bei KLIPY erstellen</a>
-      {apiKey && <button type="button" className="back-button" onClick={() => setSettings(false)}>Zurück zu den GIFs</button>}
+      <h3>Connect KLIPY</h3><p>Enter your KLIPY API key to search for GIFs here.</p>
+      <label htmlFor="klipy-key">KLIPY API key</label><input id="klipy-key" type="password" value={keyInput} onChange={(event) => setKeyInput(event.target.value)} autoComplete="off" autoFocus placeholder={apiKey ? "Enter new API key" : "Enter API key"} required />
+      <button type="submit" className="button button--compact" disabled={!keyInput.trim()}>Save & search</button>
+      <a href="https://partner.klipy.com" target="_blank" rel="noreferrer">Create a KLIPY API key</a>
+      {apiKey && <button type="button" className="back-button" onClick={() => setSettings(false)}>Back to GIFs</button>}
     </form> : <div id="gif-search-panel" role="tabpanel" aria-labelledby="gif-search-tab" className="gif-picker__search-panel">
-      <div className="gif-picker__search"><Search size={17} /><input aria-label="GIFs suchen" placeholder="GIFs auf KLIPY suchen" value={query} disabled={sending} autoFocus onChange={(event) => setQuery(event.target.value)} />
-        {query && <button type="button" className="icon-button" aria-label="Suche leeren" disabled={sending} onClick={() => setQuery("")}><X size={14} /></button>}
+      <div className="gif-picker__search"><Search size={17} /><input aria-label="Search GIFs" placeholder="Search GIFs on KLIPY" value={query} disabled={sending} autoFocus onChange={(event) => setQuery(event.target.value)} />
+        {query && <button type="button" className="icon-button" aria-label="Clear search" disabled={sending} onClick={() => setQuery("")}><X size={14} /></button>}
       </div>
       <div className="gif-picker__scroll" aria-busy={loading || sending}>
-        <div className="gif-picker__section">{query.trim() ? "SUCHERGEBNISSE" : "GERADE BELIEBT"}</div>
-        {error && <div className="gif-picker__state" role="alert"><p>{error}</p><button type="button" className="button button--compact" disabled={loading || sending} onClick={() => setRetry((value) => value + 1)}>Erneut versuchen</button></div>}
-        <div className="gif-picker__grid">{results.map((gif, index) => <GifFavoriteFrame key={gif.id} gif={gif} className="gif-picker__tile"><button type="button" className="gif-picker__result" data-tooltip={`${gif.title} senden`} aria-label={`${gif.title} senden`} disabled={sending || loading} onClick={() => void choose(gif)} style={{ aspectRatio: `${gif.width} / ${gif.height}` }}>
+        <div className="gif-picker__section">{query.trim() ? "SEARCH RESULTS" : "TRENDING"}</div>
+        {error && <div className="gif-picker__state" role="alert"><p>{error}</p><button type="button" className="button button--compact" disabled={loading || sending} onClick={() => setRetry((value) => value + 1)}>Try again</button></div>}
+        <div className="gif-picker__grid">{results.map((gif, index) => <GifFavoriteFrame key={gif.id} gif={gif} className="gif-picker__tile"><button type="button" className="gif-picker__result" data-tooltip={`Send ${gif.title}`} aria-label={`Send ${gif.title}`} disabled={sending || loading} onClick={() => void choose(gif)} style={{ aspectRatio: `${gif.width} / ${gif.height}` }}>
           <img src={gif.previewUrl} alt={gif.title} loading={index < 6 ? "eager" : "lazy"} decoding="async" referrerPolicy="no-referrer" /><span>{gif.title}</span>
         </button></GifFavoriteFrame>)}</div>
-        {loading && <div className="gif-picker__state" role="status">GIFs werden geladen…</div>}
-        {sending && <div className="gif-picker__state" role="status">GIF wird gesendet…</div>}
-        {!loading && !error && results.length === 0 && <div className="gif-picker__state">Keine GIFs gefunden. Probiere einen anderen Suchbegriff.</div>}
-        {next && <button type="button" className="gif-picker__more" disabled={loading || sending} onClick={() => void more()}>Mehr GIFs laden</button>}
+        {loading && <div className="gif-picker__state" role="status">Loading GIFs…</div>}
+        {sending && <div className="gif-picker__state" role="status">Sending GIF…</div>}
+        {!loading && !error && results.length === 0 && <div className="gif-picker__state">No GIFs found. Try another search term.</div>}
+        {next && <button type="button" className="gif-picker__more" disabled={loading || sending} onClick={() => void more()}>Load more GIFs</button>}
       </div>
-      <footer className="gif-picker__footer">GIF anklicken zum Senden <a href="https://klipy.com" target="_blank" rel="noreferrer">KLIPY</a></footer>
+      <footer className="gif-picker__footer">Click a GIF to send <a href="https://klipy.com" target="_blank" rel="noreferrer">KLIPY</a></footer>
     </div>}
   </dialog>;
 }
