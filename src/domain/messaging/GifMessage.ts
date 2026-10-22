@@ -15,6 +15,6 @@ export function parseGifMessage(body: string): string | null {
 
 export function createGifMessage(url: string): string {
   const safeUrl = gifUrl(url);
-  if (!safeUrl) throw new Error("Bitte eine gültige HTTPS-URL für das GIF verwenden.");
+  if (!safeUrl) throw new Error("Use a valid HTTPS URL for the GIF.");
   return `/gif ${safeUrl}`;
 }

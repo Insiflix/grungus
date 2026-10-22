@@ -15,6 +15,7 @@ import type {
 import { MatrixRuntime } from "./MatrixRuntime";
 
 class FakeClient implements IMatrixClient {
+  acceptUserIdentity = vi.fn(async () => undefined);
   observeUserVerification = vi.fn(() => () => {});
   createPoll = vi.fn();
   observePoll = vi.fn(() => () => {});
@@ -25,6 +26,7 @@ class FakeClient implements IMatrixClient {
   getIdentityState = vi.fn();
   refreshIdentity = vi.fn(async () => undefined);
   requestIdentityVerification = vi.fn(async () => undefined);
+  requestUserVerification = vi.fn(async (_userId: string) => undefined);
   acceptIdentityVerification = vi.fn(async () => undefined);
   startIdentityComparison = vi.fn(async () => undefined);
   confirmIdentityComparison = vi.fn(async () => undefined);
@@ -65,6 +67,7 @@ class FakeClient implements IMatrixClient {
     this.rooms = this.rooms.map(room => room.id === roomId ? { ...room, isDirectClosed: closed } : room);
     this.emit("roomsChanged", this.rooms);
   });
+  getPinnedMessages = async (id: string) => this.getTimeline(id).filter(message => message.isPinned);
   getTimeline = (id: string) => this.timelines[id] ?? [];
   refreshTimeline = vi.fn(async (id: string) => this.getTimeline(id));
   loadOlderMessages = vi.fn(async (id: string) => ({ messages: this.getTimeline(id), hasMore: false }));
@@ -92,12 +95,63 @@ const auth: IMatrixAuthProvider = {
   discover: vi.fn(),
   loginWithPassword: vi.fn(),
   startBrowserLogin: vi.fn(),
+  cancelBrowserLogin: vi.fn(async () => undefined),
   completeBrowserLogin: vi.fn(),
   restoreSession: vi.fn(async () => null),
   persistSession: vi.fn(async () => null),
   clearSession: vi.fn(async () => undefined),
   subscribeToBrowserCallback: vi.fn(() => () => undefined),
 };
+
+describe("SSO session lifecycle", () => {
+  const capabilities = { homeserverUrl: "https://matrix.example.org", serverName: "example.org", password: true, browser: true, delegatedOAuth: false, identityProviders: [] };
+  const session: MatrixSession = { homeserverUrl: capabilities.homeserverUrl, serverName: capabilities.serverName, accessToken: "access", refreshToken: "refresh", userId: "@me:example.org", deviceId: "DEVICE" };
+  function setup() {
+    let callback!: (url: string) => void;
+    const provider: IMatrixAuthProvider = {
+      ...auth,
+      restoreSession: vi.fn(async () => null),
+      discover: vi.fn(async () => capabilities),
+      loginWithPassword: vi.fn(async () => session),
+      startBrowserLogin: vi.fn(async () => undefined),
+      cancelBrowserLogin: vi.fn(async () => undefined),
+      completeBrowserLogin: vi.fn(async () => session),
+      persistSession: vi.fn(async () => null),
+      subscribeToBrowserCallback: vi.fn(listener => { callback = listener; return () => {}; }),
+    };
+    const client = new FakeClient();
+    const runtime = new MatrixRuntime(client, provider);
+    return { provider, client, runtime, callback: () => callback("validated-callback") };
+  }
+
+  it.each(["password", "sso"])("initializes and persists the existing client for %s", async method => {
+    const { runtime, provider, client, callback } = setup();
+    await runtime.bootstrap();
+    await runtime.discover("example.org");
+    if (method === "password") await runtime.loginWithPassword("me", "password");
+    else { await runtime.startBrowserLogin(); callback(); }
+    await vi.waitFor(() => expect(runtime.getSnapshot().phase).toBe("connected"));
+    expect(client.start).toHaveBeenCalledExactlyOnceWith(session);
+    expect(provider.persistSession).toHaveBeenCalledExactlyOnceWith(session);
+    expect(runtime.getSnapshot().browserLoginPending).toBe(false);
+  });
+
+  it("ignores a token exchange finishing after cancellation", async () => {
+    const { runtime, provider, client, callback } = setup();
+    let finish!: (session: MatrixSession) => void;
+    vi.mocked(provider.completeBrowserLogin).mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    await runtime.bootstrap();
+    await runtime.discover("example.org");
+    await runtime.startBrowserLogin();
+    callback();
+    await runtime.cancelBrowserLogin();
+    finish(session);
+    await Promise.resolve();
+    expect(runtime.getSnapshot()).toMatchObject({ phase: "signed-out", browserLoginPending: false, session: null });
+    expect(client.start).not.toHaveBeenCalled();
+    expect(provider.persistSession).not.toHaveBeenCalled();
+  });
+});
 
 describe("MatrixRuntime event bridge", () => {
   it("does not mark hidden voice chat read on selection or refresh, and reads new messages on reopening", async () => {

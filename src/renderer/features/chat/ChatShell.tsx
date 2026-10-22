@@ -34,6 +34,7 @@ import { ConversationCallCard } from "./ConversationCallCard";
 import type { MatrixRoom } from "../../../domain/matrix/MatrixTypes";
 import { CreateServerDialog } from "../rooms/CreateServerDialog";
 import { VoiceChatToggle } from "./VoiceChatToggle";
+import { ProfileActions } from "./ProfileActions";
 
 export function ChatShell() {
   const [directCall, setDirectCall] = useState<DirectCallState | null>(null);
@@ -75,6 +76,7 @@ export function ChatShell() {
   const [addingPeople, setAddingPeople] = useState(false);
   const [creatingServer, setCreatingServer] = useState(false);
   const [identityOpen, setIdentityOpen] = useState(false);
+  const [userVerificationOpen, setUserVerificationOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [managedRoomId, setManagedRoomId] = useState<string | null>(null);
   useEffect(() => {
@@ -130,7 +132,7 @@ export function ChatShell() {
         requestAnimationFrame(() => requestAnimationFrame(() => window.dispatchEvent(new CustomEvent("grungus:focus-message", { detail: { roomId: message.roomId, eventId: message.id } }))));
       }} />;
   const renderTimeline = (target: MatrixRoom | null, compact = false) => <TimelineErrorBoundary key={target?.id ?? "no-room"}>
-    <TimelinePanel draftKey={target && session ? JSON.stringify([session.homeserverUrl, session.userId, target.id]) : undefined} search={!compact ? renderSearch(target) : undefined} compact={compact} room={target} onOpenSettings={() => { if (target) setManagedRoomId(target.id); }} onOpenIdentity={() => setIdentityOpen(true)} onCall={video => { if (target) startCall(target, video); }} onDirectCall={video => { if (target) { setCallError(null); void directCalls.start(target.id, video).catch(error => setCallError(error instanceof Error ? error.message : "Call failed.")); } }} callActive={Boolean(call || directCall)} />
+    <TimelinePanel draftKey={target && session ? JSON.stringify([session.homeserverUrl, session.userId, target.id]) : undefined} search={!compact ? renderSearch(target) : undefined} compact={compact} room={target} onOpenSettings={() => { if (target) setManagedRoomId(target.id); }} onOpenIdentity={() => setIdentityOpen(true)} onCall={video => { if (target) startCall(target, video); }} callActive={Boolean(call || directCall)} />
   </TimelineErrorBoundary>;
   const voiceCallRoom = call && serverRooms.has(call.roomId) ? rooms.find(room => room.id === call.roomId) : null;
   const voiceChat = (target: MatrixRoom) => <aside className="voice-channel-chat" aria-label={`Text chat for ${target.name}`}>{renderTimeline(target, true)}</aside>;
@@ -143,6 +145,7 @@ export function ChatShell() {
 
   return (
     <main className="app-shell">
+      <ProfileActions onVerification={() => { setUserVerificationOpen(true); setIdentityOpen(true); }} />
       <MembershipToast />
       <WorkspaceRail spaces={spaces} selectedSpaceId={spaceId} onSelectSpace={selectSpace} onCreateServer={() => setCreatingServer(true)} />
       <RoomSidebar onManageChannel={setManagedRoomId} voiceDockRef={setVoiceDock} key={spaceId ?? "home"} space={activeSpace ?? null} calls={roomCalls} callActive={Boolean(call || directCall)} onJoinVoice={room => startCall(room, false)} discoveryPending={spaceId ? discovery[spaceId]?.pending : false} discoveryError={spaceId ? discovery[spaceId]?.error : undefined} onRetryDiscovery={() => { if (spaceId) void refreshSpace(spaceId); }} onOpenIdentity={() => setIdentityOpen(true)} onOpenSettings={() => setSettingsOpen(true)} onManageSpace={() => { if (activeSpace) setManagedRoomId(activeSpace.id); }} />
@@ -165,10 +168,10 @@ export function ChatShell() {
       </nav>
       <section className="chat-workspace">
         {(identity?.available && !identity.verified || incomingVerification) && <div className="status-banner identity-banner">
-          <span>{incomingVerification ? `Bestätigungsanfrage von ${identity?.verification?.userId}` : "Bestätige dieses Gerät, um deine verschlüsselten Chats vollständig zu nutzen."}</span>
-          <button type="button" onClick={() => setIdentityOpen(true)}>{incomingVerification ? "Anfrage öffnen" : "Identität bestätigen"}</button>
+          <span>{incomingVerification ? `Verification request from ${identity?.verification?.userId}` : "Verify this device to fully access your encrypted chats."}</span>
+          <button type="button" onClick={() => setIdentityOpen(true)}>{incomingVerification ? "Open request" : "Verify identity"}</button>
         </div>}
-        {callError && <div className="status-banner status-banner--error"><span>{callError}</span><button onClick={() => setCallError(null)}>Schließen</button></div>}
+        {callError && <div className="status-banner status-banner--error"><span>{callError}</span><button onClick={() => setCallError(null)}>Close</button></div>}
         {(sync.state === "error" || error || persistenceWarning) && (
           <div className={`status-banner ${sync.state === "error" || error ? "status-banner--error" : ""}`}>
             <span>
@@ -190,7 +193,7 @@ export function ChatShell() {
       {addingPeople && <PeopleDialog onClose={() => setAddingPeople(false)} />}
       {settingsOpen && <SettingsDialog onClose={() => setSettingsOpen(false)} onOpenIdentity={() => setIdentityOpen(true)} onManageRoom={setManagedRoomId} />}
       {managedRoomId && <RoomSettingsDialog key={managedRoomId} roomId={managedRoomId} onClose={() => setManagedRoomId(null)} />}
-      {identityOpen && <IdentityDialog onClose={() => setIdentityOpen(false)} />}
+      {identityOpen && <IdentityDialog userVerification={userVerificationOpen} onClose={() => { setIdentityOpen(false); setUserVerificationOpen(false); }} />}
     </main>
   );
 }

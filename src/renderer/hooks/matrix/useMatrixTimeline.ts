@@ -11,6 +11,11 @@ export function useMatrixTimeline(roomId: string | null) {
   const runtime = useMatrixRuntime();
   const snapshot = useMatrixSnapshot();
   const actions = useMemo(() => ({
+    loadPinnedMessages: () => roomId ? runtime.getPinnedMessages(roomId).then(messages => messages.filter(message => !blockedUsers.getSnapshot().has(message.sender.id))) : Promise.resolve([]),
+    openPinnedMessage: async (message: Parameters<typeof runtime.openSearchResult>[0]) => {
+      await runtime.openSearchResult(message);
+      requestAnimationFrame(() => window.dispatchEvent(new CustomEvent("grungus:focus-message", { detail: { roomId: message.roomId, eventId: message.id } })));
+    },
     loadOlder: () => (roomId ? runtime.loadOlder(roomId) : Promise.resolve(false)),
     sendMessage: (body: string, replyToEventId?: string) =>
       roomId ? runtime.sendMessage(roomId, body, replyToEventId) : Promise.resolve(),

@@ -4,6 +4,7 @@ import path from 'node:path';
 import { createRequire } from 'node:module';
 import { spawnSync } from 'node:child_process';
 import electronPath from 'electron';
+import { fixVersionStringLengths } from './windows-version-info.mjs';
 
 // Windows reads taskbar/toast branding from the executable's resources, even
 // when BrowserWindow and the Start Menu shortcut already have custom icons.
@@ -12,7 +13,7 @@ export async function developmentRuntime() {
   const icon = path.resolve('public/grungus.ico');
   const executable = await fs.stat(electronPath);
   const version = createHash('sha256').update(await fs.readFile(icon))
-    .update(`${executable.size}:${executable.mtimeMs}:Grungus:v1`).digest('hex').slice(0, 12);
+    .update(`${executable.size}:${executable.mtimeMs}:Grungus:v2`).digest('hex').slice(0, 12);
   const brandedPath = path.join(path.dirname(electronPath), `grungus-${version}.exe`);
   try { await fs.access(brandedPath); return brandedPath; } catch { /* Generate once per runtime/icon version. */ }
   const temporary = `${brandedPath}.${process.pid}.tmp.exe`;
@@ -29,6 +30,12 @@ export async function developmentRuntime() {
     await fs.unlink(temporary);
     throw result.error ?? new Error(`Cannot brand development runtime: ${result.stderr}`);
   }
+  const binary = await fs.readFile(temporary);
+  fixVersionStringLengths(binary, {
+    ProductName: 'Grungus', FileDescription: 'Grungus', InternalName: 'Grungus',
+    OriginalFilename: path.basename(brandedPath),
+  });
+  await fs.writeFile(temporary, binary);
   await fs.rename(temporary, brandedPath);
   return brandedPath;
 }

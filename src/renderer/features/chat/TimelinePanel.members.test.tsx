@@ -7,6 +7,7 @@ import { TimelinePanel } from "./TimelinePanel";
 const state = vi.hoisted(() => ({ members: [] as MatrixRoomMember[] }));
 vi.mock("../../hooks/matrix/useMatrixTimeline", () => ({ useMatrixTimeline: () => ({ messages: [], members: state.members, typingMembers: [] }) }));
 vi.mock("../../hooks/usePreferences", () => ({ usePreferences: () => ({ groupMessages: true, showTyping: true }) }));
+vi.mock("./DirectMessageIdentity", () => ({ DirectMessageIdentity: () => null }));
 vi.mock("./MessageComposer", () => ({ MessageComposer: () => null }));
 vi.mock("./MessageRow", () => ({ MessageRow: () => null }));
 vi.mock("../rooms/PeopleDialog", () => ({ PeopleDialog: () => null }));
@@ -14,7 +15,7 @@ const member = (name: string, presence: MatrixRoomMember["presence"], membership
   id: `@${name.toLowerCase()}:example.org`, displayName: name, avatarUrl: null, isTyping: false, membership, presence,
 });
 const room: MatrixRoom = { id: "!general:example", name: "General", avatarUrl: null, topic: null, unreadCount: 0, highlightCount: 0, isEncrypted: true, membership: "join", memberCount: 5 };
-const props = { room, onOpenIdentity: vi.fn(), onOpenSettings: vi.fn(), onCall: vi.fn(), callActive: false, onDirectCall: vi.fn() };
+const props = { room, onOpenIdentity: vi.fn(), onOpenSettings: vi.fn(), onCall: vi.fn(), callActive: false };
 beforeEach(() => {
   vi.stubGlobal("ResizeObserver", class { observe() {} disconnect() {} });
   state.members = [member("Zoe", "online"), member("Alice", "online"), member("Bob", "unavailable"), member("Carol", "offline"), member("Dave", undefined), member("Left", "online", "leave")];
@@ -63,4 +64,14 @@ it("updates visible presence groups without reopening the member list", () => {
   expect(within(screen.getByRole("region", { name: "Offline" })).getByText("Alice")).toBeTruthy();
   fireEvent.click(screen.getByRole("button", { name: "Close member list" }));
   expect(screen.queryByRole("complementary")).toBeNull();
+});
+
+it("provides pins and regular calls without classic-call options in channels and DMs", () => {
+  const view = render(<TimelinePanel {...props} />);
+  expect(screen.getByRole("button", { name: "Pinned messages" })).toBeTruthy();
+  view.rerender(<TimelinePanel {...props} room={{ ...room, isDirect: true, memberCount: 2 }} />);
+  expect(screen.getByRole("button", { name: "Pinned messages" })).toBeTruthy();
+  expect(screen.getByRole("button", { name: "Start voice call" })).toBeTruthy();
+  expect(screen.getByRole("button", { name: "Start video call" })).toBeTruthy();
+  expect(document.querySelector(".call-options")).toBeNull();
 });

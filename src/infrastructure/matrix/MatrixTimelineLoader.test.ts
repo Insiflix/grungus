@@ -13,6 +13,21 @@ function setup() {
   return { client, room, old, latest, timelineSet, oldEvent, newestEvent };
 }
 describe("latest room history", () => {
+  it("loads past verification traffic to include older chat messages", async () => {
+    const { client, room, old, latest } = setup();
+    old.getEvents = () => []; latest.getEvents = () => [];
+    const message = new MatrixEvent({ event_id: "$chat", type: EventType.RoomMessage, content: { msgtype: "m.text", body: "Hello" }, origin_server_ts: 1 });
+    const request = new MatrixEvent({ event_id: "$request", type: EventType.RoomMessage, content: { msgtype: "m.key.verification.request", body: "Unsupported client fallback" }, origin_server_ts: 2 });
+    const done = new MatrixEvent({ event_id: "$done", type: "m.key.verification.done", content: {}, origin_server_ts: 3 });
+    client.getEventMapper = () => raw => raw.event_id === "$chat" ? message : raw.event_id === "$request" ? request : done;
+    client.createMessagesRequest.mockResolvedValueOnce({ chunk: [{ event_id: "$done" }, { event_id: "$request" }], end: "older" }).mockResolvedValueOnce({ chunk: [{ event_id: "$chat" }] });
+    const events = await loadLatestRoomEvents(client as unknown as MatrixClient, room);
+    expect(events).toContain(message);
+    // Preserve protocol events for the SDK; the message mapper filters their display.
+    expect(events).toContain(request);
+    expect(events).toContain(done);
+    expect(client.createMessagesRequest).toHaveBeenNthCalledWith(2, room.roomId, "older", 40, Direction.Backward);
+  });
   it("loads past a page full of call events to include an older actual message", async () => {
     const { client, room, old, latest } = setup();
     old.getEvents = () => []; latest.getEvents = () => [];

@@ -26,7 +26,7 @@ export function RoomMemberList({ members, onClose }: { members: MatrixRoomMember
         if (!people.length) return null;
         return <section className="room-members__group" key={presence} aria-label={presenceLabels[presence]}>
           <h3>{presenceLabels[presence]} <span>— {people.length}</span></h3>
-          <ul>{people.map(member => <li className="room-member" key={member.id} data-tooltip={`${member.id} — ${presenceLabels[presence]}`}>
+          <ul>{people.map(member => <li className="room-member" key={member.id} data-profile-user-id={member.id} tabIndex={0} data-tooltip={`${member.id} — ${presenceLabels[presence]}`}>
             <Avatar name={member.displayName} url={member.avatarUrl} size="small" presence={presence} />
             <span><strong>{member.displayName}</strong><small>{member.id}</small><span className="sr-only">{presenceLabels[presence]}</span></span>
           </li>)}</ul>

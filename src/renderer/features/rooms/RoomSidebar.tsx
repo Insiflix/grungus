@@ -131,7 +131,7 @@ export function RoomSidebar({ space, onOpenIdentity, onOpenSettings, onManageSpa
           <strong>{profile?.displayName ?? session?.userId.split(":")[0].replace("@", "")}</strong>
           <small>{sync.state === "ready" ? "Online" : sync.state}</small>
         </span>
-        <button type="button" className="icon-button" aria-label="Identität und Verschlüsselung" data-tooltip="Identität & Verschlüsselung" onClick={onOpenIdentity}><ShieldCheck /></button>
+        <button type="button" className="icon-button" aria-label="Identity and encryption" data-tooltip="Identity & encryption" onClick={onOpenIdentity}><ShieldCheck /></button>
         <button type="button" className="icon-button" aria-label="Settings" data-tooltip="Settings (Ctrl+,)" onClick={onOpenSettings}>
           <Settings />
         </button>

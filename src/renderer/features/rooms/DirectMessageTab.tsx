@@ -14,7 +14,7 @@ export function DirectMessageTab({ room, selected, presence = "unknown", onSelec
 }) {
   const blocked = useIsBlocked(room.directUserId);
   return <div className="dm-tab-wrap">
-    <button type="button" className={`dm-tab ${selected ? "is-selected" : ""} ${blocked ? "is-blocked" : ""}`}
+    <button type="button" data-profile-user-id={room.directUserId} className={`dm-tab ${selected ? "is-selected" : ""} ${blocked ? "is-blocked" : ""}`}
       data-tooltip={`${room.name} — ${blocked ? "Blocked · " : ""}${presenceLabels[presence]}`} aria-label={`${room.name}, ${blocked ? "Blocked, " : ""}${presenceLabels[presence]}${room.unreadCount > 0 ? `, ${room.unreadCount} unread messages` : ""}`}
       aria-current={selected ? "page" : undefined} onClick={() => onSelect(room.id)}>
       <Avatar name={room.name} url={room.avatarUrl} size="small" presence={presence} />

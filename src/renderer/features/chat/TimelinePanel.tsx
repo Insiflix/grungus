@@ -1,5 +1,5 @@
+import { PinnedMessages } from "./PinnedMessages";
 import { DirectMessageIdentity } from "./DirectMessageIdentity";
-import { ChevronDown } from "lucide-react";
 import { Phone, Video } from "lucide-react";
 import { memo, useCallback, useEffect, useRef, useState, type ReactNode } from "react";
 import type { MatrixRoom, MatrixMessage } from "../../../domain/matrix/MatrixTypes";
@@ -38,14 +38,13 @@ interface TimelinePanelProps {
   onOpenSettings: () => void;
   onCall: (video: boolean) => void;
   callActive: boolean;
-  onDirectCall: (video: boolean) => void;
   compact?: boolean;
 }
 
-export function TimelinePanel({ room, draftKey, search, onOpenIdentity, onOpenSettings, onCall, callActive, onDirectCall, compact = false }: TimelinePanelProps) {
+export function TimelinePanel({ room, draftKey, search, onOpenIdentity, onOpenSettings, onCall, callActive, compact = false }: TimelinePanelProps) {
   const savedDraft = useRoomDraft(draftKey);
   const prefs = usePreferences();
-  const { messages, members, typingMembers, loadOlder, sendMessage, createPoll, sendAttachment, getUploadLimit, setTyping, toggleReaction, editMessage, deleteMessage, togglePin, retryMessage, cancelSend } =
+  const { loadPinnedMessages, openPinnedMessage, messages, members, typingMembers, loadOlder, sendMessage, createPoll, sendAttachment, getUploadLimit, setTyping, toggleReaction, editMessage, deleteMessage, togglePin, retryMessage, cancelSend } =
     useMatrixTimeline(room?.id ?? null);
   const [loadingOlder, setLoadingOlder] = useState(false);
   const [hasMore, setHasMore] = useState(true);
@@ -110,12 +109,12 @@ export function TimelinePanel({ room, draftKey, search, onOpenIdentity, onOpenSe
           </>}
         </div>
         <div className="room-header__actions" hidden={compact}>
+          <PinnedMessages key={room.id} pinnedEventIds={room.pinnedEventIds} messages={messages} load={loadPinnedMessages} onOpen={openPinnedMessage} />
           <button type="button" className="icon-button" aria-label="Room settings" data-tooltip="Room settings" onClick={onOpenSettings}><Settings /></button>
-          <button className="icon-button" data-tooltip="Sprachanruf / laufendem Anruf beitreten" aria-label="Sprachanruf starten" disabled={callActive} onClick={() => onCall(false)}><Phone /></button>
-          <button className="icon-button" data-tooltip="Videoanruf / laufendem Anruf beitreten" aria-label="Videoanruf starten" disabled={callActive} onClick={() => onCall(true)}><Video /></button>
-          {room.memberCount === 2 && <details className="call-options"><summary data-tooltip="Klassische Matrix-Anrufe" aria-label="Weitere Anrufoptionen"><ChevronDown size={16} /></summary><div><button disabled={callActive} onClick={event => { event.currentTarget.closest("details")?.removeAttribute("open"); onDirectCall(false); }}>Klassischer Sprachanruf</button><button disabled={callActive} onClick={event => { event.currentTarget.closest("details")?.removeAttribute("open"); onDirectCall(true); }}>Klassischer Videoanruf</button></div></details>}
+          <button className="icon-button" data-tooltip="Start or join voice call" aria-label="Start voice call" disabled={callActive} onClick={() => onCall(false)}><Phone /></button>
+          <button className="icon-button" data-tooltip="Start or join video call" aria-label="Start video call" disabled={callActive} onClick={() => onCall(true)}><Video /></button>
           <button type="button" className="icon-button room-invite-button" aria-label="Invite people to this room" data-tooltip="Invite people" onClick={() => setInviting(true)}><UserPlus /></button>
-          {room.isEncrypted && <button type="button" className="encrypted-pill" aria-label="End-to-end encryption" onClick={onOpenIdentity} data-tooltip="Identität & Verschlüsselung"><LockIcon /></button>}
+          {room.isEncrypted && <button type="button" className="encrypted-pill" aria-label="End-to-end encryption" onClick={onOpenIdentity} data-tooltip="Identity & encryption"><LockIcon /></button>}
           <button ref={memberToggle} type="button" className="member-count" aria-label="Show room members" data-tooltip="Room members"
             aria-expanded={membersVisible} aria-controls="room-members" onClick={() => setMembersVisible(visible => !visible)}><UsersIcon /> {room.memberCount}</button>
           {search}

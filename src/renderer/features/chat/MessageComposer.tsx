@@ -197,7 +197,7 @@ export function MessageComposer({ roomName, draftKey, onSendComplete, onSend, on
   };
 
   const sendGif = async (url: string) => {
-    if (sendLock.current || savedDraft.sending) throw new Error("Eine Nachricht wird bereits gesendet.");
+    if (sendLock.current || savedDraft.sending) throw new Error("A message is already being sent.");
     const message = createGifMessage(url);
     sendLock.current = true; setSending(true); typingNotifications.current?.stop();
     roomDrafts.patch(draftKey, { sending: true });
@@ -251,10 +251,10 @@ export function MessageComposer({ roomName, draftKey, onSendComplete, onSend, on
           <Avatar name={member.displayName} url={member.avatarUrl} size="small" /><strong>@{member.displayName}</strong><small>{member.id}</small>
         </button>)}<footer>↑ ↓ to choose · Enter / Tab to mention · Esc to close</footer>
       </div>}
-      {suggestions.length > 0 && <div className="emoji-suggestions" role="listbox" id={suggestionId} aria-label="Emoji-Vorschläge" ref={suggestionList}>
+      {suggestions.length > 0 && <div className="emoji-suggestions" role="listbox" id={suggestionId} aria-label="Emoji suggestions" ref={suggestionList}>
         {suggestions.map((emoji, index) => <button type="button" role="option" id={`${suggestionId}-${index}`} key={emoji.id} aria-selected={index === activeEmoji} onMouseDown={(event) => event.preventDefault()} onMouseEnter={() => setActiveEmoji(index)} onClick={() => pickEmoji(nativeEmoji(emoji), true)}>
           <span>{nativeEmoji(emoji)}</span><strong>:{emoji.id}:</strong><small>{emoji.name}</small>
-        </button>)}<footer>↑ ↓ auswählen · Enter / Tab einfügen · Esc schließen</footer>
+        </button>)}<footer>↑ ↓ select · Enter / Tab insert · Esc close</footer>
       </div>}
       <textarea
         ref={textarea}
@@ -288,8 +288,8 @@ export function MessageComposer({ roomName, draftKey, onSendComplete, onSend, on
       />
       </div>
       <span className="composer__hint">{prefs.sendWithEnter ? "Shift + Enter for a new line" : "Ctrl + Enter to send"}</span>
-      <button type="button" className="composer__emoji icon-button" aria-label="Emoji auswählen" data-tooltip="Emojis" aria-haspopup="dialog" aria-expanded={emojiOpen} disabled={sending} onClick={() => setEmojiOpen(true)}><Smile /></button>
-      <button type="button" className="composer__gif" aria-label="GIF suchen und senden" data-tooltip="GIF suchen" aria-haspopup="dialog" aria-expanded={gifOpen} disabled={sending || Boolean(editing)} onClick={() => setGifOpen(true)}>GIF</button>
+      <button type="button" className="composer__emoji icon-button" aria-label="Choose emoji" data-tooltip="Emojis" aria-haspopup="dialog" aria-expanded={emojiOpen} disabled={sending} onClick={() => setEmojiOpen(true)}><Smile /></button>
+      <button type="button" className="composer__gif" aria-label="Search and send GIF" data-tooltip="Search GIF" aria-haspopup="dialog" aria-expanded={gifOpen} disabled={sending || Boolean(editing)} onClick={() => setGifOpen(true)}>GIF</button>
       <button className="composer__send" type="submit" disabled={(!body.trim() && (Boolean(editing) || !attachments.files.length)) || sending || attachmentsBlocked} aria-label="Send message">
         <SendIcon />
       </button>

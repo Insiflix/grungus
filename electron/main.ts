@@ -1,3 +1,4 @@
+import { SsoCallback } from "./ssoCallback.js";
 import { writeClipboardImage } from "./imageClipboard.js";
 import { registerNotifications } from "./notifications.js";
 import { registerWindowControls } from "./windowControls.js";
@@ -36,6 +37,14 @@ let mainWindow: BrowserWindow | null = null;
 let windowsIconPath = process.execPath;
 let pendingAuthCallback: string | null = null;
 const sessionOperations = new SessionOperationQueue();
+const ssoCallback = new SsoCallback(url => {
+  if (!mainWindow || mainWindow.isDestroyed()) return;
+  mainWindow.webContents.send("matrix-auth:callback", url);
+  if (mainWindow.isMinimized()) mainWindow.restore();
+  mainWindow.show();
+  mainWindow.focus();
+});
+app.on("before-quit", () => ssoCallback.cancel());
 
 function isAuthCallback(value: string): boolean {
   try {
@@ -153,6 +162,8 @@ function createWindow(): void {
     try { void shell.openExternal(secureMessageUrl(url)).catch(() => undefined); } catch { /* Unsupported external scheme. */ }
     return { action: "deny" };
   });
+  mainWindow.webContents.on("render-process-gone", () => ssoCallback.cancel());
+  mainWindow.webContents.on("did-start-navigation", (_event, _url, isInPlace, isMainFrame) => { if (isMainFrame && !isInPlace) ssoCallback.cancel(); });
   mainWindow.webContents.on("will-navigate", (event, url) => {
     desktopCapture?.cancel();
     if (!isTrustedRendererUrl(url) || !["/", "/index.html"].includes(new URL(url).pathname)) event.preventDefault();
@@ -168,6 +179,7 @@ function createWindow(): void {
   });
   mainWindow.once("ready-to-show", () => mainWindow?.show());
   mainWindow.on("closed", () => {
+    ssoCallback.cancel();
     desktopCapture?.cancel();
     mainWindow = null;
   });
@@ -200,6 +212,15 @@ function registerIpc(): void {
     (event, value: PersistedMatrixSession) => { assertTrustedAppSender(event, mainWindow, isTrustedRendererUrl); return sessionOperations.run(() => saveSession(value)); },
   );
   ipcMain.handle("matrix-session:remove", event => { assertTrustedAppSender(event, mainWindow, isTrustedRendererUrl); return sessionOperations.run(removeSession); });
+  ipcMain.handle("matrix-auth:prepare-sso", (event, mode: unknown) => {
+    assertTrustedAppSender(event, mainWindow, isTrustedRendererUrl);
+    if (mode !== undefined && mode !== "sso" && mode !== "oauth") throw new Error("Invalid authentication mode");
+    return ssoCallback.prepare(mode);
+  });
+  ipcMain.handle("matrix-auth:cancel-sso", event => {
+    assertTrustedAppSender(event, mainWindow, isTrustedRendererUrl);
+    ssoCallback.cancel();
+  });
   ipcMain.handle("matrix-auth:open-external", async (event, value: unknown) => {
     assertTrustedAppSender(event, mainWindow, isTrustedRendererUrl);
     if (typeof value !== "string") throw new Error("Invalid URL");
@@ -237,8 +258,8 @@ if (!app.requestSingleInstanceLock()) {
       await fs.writeFile(windowsIconPath, icon, { flag: "wx" }).catch(error => {
         if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
       });
-      // Older notification tests let Electron create a competing shortcut.
-      for (const name of ["Electron.lnk", "Grungus Matrix Development.lnk"]) {
+      // Older notification tests and a misspelled shortcut can compete for the toast display name.
+      for (const name of ["Electron.lnk", "Grungus Matrix Development.lnk", "Grungu.lnk"]) {
         const legacyShortcut = path.join(app.getPath("appData"), "Microsoft", "Windows", "Start Menu", "Programs", name);
         try {
           const legacy = shell.readShortcutLink(legacyShortcut);

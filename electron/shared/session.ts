@@ -1,4 +1,10 @@
+export interface MatrixOAuthSession {
+  issuer: string;
+  clientId: string;
+}
+
 export interface PersistedMatrixSession {
+  oauth?: MatrixOAuthSession;
   homeserverUrl: string;
   serverName: string;
   accessToken: string;
@@ -32,6 +38,8 @@ export interface DesktopBridge {
     remove(): Promise<void>;
   };
   auth: {
+    prepareSso(mode?: "sso" | "oauth"): Promise<string>;
+    cancelSso(): Promise<void>;
     openExternal(url: string): Promise<void>;
     onCallback(listener: (url: string) => void): () => void;
   };

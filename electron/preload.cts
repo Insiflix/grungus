@@ -41,6 +41,8 @@ const bridge: DesktopBridge = {
     remove: () => ipcRenderer.invoke("matrix-session:remove"),
   },
   auth: {
+    prepareSso: mode => ipcRenderer.invoke("matrix-auth:prepare-sso", mode),
+    cancelSso: () => ipcRenderer.invoke("matrix-auth:cancel-sso"),
     openExternal: (url: string) =>
       ipcRenderer.invoke("matrix-auth:open-external", url),
     onCallback: (listener: (url: string) => void) => {

@@ -9,17 +9,20 @@ export function LoginScreen() {
     phase,
     discovery,
     discoveryPending,
+    browserLoginPending,
     error,
     discover,
     resetDiscovery,
     loginWithPassword,
     startBrowserLogin,
     cancelRegistration,
+    cancelBrowserLogin,
   } = useMatrixSession();
-  const [server, setServer] = useState("matrix.org");
+  const [server, setServer] = useState("matrix.grung.us");
   const [user, setUser] = useState("");
   const [password, setPassword] = useState("");
   const [registering, setRegistering] = useState(false);
+  const startSso = (id?: string) => { void startBrowserLogin(id, registering); };
   const busy = discoveryPending || phase === "authenticating";
 
   const handleDiscovery = (event: FormEvent) => {
@@ -58,7 +61,7 @@ export function LoginScreen() {
                   id="homeserver"
                   value={server}
                   onChange={(event) => setServer(event.target.value)}
-                  placeholder="matrix.org"
+                  placeholder="matrix.grung.us"
                   autoComplete="url"
                   spellCheck={false}
                   disabled={busy}
@@ -93,22 +96,23 @@ export function LoginScreen() {
                   className="button button--primary"
                   type="button"
                   disabled={busy}
-                  onClick={() => void startBrowserLogin(undefined, registering)}
+                  onClick={() => startSso()}
                 >
                   {phase === "authenticating"
                     ? "Waiting for browser…"
                     : registering ? "Register in browser" : discovery.delegatedOAuth
                       ? "Continue securely in browser"
-                      : "Continue with SSO"}
+                      : `Mit SSO anmelden${discovery.identityProviders.length === 1 ? ` (${discovery.identityProviders[0].name})` : ""}`}
                 </button>
-                {discovery.identityProviders.length > 0 && (
+                {browserLoginPending && <p role="status">Anmeldung im Systembrowser. <button type="button" className="back-button" onClick={() => { void cancelBrowserLogin(); }}>Anmeldung abbrechen</button></p>}
+                {discovery.identityProviders.length > 1 && (
                   <div className="identity-providers">
                     {discovery.identityProviders.map((provider) => (
                       <button
                         type="button"
                         className="button button--secondary"
                         key={provider.id}
-                        onClick={() => void startBrowserLogin(provider.id, registering)}
+                        onClick={() => startSso(provider.id)}
                         disabled={busy}
                       >
                         {provider.iconUrl && <img src={provider.iconUrl} alt="" />}
@@ -120,9 +124,9 @@ export function LoginScreen() {
               </div>
             )}
 
-            {discovery.browser && (discovery.password || registering) && <div className="divider"><span>or</span></div>}
+            {discovery.browser && (discovery.password || (registering && !discovery.delegatedOAuth)) && <div className="divider"><span>or</span></div>}
 
-            {registering && <RegistrationForm />}
+            {registering && !discovery.delegatedOAuth && <RegistrationForm />}
 
             {discovery.password && !registering && (
               <form className="auth-form" onSubmit={handlePassword}>

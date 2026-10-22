@@ -53,7 +53,7 @@ describe("GIF favourites", () => {
     expect(send).not.toHaveBeenCalled();
     fireEvent.click(screen.getByRole("tab", { name: "Favourites" }));
     expect(screen.getByRole("tab", { name: "Favourites" }).getAttribute("aria-selected")).toBe("true");
-    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Frog senden" })); });
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Send Frog" })); });
     expect(send).toHaveBeenCalledWith(gif.url);
     expect(close).toHaveBeenCalledOnce();
   });
@@ -65,7 +65,7 @@ describe("GIF favourites", () => {
     const send = vi.fn().mockResolvedValue(undefined);
     render(<GifPicker onSend={send} onClose={vi.fn()} />);
     fireEvent.click(screen.getByRole("tab", { name: "Favourites" }));
-    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "GIF senden" })); });
+    await act(async () => { fireEvent.click(screen.getByRole("button", { name: "Send GIF" })); });
     expect(send).toHaveBeenCalledWith(gif.url);
     expect(mocks.search).not.toHaveBeenCalled();
   });

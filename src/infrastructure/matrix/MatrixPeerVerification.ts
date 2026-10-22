@@ -2,6 +2,23 @@ import type { MatrixClient } from "matrix-js-sdk";
 import { CryptoEvent, type UserVerificationStatus } from "matrix-js-sdk/lib/crypto-api";
 import type { MatrixPeerVerification } from "../../domain/matrix/MatrixTypes";
 
+export async function acceptPeerIdentity(client: MatrixClient, userId: string, assertCurrent = () => {}): Promise<void> {
+  if (userId === client.getUserId()) throw new Error("You cannot accept your own identity here.");
+  const crypto = client.getCrypto();
+  if (!crypto) throw new Error("Encryption is not ready. Please try again.");
+  const status = await crypto.getUserVerificationStatus(userId);
+  assertCurrent();
+  if (status.wasCrossSigningVerified() && !status.isVerified()) {
+    await crypto.withdrawVerificationRequirement(userId);
+  } else if (status.needsUserApproval) {
+    await crypto.pinCurrentUserIdentity(userId);
+  }
+  assertCurrent();
+  const updated = await crypto.getUserVerificationStatus(userId);
+  assertCurrent();
+  client.emit(CryptoEvent.UserTrustStatusChanged, userId, updated);
+}
+
 export function observePeerVerification(client: MatrixClient, userId: string, listener: (status: MatrixPeerVerification) => void, current = () => true): () => void {
   let active = true, revision = 0;
   const publish = (status: UserVerificationStatus) => {

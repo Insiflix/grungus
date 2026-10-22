@@ -35,18 +35,18 @@ export function MessageRow({ message, grouped, onReact, onMediaLoad, onAction, o
   const actionable = message.sendState === "sent" && !message.isRedacted && message.type !== "encrypted";
   const react = (key: string) => { setError(""); void Promise.resolve().then(() => onReact(key)).catch(cause => setError(cause instanceof Error ? cause.message : "Reaction failed.")); };
   const prefs = usePreferences();
-  const timeFormatter = new Intl.DateTimeFormat(undefined, { hour: "2-digit", minute: "2-digit", hour12: !prefs.use24HourTime });
+  const timeFormatter = new Intl.DateTimeFormat("en-US", { hour: "2-digit", minute: "2-digit", hour12: !prefs.use24HourTime });
   const timestamp = Number.isFinite(message.timestamp) ? message.timestamp : Date.now();
   const special = message.type === "encrypted" || message.type === "unsupported";
   const gif = prefs.showInlineMedia && message.type === "text" && !message.isRedacted ? parseGifMessage(message.body) : null;
   const mentioned = Boolean(message.mentionsOwnUser && !message.isRedacted);
-  if (message.type === "membership") return <article id={`message-${message.id}`} className="membership-notice">
+  if (message.type === "membership") return <article id={`message-${message.id}`} className={`membership-notice${message.membershipChange === "leave" ? " membership-notice--leave" : ""}`}>
     {message.membershipChange === "join" ? <LogIn size={15} aria-hidden="true" /> : <LogOut size={15} aria-hidden="true" />}
     <span>{message.body}</span><time dateTime={new Date(timestamp).toISOString()}>{timeFormatter.format(timestamp)}</time>
   </article>;
   return (
     <article id={`message-${message.id}`} aria-label={mentioned ? "Message mentioning you" : undefined} className={`message-row ${grouped ? "is-grouped" : ""} ${message.sendState === "failed" ? "is-failed" : ""} ${mentioned ? "is-mentioned" : ""}`} onContextMenu={event => { if (actionable) { event.preventDefault(); setMenu({ x: event.clientX, y: event.clientY }); } }}>
-      <div className="message-row__avatar">
+      <div className="message-row__avatar" data-profile-user-id={message.sender.id}>
         {!grouped && <Avatar name={message.sender.displayName} url={message.sender.avatarUrl} />}
         {grouped && <time>{timeFormatter.format(timestamp)}</time>}
       </div>
@@ -54,9 +54,9 @@ export function MessageRow({ message, grouped, onReact, onMediaLoad, onAction, o
         {message.isPinned && <div className="message-pinned"><Pin size={12} /> Pinned message</div>}
         {!grouped && (
           <header>
-            <strong>{message.sender.displayName}</strong>
+            <strong data-profile-user-id={message.sender.id} tabIndex={0}>{message.sender.displayName}</strong>
             <time dateTime={new Date(timestamp).toISOString()}>
-              {new Date(timestamp).toLocaleDateString(undefined, { month: "short", day: "numeric" })} at {timeFormatter.format(timestamp)}
+              {new Date(timestamp).toLocaleDateString("en-US", { month: "short", day: "numeric" })} at {timeFormatter.format(timestamp)}
             </time>
             {message.edited && <span>(edited)</span>}
           </header>

@@ -11,6 +11,7 @@ export function useMatrixSession() {
     sync: snapshot.sync,
     discovery: snapshot.discovery,
     discoveryPending: snapshot.discoveryPending,
+    browserLoginPending: snapshot.browserLoginPending,
     error: snapshot.error,
     persistenceWarning: snapshot.persistenceWarning,
     registrationChallenge: snapshot.registrationChallenge,
@@ -22,6 +23,7 @@ export function useMatrixSession() {
       runtime.loginWithPassword(user, password),
     startBrowserLogin: (identityProviderId?: string, register = false) =>
       runtime.startBrowserLogin(identityProviderId, register),
+    cancelBrowserLogin: () => runtime.cancelBrowserLogin(),
     logout: () => runtime.logout(),
     clearError: () => runtime.clearError(),
   };

@@ -1,4 +1,6 @@
-import { observePeerVerification } from "./MatrixPeerVerification";
+import { oauthForSession, withAuthTimeout } from "./MatrixOAuth";
+import { TokenRefresher, type OAuth2 } from "matrix-js-sdk/lib/oauth/index.js";
+import { acceptPeerIdentity, observePeerVerification } from "./MatrixPeerVerification";
 import type { TimelineEvents } from "matrix-js-sdk";
 import { createPollEvent, observeMatrixPoll, sendPollVote, closeMatrixPoll } from "./MatrixPolls";
 import type { PollInput, PollSnapshot } from "../../domain/messaging/Polls";
@@ -100,6 +102,10 @@ export class MatrixJsSdkClient implements IMatrixClient, ICallProvider {
     return { id, displayName: profile.displayname || id, avatarUrl: this.resolveMediaUrl(profile.avatar_url ?? null, 96, 96) };
   }
   private readonly identity = new MatrixIdentityManager((state) => this.emit("identityChanged", state));
+  acceptUserIdentity = (userId: string) => {
+    const client = this.requireClient();
+    return acceptPeerIdentity(client, userId, () => this.assertCurrent(client));
+  };
   observeUserVerification = (userId: string, listener: (status: import("../../domain/matrix/MatrixTypes").MatrixPeerVerification) => void) => {
     const client = this.requireClient();
     return observePeerVerification(client, userId, listener, () => this.client === client);
@@ -107,6 +113,10 @@ export class MatrixJsSdkClient implements IMatrixClient, ICallProvider {
   getIdentityState = () => this.identity.getSnapshot();
   refreshIdentity = () => this.identity.refresh();
   requestIdentityVerification = () => this.identity.requestVerification();
+  requestUserVerification = (userId: string) => {
+    this.validateUserId(userId);
+    return this.identity.requestUserVerification(userId.trim(), async () => (await this.startDirectMessage(userId)).id);
+  };
   acceptIdentityVerification = () => this.identity.acceptVerification();
   startIdentityComparison = () => this.identity.startComparison();
   confirmIdentityComparison = (matches: boolean) => this.identity.confirmComparison(matches);
@@ -122,6 +132,7 @@ export class MatrixJsSdkClient implements IMatrixClient, ICallProvider {
   private messageMapper: MatrixMessageMapper | null = null;
   private listeners = new Map<MatrixEventName, Set<(payload: unknown) => void>>();
   private session: MatrixSession | null = null;
+  private oauth: OAuth2 | null = null;
   private status: MatrixSyncStatus = { state: "stopped", error: null };
   private startPromise: Promise<void> | null = null;
   private hasPrepared = false;
@@ -184,6 +195,10 @@ export class MatrixJsSdkClient implements IMatrixClient, ICallProvider {
     this.hasPrepared = false;
     this.updateStatus({ state: "connecting", error: null });
 
+    const oauth = session.oauth ? await oauthForSession(session) : null;
+    if (this.session !== session) throw new Error("The Matrix session ended during initialization.");
+    this.oauth = oauth;
+    const oauthRefresher = oauth ? new TokenRefresher(oauth, async () => undefined) : null;
     let clientRef: MatrixClient | null = null;
     const client = createClient({
       baseUrl: secureHomeserverUrl(session.homeserverUrl),
@@ -197,7 +212,9 @@ export class MatrixJsSdkClient implements IMatrixClient, ICallProvider {
       tokenRefreshFunction: session.refreshToken
         ? async (refreshToken) => {
             if (!clientRef) throw new Error("Matrix client is not ready to refresh");
-            const refreshed = await clientRef.refreshToken(refreshToken);
+            const refreshed = oauthRefresher
+              ? await withAuthTimeout(oauthRefresher.tokenRefreshFunction(refreshToken)).then(tokens => ({ access_token: tokens.accessToken, refresh_token: tokens.refreshToken }))
+              : await clientRef.refreshToken(refreshToken);
             if (this.client !== clientRef) throw new Error("The Matrix session changed during token refresh.");
             const updated: MatrixSession = {
               ...this.session!,
@@ -258,6 +275,7 @@ export class MatrixJsSdkClient implements IMatrixClient, ICallProvider {
     }
     this.client = null;
     this.session = null;
+    this.oauth = null;
     this.roomMapper = null;
     this.messageMapper = null;
     this.hasPrepared = false;
@@ -266,8 +284,19 @@ export class MatrixJsSdkClient implements IMatrixClient, ICallProvider {
 
   async logout(): Promise<void> {
     const client = this.client;
+    const oauth = this.oauth;
+    const session = this.session;
     await this.stop();
-    if (client) await client.logout(false);
+    if (oauth && session) {
+      // OAuth-only servers disable the legacy /logout API too.
+      // Attempt both revocations even if one fails.
+      const results = await Promise.allSettled([
+        withAuthTimeout(oauth.revokeToken(session.accessToken, "access_token")),
+        ...(session.refreshToken ? [withAuthTimeout(oauth.revokeToken(session.refreshToken, "refresh_token"))] : []),
+      ]);
+      const failure = results.find(result => result.status === "rejected");
+      if (failure?.status === "rejected") throw failure.reason;
+    } else if (client) await client.logout(false);
   }
 
   getRooms(): MatrixRoom[] {
@@ -468,6 +497,20 @@ export class MatrixJsSdkClient implements IMatrixClient, ICallProvider {
     await Promise.allSettled(events.map(event => client.decryptEventIfNeeded(event)));
     return events.map(event => this.mapMessage(event, room)).filter((message): message is MatrixMessage => message !== null);
   }
+  async getPinnedMessages(roomId: string): Promise<MatrixMessage[]> {
+    const client = this.requireClient();
+    const room = this.requireRoom(roomId);
+    if (room.getMyMembership() !== "join") throw new Error("Join this room before opening its pinned messages.");
+    const ids = this.getRoom(roomId)?.pinnedEventIds ?? [];
+    const results = await Promise.all(ids.map(async id => {
+      const event = room.findEventById(id) ?? client.getEventMapper()({ ...await client.fetchRoomEvent(roomId, id), room_id: roomId });
+      await client.decryptEventIfNeeded(event);
+      this.assertCurrent(client);
+      return this.mapMessage(event, room);
+    }));
+    return results.filter((message): message is MatrixMessage => message !== null && !message.isRedacted);
+  }
+
   getTimeline(roomId: string): MatrixMessage[] {
     return this.mapRoomTimeline(this.requireRoom(roomId));
   }
