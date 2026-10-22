@@ -9,6 +9,7 @@ import { secureMessageUrl, secureExternalUrl } from "./shared/urls.js";
 import { app, BrowserWindow, clipboard, ipcMain, safeStorage, shell, session, protocol, net, desktopCapturer } from "electron";
 import { promises as fs } from "node:fs";
 import path from "node:path";
+import { createHash } from "node:crypto";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import type {
   PersistedMatrixSession,
@@ -18,8 +19,12 @@ import type {
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
+// A branded executable has a different basename from electron.exe, so Electron
+// reports isPackaged=true even when its default app loader runs our source tree.
+const isPackaged = app.isPackaged && !process.defaultApp;
+
 // Keep development windows separate from installed/pinned application groups.
-const APP_ID = app.isPackaged ? "dev.grungus.matrix" : "dev.grungus.matrix.development";
+const APP_ID = isPackaged ? "dev.grungus.matrix" : "dev.grungus.matrix.development";
 if (process.platform === "win32") app.setAppUserModelId(APP_ID);
 
 protocol.registerSchemesAsPrivileged([{ scheme: "grungus-app", privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true, stream: true } }]);
@@ -28,6 +33,7 @@ const PROTOCOL = "grungus-matrix";
 const SESSION_FILE = "matrix-session.bin";
 let desktopCapture: DesktopCaptureBroker | null = null;
 let mainWindow: BrowserWindow | null = null;
+let windowsIconPath = process.execPath;
 let pendingAuthCallback: string | null = null;
 const sessionOperations = new SessionOperationQueue();
 
@@ -103,18 +109,18 @@ async function removeSession(): Promise<void> {
 }
 
 function isTrustedRendererUrl(url: string): boolean {
-  try { const parsed = new URL(url); return app.isPackaged ? (parsed.protocol === "grungus-app:" && parsed.hostname === "client") : parsed.origin === "http://127.0.0.1:5173"; } catch { return false; }
+  try { const parsed = new URL(url); return isPackaged ? (parsed.protocol === "grungus-app:" && parsed.hostname === "client") : parsed.origin === "http://127.0.0.1:5173"; } catch { return false; }
 }
 
 function createWindow(): void {
-  const assetDirectory = path.join(app.getAppPath(), app.isPackaged ? "dist" : "public");
+  const assetDirectory = path.join(app.getAppPath(), isPackaged ? "dist" : "public");
   mainWindow = new BrowserWindow({
     width: 1440,
     height: 900,
     minWidth: 980,
     minHeight: 640,
     backgroundColor: "#090d18",
-    icon: path.join(assetDirectory, process.platform === "win32" ? "grungus.ico" : "grungus.png"),
+    icon: path.join(assetDirectory, "grungus.png"),
     frame: false,
     autoHideMenuBar: true,
     show: false,
@@ -130,10 +136,10 @@ function createWindow(): void {
 
   if (process.platform === "win32") mainWindow.setAppDetails({
     appId: APP_ID,
-    appIconPath: app.isPackaged ? process.execPath : path.join(assetDirectory, "grungus.ico"),
+    appIconPath: windowsIconPath,
     appIconIndex: 0,
-    relaunchDisplayName: "Grungus Matrix",
-    relaunchCommand: app.isPackaged ? `"${process.execPath}"` : `"${process.execPath}" "${app.getAppPath()}"`,
+    relaunchDisplayName: "Grungus",
+    relaunchCommand: isPackaged ? `"${process.execPath}"` : `"${process.execPath}" "${app.getAppPath()}"`,
   });
   mainWindow.removeMenu();
   const publishWindowState = () => mainWindow?.webContents.send("window:state-changed", { maximized: mainWindow.isMaximized() });
@@ -149,7 +155,7 @@ function createWindow(): void {
     if (!isTrustedRendererUrl(url) || !["/", "/index.html"].includes(new URL(url).pathname)) event.preventDefault();
   });
   mainWindow.webContents.on("will-frame-navigate", event => {
-    if (!event.isMainFrame && !allowsAppPermission("media", event.url, app.isPackaged, false)) event.preventDefault();
+    if (!event.isMainFrame && !allowsAppPermission("media", event.url, isPackaged, false)) event.preventDefault();
   });
   mainWindow.webContents.on("did-finish-load", () => {
     if (pendingAuthCallback) {
@@ -169,7 +175,7 @@ function createWindow(): void {
 }
 
 function registerIpc(): void {
-  registerNotifications(ipcMain, () => mainWindow, isTrustedRendererUrl, path.join(app.getAppPath(), app.isPackaged ? "dist" : "public", "grungus.png"));
+  registerNotifications(ipcMain, () => mainWindow, isTrustedRendererUrl, path.join(app.getAppPath(), isPackaged ? "dist" : "public", "grungus.png"));
   registerWindowControls(ipcMain, () => mainWindow, isTrustedRendererUrl);
   ipcMain.handle("clipboard:write-text", (event, text: unknown) => {
     if (event.sender !== mainWindow?.webContents || event.senderFrame !== mainWindow.webContents.mainFrame || !isTrustedRendererUrl(event.senderFrame.url)) throw new Error("Untrusted clipboard request");
@@ -207,7 +213,7 @@ if (!app.requestSingleInstanceLock()) {
     consumeProtocolArg([url]);
   });
 
-  if (app.isPackaged) {
+  if (isPackaged) {
     app.setAsDefaultProtocolClient(PROTOCOL);
   } else {
     app.setAsDefaultProtocolClient(PROTOCOL, process.execPath, [
@@ -216,15 +222,34 @@ if (!app.requestSingleInstanceLock()) {
   }
 
   consumeProtocolArg(process.argv);
-  void app.whenReady().then(() => {
-    if (process.platform === "win32" && !app.isPackaged) {
+  void app.whenReady().then(async () => {
+    if (process.platform === "win32" && !isPackaged) {
+      // Explorer caches icon resources by path. A content-specific path refreshes
+      // development taskbar/shortcut icons whenever the artwork changes.
+      const icon = await fs.readFile(path.join(app.getAppPath(), "public", "grungus.ico"));
+      const iconVersion = createHash("sha256").update(icon).digest("hex").slice(0, 16);
+      const iconDirectory = path.join(app.getPath("userData"), "icons");
+      await fs.mkdir(iconDirectory, { recursive: true });
+      windowsIconPath = path.join(iconDirectory, `grungus-${iconVersion}.ico`);
+      await fs.writeFile(windowsIconPath, icon, { flag: "wx" }).catch(error => {
+        if ((error as NodeJS.ErrnoException).code !== "EEXIST") throw error;
+      });
+      // Older notification tests let Electron create a competing shortcut.
+      for (const name of ["Electron.lnk", "Grungus Matrix Development.lnk"]) {
+        const legacyShortcut = path.join(app.getPath("appData"), "Microsoft", "Windows", "Start Menu", "Programs", name);
+        try {
+          const legacy = shell.readShortcutLink(legacyShortcut);
+          if (legacy.appUserModelId === APP_ID && path.dirname(legacy.target) === path.dirname(process.execPath)) await fs.unlink(legacyShortcut);
+        } catch { /* No legacy shortcut. */ }
+      }
+      // Match Electron's automatic notification shortcut name and working directory.
       // Windows toast delivery requires a Start Menu shortcut matching the AUMID.
-      const shortcut = path.join(app.getPath("appData"), "Microsoft", "Windows", "Start Menu", "Programs", "Grungus Matrix Development.lnk");
+      const shortcut = path.join(app.getPath("appData"), "Microsoft", "Windows", "Start Menu", "Programs", "Grungus.lnk");
       if (!shell.writeShortcutLink(shortcut, "create", {
-        target: process.execPath, args: `"${app.getAppPath()}"`, cwd: app.getAppPath(),
-        description: "Grungus Matrix development", appUserModelId: APP_ID,
+        target: process.execPath, args: `"${app.getAppPath()}"`, cwd: path.dirname(process.execPath),
+        description: "Grungus", appUserModelId: APP_ID,
         toastActivatorClsid: app.toastActivatorCLSID,
-        icon: path.join(app.getAppPath(), "public", "grungus.ico"), iconIndex: 0,
+        icon: windowsIconPath, iconIndex: 0,
       })) console.warn("Unable to register the development notification shortcut");
     }
     protocol.handle("grungus-app", async (request) => {
@@ -237,7 +262,7 @@ if (!app.requestSingleInstanceLock()) {
     desktopCapture = new DesktopCaptureBroker({
       platform: process.platform,
       getSources: () => desktopCapturer.getSources({ types: ["screen", "window"], thumbnailSize: { width: 320, height: 180 }, fetchWindowIcons: true }),
-      isTrusted: request => Boolean(mainWindow && request.frame && request.frame.top === mainWindow.webContents.mainFrame && allowsAppPermission("display-capture", request.frame.url, app.isPackaged, request.frame === mainWindow.webContents.mainFrame)),
+      isTrusted: request => Boolean(mainWindow && request.frame && request.frame.top === mainWindow.webContents.mainFrame && allowsAppPermission("display-capture", request.frame.url, isPackaged, request.frame === mainWindow.webContents.mainFrame)),
       notify: request => mainWindow?.webContents.send("desktop-capture:request", request),
       dismiss: id => mainWindow?.webContents.send("desktop-capture:dismiss", id),
     });
@@ -245,8 +270,8 @@ if (!app.requestSingleInstanceLock()) {
     app.on("before-quit", event => {
       desktopCapture?.cancel();
     });
-    configureAppPermissions(session.defaultSession, () => mainWindow, app.isPackaged);
-    if (process.platform === "darwin" && !app.isPackaged) {
+    configureAppPermissions(session.defaultSession, () => mainWindow, isPackaged);
+    if (process.platform === "darwin" && !isPackaged) {
       app.dock?.setIcon(path.join(app.getAppPath(), "public", "grungus.png"));
     }
     registerIpc();

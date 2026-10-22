@@ -65,6 +65,7 @@ import { MatrixAvatarLoader } from "./MatrixAvatarLoader";
 import { MatrixSettings } from "./MatrixSettings";
 import { preferences } from "../../domain/settings/Preferences";
 import { MatrixNotifications } from "./MatrixNotifications";
+import { notificationAvatar } from "../desktop/NotificationAvatar";
 import { blockedUsers } from "../../domain/settings/BlockedUsers";
 import { matrixPresence } from "../../domain/matrix/MatrixTypes";
 import { discoverSpaceRooms } from "./MatrixSpaceHierarchy";
@@ -80,7 +81,7 @@ function errorMessage(value: unknown): string {
 }
 
 export class MatrixJsSdkClient implements IMatrixClient, ICallProvider {
-  readonly notifications = new MatrixNotifications();
+  readonly notifications = new MatrixNotifications((url, name) => notificationAvatar(url, name, this.loadAvatar));
   readonly settings = new MatrixSettings(() => this.requireClient(), async () => {
     this.emit("profileUpdated", await this.getOwnProfile());
   });

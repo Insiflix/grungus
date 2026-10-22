@@ -109,7 +109,7 @@ describe("account settings interactions", () => {
     expect(requestPermission).not.toHaveBeenCalled();
     expect(preferences.getSnapshot().desktopNotifications).toBe(true);
     await user.click(screen.getByRole("button", { name: "Send test notification" }));
-    expect(notify).toHaveBeenCalledWith("Grungus Matrix", expect.objectContaining({ body: "Your notifications are working." }));
+    expect(notify).toHaveBeenCalledWith("Grungus", expect.objectContaining({ body: "Your notifications are working." }));
   });
   it("opens every settings category without requiring unsupported browser capabilities", async () => {
     const user = userEvent.setup(); showSettings();

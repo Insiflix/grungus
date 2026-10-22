@@ -6,7 +6,7 @@ export function BrandLogo({ className = "" }: BrandLogoProps) {
   return (
     <img
       className={"brand-logo " + className}
-      src="/grungus-512.webp"
+      src="/grungus.png"
       alt=""
       aria-hidden="true"
       width={512}

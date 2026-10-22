@@ -16,6 +16,7 @@
     "typecheck": "tsc -p tsconfig.app.json --noEmit && tsc -p tsconfig.electron.json --noEmit",
     "test": "vitest run",
     "test:watch": "vitest",
+    "test:notification": "tsc -p tsconfig.electron.json && node scripts/test-notification.cjs",
     "test:typing": "node scripts/test-typing-performance.mjs",
     "test:pickers": "node scripts/test-picker-performance.mjs",
     "test:chat": "tsc -p tsconfig.electron.json && node scripts/test-chat-interactions.mjs",
@@ -29,7 +30,7 @@
   },
   "build": {
     "appId": "dev.grungus.matrix",
-    "productName": "Grungus Matrix",
+    "productName": "Grungus",
     "directories": {
       "output": "release"
     },

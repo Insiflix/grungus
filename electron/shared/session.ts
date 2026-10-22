@@ -43,7 +43,7 @@ export interface DesktopBridge {
   platform: NodeJS.Platform;
 }
 
-export interface DesktopNotification { title: string; body: string; silent: boolean; roomId?: string }
+export interface DesktopNotification { title: string; body: string; silent: boolean; roomId?: string; iconDataUrl?: string }
 
 export interface ScreenShareSource { id: string; name: string; kind: "screen" | "window"; thumbnail: string; icon?: string }
 export interface ScreenShareRequest { id: string; sources: ScreenShareSource[]; audioRequested: boolean; systemAudioSupported: boolean }
