@@ -159,7 +159,7 @@ npm run build:dir
 - Direct native delegated OAuth dynamic registration/PKCE (the SSO compatibility path is implemented)
 - Polished reply/edit/delete controls, reaction picker, threads, message search, moderation, and room settings
 - Inline image/file rendering and upload UI (media resolution and domain extension points exist)
-- Push notifications and background sync
+- Push notifications and background sync while the app is closed
 - Native incoming-call notifications
 
 ## Tests

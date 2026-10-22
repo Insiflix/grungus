@@ -1,5 +1,6 @@
 import type { MatrixClient, MatrixEvent, Room } from "matrix-js-sdk";
 import { preferences } from "../../domain/settings/Preferences";
+import { showNotification } from "../desktop/Notifications";
 
 export async function playNotificationSound() {
   const context = new AudioContext();
@@ -37,16 +38,12 @@ export class MatrixNotifications {
     if (!actions?.notify) return;
     const prefs = preferences.getSnapshot();
     if (prefs.notificationSound && actions.tweaks.sound) void playNotificationSound().catch(() => undefined);
-    if (!prefs.desktopNotifications || typeof Notification === "undefined" || Notification.permission !== "granted") return;
+    if (!prefs.desktopNotifications) return;
     const content = event.getContent();
     const sender = room.getMember(event.getSender()!)?.name ?? event.getSender();
-    try {
-      const notification = new Notification(room.name, {
+    void showNotification({ title: room.name, roomId: room.roomId, silent: true,
         body: prefs.notificationPreviews ? `${sender}: ${typeof content.body === "string" ? content.body : "New activity"}` : "New activity in Grungus",
-        icon: "./grungus.png", tag: `${room.roomId}:${id}`,
-      });
-      notification.onclick = () => { window.focus(); window.dispatchEvent(new CustomEvent("grungus:open-room", { detail: room.roomId })); notification.close(); };
-    } catch { /* OS notifications may become unavailable after permission changes. */ }
+    }).catch(error => console.warn("Unable to deliver desktop notification", error));
   }
   decrypted(client: MatrixClient, event: MatrixEvent, room: Room) {
     if (this.encrypted.delete(event.getId() ?? "")) this.live(client, event, room);
