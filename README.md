@@ -48,6 +48,10 @@ Element Call embedded / MatrixRTC
 - `src/renderer/features/` — login, room navigation, timeline, composer, and local-echo UI.
 - `src/renderer/styles/` — Tailwind CSS 4 entry point plus reusable frozen-glass design tokens and desktop layout.
 
+On Windows, `npm run dev` creates a separate Grungus-branded development executable beside the installed Electron runtime. Its embedded product name and icon ensure the taskbar and Windows notification header show Grungus. The original Electron executable is preserved. Recreate the development executable automatically by restarting development after regenerating icons.
+
+With the development app running, `npm run test:notification -- --examples` sends real Windows test notifications, including labeled DM and channel examples. Message notifications use the sender's name/avatar for DMs and the channel name/server avatar for channels; missing avatars use initials.
+
 ## Electron module format
 
 The Electron main process and shared session types are ES modules. The preload alone compiles from `.cts` to CommonJS intentionally: Electron sandboxed preloads run as plain JavaScript and do not support ESM imports. Keeping that one boundary as CommonJS preserves `sandbox: true`; it is not an application-wide CommonJS choice. See Electron's [ES Modules documentation](https://www.electronjs.org/docs/latest/tutorial/esm#sandboxed-preload-scripts).

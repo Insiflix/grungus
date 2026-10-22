@@ -1,6 +1,7 @@
 import { watch } from "node:fs";
 import { spawn } from "node:child_process";
-import electronPath from "electron";
+import { developmentRuntime } from "./development-runtime.mjs";
+const electronPath = await developmentRuntime();
 
 // Some editor/agent hosts set this for their own Electron helpers. A desktop
 // application must launch Electron in browser-process mode instead.

@@ -4,7 +4,7 @@ import { runInNewContext } from "node:vm";
 import { afterEach, expect, it, vi } from "vitest";
 
 afterEach(() => vi.useRealTimers());
-it("restarts compiled Electron changes once, without node-only mode, and stops watching on shutdown", () => {
+it("restarts compiled Electron changes once, without node-only mode, and stops watching on shutdown", async () => {
   vi.useFakeTimers();
   let changed!: (event: string, file: string) => void;
   const close = vi.fn();
@@ -18,7 +18,10 @@ it("restarts compiled Electron changes once, without node-only mode, and stops w
   const handlers = new Map<string, () => void>();
   const process = { env: { VITE_DEV_SERVER_URL: "http://127.0.0.1:5173", ELECTRON_RUN_AS_NODE: "1" }, cwd: () => "/project", on: (signal: string, callback: () => void) => handlers.set(signal, callback), exit: vi.fn() };
   const source = readFileSync("scripts/start-electron.mjs", "utf8").replace(/^import .*;$/gm, "");
-  runInNewContext(source, { process, spawn, watch, electronPath: "electron", setTimeout, clearTimeout, console: { log: vi.fn(), error: vi.fn() } });
+  const developmentRuntime = vi.fn().mockResolvedValue("grungus.exe");
+  await runInNewContext(`(async () => { ${source} })()`, { process, spawn, watch, developmentRuntime, setTimeout, clearTimeout, console: { log: vi.fn(), error: vi.fn() } });
+  expect(developmentRuntime).toHaveBeenCalledOnce();
+  expect(spawn.mock.calls[0][0]).toBe("grungus.exe");
   expect(spawn).toHaveBeenCalledTimes(1);
   expect(spawn.mock.calls[0][2].env.ELECTRON_RUN_AS_NODE).toBeUndefined();
   expect(spawn.mock.calls[0][2].windowsHide).toBe(false);

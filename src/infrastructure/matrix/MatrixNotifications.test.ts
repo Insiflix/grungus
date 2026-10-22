@@ -51,4 +51,40 @@ describe("desktop notifications", () => {
     notify.mockClear(); FakeNotification.permission = "denied"; fixture().send();
     expect(notify).not.toHaveBeenCalled(); FakeNotification.permission = "granted";
   });
+  it("uses the DM sender name and profile picture without duplicating their name in the preview", async () => {
+    preferences.update({ notificationPreviews: true });
+    const { sdk, room, event } = fixture();
+    Object.assign(sdk, { getAccountData: () => ({ getContent: () => ({ "@alice:example.org": [room.roomId] }) }), getHomeserverUrl: () => "https://example.org" });
+    Object.assign(room, { getMember: () => ({ name: "Alice", getMxcAvatarUrl: () => "mxc://example.org/alice" }) });
+    const avatar = vi.fn().mockResolvedValue("data:image/png;base64,avatar");
+    new MatrixNotifications(avatar).live(sdk as unknown as MatrixClient, event, room as unknown as Room);
+    await vi.waitFor(() => expect(notify).toHaveBeenCalledWith("Alice", expect.objectContaining({ body: "Secret message", icon: "data:image/png;base64,avatar" })));
+    expect(avatar).toHaveBeenCalledWith(expect.stringContaining("/alice"), "Alice");
+  });
+  it("uses the canonical server avatar and channel name", async () => {
+    const { sdk, room, event } = fixture();
+    const parent = (id: string, canonical: boolean) => ({ getContent: () => ({ via: ["example.org"], canonical }), getStateKey: () => id });
+    const server = { name: "Forest server", isSpaceRoom: () => true, getMxcAvatarUrl: () => "mxc://example.org/server" };
+    Object.assign(sdk, { getHomeserverUrl: () => "https://example.org", getRoom: (id: string) => id === "!canonical" ? server : undefined });
+    Object.assign(room, { currentState: { getStateEvents: () => [parent("!other", false), parent("!canonical", true)] } });
+    const avatar = vi.fn().mockResolvedValue("data:image/png;base64,server");
+    new MatrixNotifications(avatar).live(sdk as unknown as MatrixClient, event, room as unknown as Room);
+    await vi.waitFor(() => expect(notify).toHaveBeenCalledWith("Forest room", expect.objectContaining({ icon: "data:image/png;base64,server" })));
+    expect(avatar).toHaveBeenCalledWith(expect.stringContaining("/server"), "Forest server");
+  });
+  it("does not deliver a pending avatar notification after the session is cleared", async () => {
+    const { sdk, room, event } = fixture();
+    let resolve!: (value: string) => void;
+    const manager = new MatrixNotifications(() => new Promise<string>(done => { resolve = done; }));
+    manager.live(sdk as unknown as MatrixClient, event, room as unknown as Room);
+    manager.clear(); resolve("data:image/png;base64,test");
+    await new Promise(done => setTimeout(done, 0));
+    expect(notify).not.toHaveBeenCalled();
+  });
+  it("still delivers text if avatar rendering fails", async () => {
+    const { sdk, room, event } = fixture();
+    new MatrixNotifications(() => Promise.reject(new Error("No canvas"))).live(sdk as unknown as MatrixClient, event, room as unknown as Room);
+    await vi.waitFor(() => expect(notify).toHaveBeenCalledOnce());
+  });
+
 });

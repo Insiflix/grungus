@@ -1,4 +1,4 @@
-import { Notification, type BrowserWindow, type IpcMain } from "electron";
+import { Notification, nativeImage, type BrowserWindow, type IpcMain } from "electron";
 import { assertTrustedAppSender } from "./ipcSecurity.js";
 import type { DesktopNotification } from "./shared/session.js";
 
@@ -15,7 +15,16 @@ export function registerNotifications(ipc: IpcMain, getWindow: () => BrowserWind
         typeof value.body !== "string" || value.body.length > 4096 || typeof value.silent !== "boolean" ||
         (value.roomId !== undefined && (typeof value.roomId !== "string" || value.roomId.length > 2048))) throw new Error("Invalid notification");
     if (!Notification.isSupported()) throw new Error("Desktop notifications are unavailable on this system.");
-    const notification = new Notification({ title: value.title, body: value.body, silent: value.silent, icon });
+    let notificationIcon: string | Electron.NativeImage = icon;
+    if (value.iconDataUrl !== undefined) {
+      if (typeof value.iconDataUrl !== "string" || value.iconDataUrl.length > 350_000 || !/^data:image\/png;base64,[A-Za-z0-9+/]+=*$/.test(value.iconDataUrl)) throw new Error("Invalid notification icon");
+      const bytes = Buffer.from(value.iconDataUrl.slice("data:image/png;base64,".length), "base64");
+      if (bytes.length < 24 || bytes.subarray(0, 8).toString("hex") !== "89504e470d0a1a0a" ||
+          bytes.readUInt32BE(16) < 1 || bytes.readUInt32BE(16) > 256 || bytes.readUInt32BE(20) < 1 || bytes.readUInt32BE(20) > 256) throw new Error("Invalid notification icon");
+      notificationIcon = nativeImage.createFromBuffer(bytes);
+      if (notificationIcon.isEmpty()) throw new Error("Invalid notification icon");
+    }
+    const notification = new Notification({ title: value.title, body: value.body, silent: value.silent, icon: notificationIcon });
     active.add(notification);
     // Keep the object alive for click events, while bounding retained notifications.
     if (active.size > 100) { const oldest = active.values().next().value!; active.delete(oldest); oldest.close(); }

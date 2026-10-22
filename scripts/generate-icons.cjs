@@ -17,7 +17,47 @@ if (!process.versions.electron) {
     const dataUrl = 'data:image/webp;base64,' + source.toString('base64');
     const window = new BrowserWindow({ show: false, webPreferences: { sandbox: true, contextIsolation: true, nodeIntegration: false } });
     await window.loadURL('data:text/html,<html></html>');
-    const png = await window.webContents.executeJavaScript('new Promise((resolve, reject) => { const image = new Image(); image.onload = () => { const canvas = document.createElement("canvas"); canvas.width = canvas.height = 512; const context = canvas.getContext("2d"); context.drawImage(image, 0, 0, 512, 512); resolve(canvas.toDataURL("image/png")); }; image.onerror = () => reject(new Error("Cannot decode logo")); image.src = ' + JSON.stringify(dataUrl) + '; })');
+    const png = await window.webContents.executeJavaScript(`
+      new Promise((resolve, reject) => {
+        const image = new Image();
+        image.onload = () => {
+          const source = document.createElement('canvas');
+          source.width = image.naturalWidth;
+          source.height = image.naturalHeight;
+          const sourceContext = source.getContext('2d');
+          sourceContext.drawImage(image, 0, 0);
+          const { data } = sourceContext.getImageData(0, 0, source.width, source.height);
+          let left = source.width, top = source.height, right = -1, bottom = -1;
+          for (let y = 0; y < source.height; y++) {
+            for (let x = 0; x < source.width; x++) {
+              if (data[(y * source.width + x) * 4 + 3] === 0) continue;
+              left = Math.min(left, x);
+              right = Math.max(right, x);
+              top = Math.min(top, y);
+              bottom = Math.max(bottom, y);
+            }
+          }
+          if (right < left) return reject(new Error('Empty logo'));
+
+          // Fit the visible artwork, rather than its padded source canvas, into
+          // a square. Preserve its proportions and center it for every usage.
+          const width = right - left + 1;
+          const height = bottom - top + 1;
+          // Leave a balanced 5% inset so the frog has room inside buttons.
+          const scale = (512 * 0.9) / Math.max(width, height);
+          const canvas = document.createElement('canvas');
+          canvas.width = canvas.height = 512;
+          const context = canvas.getContext('2d');
+          context.imageSmoothingQuality = 'high';
+          context.drawImage(source, left, top, width, height,
+            (512 - width * scale) / 2, (512 - height * scale) / 2,
+            width * scale, height * scale);
+          resolve(canvas.toDataURL('image/png'));
+        };
+        image.onerror = () => reject(new Error('Cannot decode logo'));
+        image.src = ${JSON.stringify(dataUrl)};
+      })
+    `);
     const icon = nativeImage.createFromDataURL(png);
     if (icon.isEmpty()) throw new Error('Empty logo');
     await fs.writeFile(path.join(root, 'public/grungus.png'), icon.toPNG());
@@ -37,7 +77,7 @@ if (!process.versions.electron) {
       offset += images[index].length;
     });
     await fs.writeFile(path.join(root, 'public/grungus.ico'), Buffer.concat([header, ...images]));
-    console.log('Generated PNG and multi-resolution Windows ICO from grungus-full.webp');
+    console.log('Generated centered, trimmed PNG and multi-resolution Windows ICO from grungus-full.webp');
     window.destroy();
     app.quit();
   }).catch(error => { console.error(error); app.exit(1); });

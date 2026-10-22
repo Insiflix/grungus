@@ -17,7 +17,7 @@ export async function enableNotifications(): Promise<void> {
 export async function showNotification(value: DesktopNotification): Promise<void> {
   if (window.desktop?.notifications) return window.desktop.notifications.show({ ...value, title: value.title.slice(0, 512), body: value.body.slice(0, 4096) });
   if (typeof Notification === "undefined" || Notification.permission !== "granted") return;
-  const notification = new Notification(value.title, { body: value.body, silent: value.silent, icon: "./grungus.png" });
+  const notification = new Notification(value.title, { body: value.body, silent: value.silent, icon: value.iconDataUrl ?? "./grungus.png" });
   notification.onclick = () => {
     window.focus();
     if (value.roomId) window.dispatchEvent(new CustomEvent("grungus:open-room", { detail: value.roomId }));
