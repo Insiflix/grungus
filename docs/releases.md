@@ -32,7 +32,7 @@ commit is rejected.
 | Platform | Architecture | Download |
 | --- | --- | --- |
 | Windows | x64 and ARM64 | One NSIS `.exe` installer selecting the native architecture |
-| Linux | x64 | `Grungus-<version>-linux-x64.AppImage` |
+| Linux | x64 | `Grungus-<version>-linux-x86_64.AppImage` |
 | Linux | ARM64 | `Grungus-<version>-linux-arm64.AppImage` |
 
 Linux builds use native Ubuntu 24.04 runners for each architecture. AppImages

@@ -11,7 +11,8 @@ module.exports = async function publish({ github, context, core }) {
   const required = [
     `Grungus-${version}-windows-setup.exe`,
     `Grungus-${version}-windows-setup.exe.blockmap`,
-    `Grungus-${version}-linux-x64.AppImage`,
+    // Electron Builder expands the AppImage ${arch} macro to x86_64 for x64.
+    `Grungus-${version}-linux-x86_64.AppImage`,
     `Grungus-${version}-linux-arm64.AppImage`,
     'latest.yml', 'latest-linux.yml', 'latest-linux-arm64.yml',
   ];
