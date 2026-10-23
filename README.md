@@ -126,6 +126,9 @@ Custom protocol registration is most reliable in an installed production build. 
 
 ## Commands
 
+For automatic Windows/Linux builds, GitHub Releases, and in-app updates, see
+[Desktop releases and updates](docs/releases.md).
+
 ```bash
 # Development (Vite + Electron)
 npm run dev
