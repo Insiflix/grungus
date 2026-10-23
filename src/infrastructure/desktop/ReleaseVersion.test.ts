@@ -47,7 +47,7 @@ it("skips published releases, resumes matching drafts, and fails closed on API e
 it("resumes draft uploads and only publishes after every upload succeeds", async () => {
   const files = [
     "Grungus-1.2.0-windows-setup.exe", "Grungus-1.2.0-windows-setup.exe.blockmap",
-    "Grungus-1.2.0-linux-x64.AppImage", "Grungus-1.2.0-linux-arm64.AppImage",
+    "Grungus-1.2.0-linux-x86_64.AppImage", "Grungus-1.2.0-linux-arm64.AppImage",
     "latest.yml", "latest-linux.yml", "latest-linux-arm64.yml",
   ];
   const events: string[] = [];
@@ -81,6 +81,10 @@ it("resumes draft uploads and only publishes after every upload succeeds", async
   await publish(options);
   expect(events).toEqual(["upload", "publish"]);
   events.length = 0;
+  files[2] = "Grungus-1.2.0-linux-x64.AppImage";
+  await expect(publish(options)).rejects.toThrow("Missing release asset: Grungus-1.2.0-linux-x86_64.AppImage");
+  expect(events).toEqual([]);
+  files[2] = "Grungus-1.2.0-linux-x86_64.AppImage";
   failUpload = true;
   await expect(publish(options)).rejects.toThrow("Upload failed");
   expect(events).toEqual([]);
