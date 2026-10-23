@@ -185,8 +185,9 @@ function createWindow(): void {
     mainWindow = null;
   });
 
-  const developmentUrl = process.env.VITE_DEV_SERVER_URL;
-  if (developmentUrl) void mainWindow.loadURL(developmentUrl);
+  // Packaged builds must never load a renderer chosen by an environment variable.
+  const developmentUrl = isPackaged ? undefined : process.env.VITE_DEV_SERVER_URL;
+  if (developmentUrl && isTrustedRendererUrl(developmentUrl)) void mainWindow.loadURL(developmentUrl);
   else void mainWindow.loadURL("grungus-app://client/index.html");
 }
 
@@ -278,9 +279,13 @@ if (!app.requestSingleInstanceLock()) {
       })) console.warn("Unable to register the development notification shortcut");
     }
     protocol.handle("grungus-app", async (request) => {
+      if (request.method !== "GET" && request.method !== "HEAD") return new Response("Method Not Allowed", { status: 405 });
       const url = new URL(request.url);
       const root = path.resolve(__dirname, "../dist");
-      const destination = path.resolve(root, "." + decodeURIComponent(url.pathname));
+      let pathname: string;
+      try { pathname = decodeURIComponent(url.pathname); } catch { return new Response("Bad Request", { status: 400 }); }
+      if (pathname.includes("\0")) return new Response("Bad Request", { status: 400 });
+      const destination = path.resolve(root, "." + pathname);
       if (!["client", "call"].includes(url.hostname) || (url.hostname === "call" && !url.pathname.startsWith("/element-call/")) || !destination.startsWith(root + path.sep)) return new Response("Forbidden", { status: 403 });
       return net.fetch(pathToFileURL(destination).href);
     });

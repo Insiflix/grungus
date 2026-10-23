@@ -152,8 +152,9 @@ export class MatrixAuthProvider implements IMatrixAuthProvider {
         ? (ssoFlow.identity_providers ?? []).map((provider) => ({
             id: provider.id,
             name: provider.name,
-            iconUrl: provider.icon
-              ? getHttpUriForMxc(client.getHomeserverUrl(), provider.icon, undefined, undefined, undefined, true, true, true) || provider.icon
+            // No access token exists before login; only accept homeserver-hosted MXC icons.
+            iconUrl: provider.icon?.startsWith("mxc://")
+              ? getHttpUriForMxc(client.getHomeserverUrl(), provider.icon, 64, 64, "scale", false, true, false) || null
               : null,
             brand: provider.brand ?? null,
           }))
