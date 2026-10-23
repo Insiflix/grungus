@@ -2,6 +2,10 @@
   "name": "grungus-matrix",
   "version": "0.1.0",
   "private": true,
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Insiflix/grungus-frontend.git"
+  },
   "overrides": {
     "@electron/get": {
       "global-agent": "^4.1.3"
@@ -22,7 +26,8 @@
     "test:chat": "tsc -p tsconfig.electron.json && node scripts/test-chat-interactions.mjs",
     "test:spaces": "node scripts/test-space-navigation.mjs",
     "test:media": "tsc -p tsconfig.electron.json && node scripts/test-media-playback.mjs",
-    "build": "npm run typecheck && vite build && tsc -p tsconfig.electron.json && electron-builder",
+    "build:app": "npm run typecheck && vite build && tsc -p tsconfig.electron.json",
+    "build": "npm run build:app && electron-builder --publish never",
     "build:dir": "npm run typecheck && vite build && tsc -p tsconfig.electron.json && electron-builder --dir",
     "test:call": "node scripts/smoke-element-call.mjs",
     "test:security": "vite build && tsc -p tsconfig.electron.json && node scripts/test-packaged-security.mjs",
@@ -31,6 +36,12 @@
   "build": {
     "appId": "dev.grungus.matrix",
     "productName": "Grungus",
+    "publish": {
+      "provider": "github",
+      "owner": "Insiflix",
+      "repo": "grungus-frontend",
+      "private": false
+    },
     "directories": {
       "output": "release"
     },
@@ -49,13 +60,16 @@
     ],
     "win": {
       "target": "nsis",
+      "artifactName": "Grungus-${version}-windows-setup.${ext}",
       "icon": "public/grungus.ico"
     },
     "linux": {
       "target": [
         "AppImage"
       ],
-      "icon": "public/grungus.png"
+      "icon": "public/grungus.png",
+      "category": "Network",
+      "artifactName": "Grungus-${version}-linux-${arch}.${ext}"
     },
     "mac": {
       "target": [
@@ -73,6 +87,7 @@
     "@matrix-org/matrix-sdk-crypto-wasm": "^18.8.0",
     "@tanstack/react-query": "^5.102.8",
     "axios": "^1.20.0",
+    "electron-updater": "^6.8.9",
     "linkify-it": "^6.1.0",
     "lucide-react": "^1.41.0",
     "matrix-js-sdk": "^42.3.0",

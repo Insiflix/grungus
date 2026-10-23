@@ -1,4 +1,5 @@
 import { SsoCallback } from "./ssoCallback.js";
+import { startAutoUpdates } from "./updates.js";
 import { writeClipboardImage } from "./imageClipboard.js";
 import { registerNotifications } from "./notifications.js";
 import { registerWindowControls } from "./windowControls.js";
@@ -300,6 +301,7 @@ if (!app.requestSingleInstanceLock()) {
     }
     registerIpc();
     createWindow();
+    startAutoUpdates(() => mainWindow);
     app.on("activate", () => {
       if (BrowserWindow.getAllWindows().length === 0) createWindow();
     });
