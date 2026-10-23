@@ -9,5 +9,8 @@ export function spaceRoomIds(spaces: MatrixRoom[], discovered: Readonly<Record<s
 }
 
 export function canJoinChannel(room: MatrixRoom): boolean {
-  return room.membership === "join" || room.membership === "invite" || ["public", "restricted", "knock_restricted"].includes(room.joinRule ?? "");
+  if (room.membership === "ban") return false;
+  // Hierarchy summaries may omit access rules. Let the homeserver decide a
+  // join attempt instead of presenting missing data as invitation-only access.
+  return room.membership === "join" || room.membership === "invite" || !room.joinRule || ["public", "restricted", "knock_restricted"].includes(room.joinRule);
 }

@@ -1,6 +1,6 @@
 import { membershipNotices } from "../../domain/matrix/MembershipNotices";
 import { describe, expect, it, vi } from "vitest";
-import { EventType, MatrixError, PushRuleKind, Visibility, type MatrixClient } from "matrix-js-sdk";
+import { EventType, MatrixError, MatrixEvent, RoomState, PushRuleKind, Visibility, type MatrixClient } from "matrix-js-sdk";
 import { MatrixSettings, SettingsAuthRequired } from "./MatrixSettings";
 
 function fixture() {
@@ -44,6 +44,7 @@ describe("Matrix account settings", () => {
   });
   it("creates server channels that members can join and links them to the space", async () => {
     const { sdk, settings } = fixture();
+    sdk.getStateEvent.mockResolvedValue({ join_rule: "restricted", allow: [{ type: "m.room_membership", room_id: "!server:example.org" }] } as never);
     Object.assign(sdk, { getDomain: () => "example.org", getRoom: () => ({ currentState: { maySendStateEvent: () => true } }) });
     await settings.createSpaceChannel("!server:example.org", " Lounge ", true);
     expect(sdk.createRoom).toHaveBeenCalledWith(expect.objectContaining({ name: "Lounge", creation_content: { type: "org.matrix.msc3417.call" }, initial_state: expect.arrayContaining([
@@ -55,6 +56,7 @@ describe("Matrix account settings", () => {
   });
   it.each(["public", "private", "invite"] as const)("creates text and voice channels with %s access", async access => {
     const { sdk, settings } = fixture();
+    sdk.getStateEvent.mockResolvedValue((access === "private" ? { join_rule: "restricted", allow: [{ type: "m.room_membership", room_id: "!server:example.org" }] } : { join_rule: access }) as never);
     Object.assign(sdk, { getDomain: () => "example.org", getRoom: () => ({ currentState: { maySendStateEvent: () => true } }) });
     for (const voice of [false, true]) {
       await settings.createSpaceChannel("!server:example.org", "Channel", voice, access);
@@ -62,12 +64,25 @@ describe("Matrix account settings", () => {
       expect(options[0]).toMatchObject({
         visibility: access === "public" ? Visibility.Public : Visibility.Private,
         creation_content: voice ? { type: "org.matrix.msc3417.call" } : {},
+        power_level_content_override: { events: { "org.matrix.msc3401.call.member": 0, "m.call.member": 0 } },
         initial_state: expect.arrayContaining([{ type: "m.room.join_rules", state_key: "", content: access === "private" ? { join_rule: "restricted", allow: [{ type: "m.room_membership", room_id: "!server:example.org" }] } : { join_rule: access } }]),
       });
+      // Joining the room is separate from permission to publish call membership.
+      // Exercise the SDK's permission check with a regular member and the room defaults.
+      const state = new RoomState("!new:example.org");
+      const override = options[0].power_level_content_override as { events: Record<string, number> };
+      state.setStateEvents([
+        new MatrixEvent({ room_id: "!new:example.org", type: EventType.RoomMember, state_key: "@member:example.org", content: { membership: "join" } }),
+        new MatrixEvent({ room_id: "!new:example.org", type: EventType.RoomPowerLevels, state_key: "", content: { users_default: 0, state_default: 50, ...override } }),
+      ]);
+      expect(state.maySendStateEvent("org.matrix.msc3401.call.member", "@member:example.org")).toBe(true);
+      expect(state.maySendStateEvent("m.call.member", "@member:example.org")).toBe(true);
+      expect(state.maySendStateEvent(EventType.RoomPowerLevels, "@member:example.org")).toBe(false);
     }
   });
   it("checks server permissions before creating a room and preserves recovery details if linking fails", async () => {
     const { sdk, settings } = fixture();
+    sdk.getStateEvent.mockResolvedValue({ join_rule: "restricted", allow: [{ type: "m.room_membership", room_id: "!server:example.org" }] } as never);
     const maySendStateEvent = vi.fn(() => false);
     Object.assign(sdk, { getDomain: () => "example.org", getRoom: () => ({ currentState: { maySendStateEvent } }) });
     await expect(settings.createSpaceChannel("!server:example.org", "General", false)).rejects.toThrow("Your role");
@@ -76,6 +91,22 @@ describe("Matrix account settings", () => {
     sdk.sendStateEvent.mockRejectedValueOnce(new Error("Forbidden"));
     await expect(settings.createSpaceChannel("!server:example.org", "General", false)).rejects.toThrow("!new:example.org");
     expect(sdk.createRoom).toHaveBeenCalledWith(expect.objectContaining({ initial_state: expect.arrayContaining([{ type: "m.room.encryption", state_key: "", content: { algorithm: "m.megolm.v1.aes-sha2" } }]) }));
+  });
+  it("repairs invitation-only access before publishing a channel created as public", async () => {
+    const { sdk, settings } = fixture();
+    Object.assign(sdk, { getDomain: () => "example.org", getRoom: () => ({ currentState: { maySendStateEvent: () => true } }) });
+    sdk.getStateEvent.mockResolvedValueOnce({ join_rule: "invite" } as never).mockResolvedValueOnce({ join_rule: "public" } as never);
+    await settings.createSpaceChannel("!server:example.org", "Public voice", true, "public");
+    expect(sdk.sendStateEvent).toHaveBeenNthCalledWith(1, "!new:example.org", EventType.RoomJoinRules, { join_rule: "public" }, "");
+    expect(sdk.sendStateEvent).toHaveBeenNthCalledWith(2, "!server:example.org", EventType.SpaceChild, expect.anything(), "!new:example.org");
+  });
+  it("reports the created room ID and avoids listing it if the server keeps invite-only access", async () => {
+    const { sdk, settings } = fixture();
+    Object.assign(sdk, { getDomain: () => "example.org", getRoom: () => ({ currentState: { maySendStateEvent: () => true } }) });
+    sdk.getStateEvent.mockResolvedValue({ join_rule: "invite" } as never);
+    await expect(settings.createSpaceChannel("!server:example.org", "Public voice", true, "public")).rejects.toThrow("Channel created (!new:example.org), but its access could not be verified");
+    expect(sdk.sendStateEvent).toHaveBeenCalledOnce();
+    expect(sdk.sendStateEvent).toHaveBeenCalledWith("!new:example.org", EventType.RoomJoinRules, { join_rule: "public" }, "");
   });
   it("publishes profile changes only after the homeserver accepts them", async () => {
     const { sdk, settings, profileChanged } = fixture();
@@ -177,6 +208,22 @@ describe("Matrix room and space administration", () => {
       events: { "m.room.name": 75 }, invite: 25, ban: 50,
     }, "");
   });
+  it("repairs call permissions only in the explicitly selected room and preserves other thresholds", async () => {
+    const { sdk, settings } = fixture();
+    Object.assign(sdk, { getRoom: () => ({ getMyMembership: () => "join", currentState: { maySendStateEvent: () => true } }) });
+    await settings.allowMemberCalls("!voice:example.org");
+    expect(sdk.getStateEvent).toHaveBeenCalledWith("!voice:example.org", EventType.RoomPowerLevels, "");
+    expect(sdk.sendStateEvent).toHaveBeenCalledExactlyOnceWith("!voice:example.org", EventType.RoomPowerLevels, {
+      users: { "@me:example.org": 100, "@other:example.org": 50 },
+      events: { "m.room.name": 75, "org.matrix.msc3401.call.member": 0, "m.call.member": 0 }, invite: 25, ban: 50,
+    }, "");
+  });
+  it("does not attempt to repair call permissions as an ordinary member", async () => {
+    const { sdk, settings } = fixture();
+    Object.assign(sdk, { getRoom: () => ({ getMyMembership: () => "join", currentState: { maySendStateEvent: () => false } }) });
+    await expect(settings.allowMemberCalls("!voice:example.org")).rejects.toThrow("administrator");
+    expect(sdk.sendStateEvent).not.toHaveBeenCalled();
+  });
   it("validates space-restricted access and writes the allowed-room membership rules", async () => {
     const { sdk, settings } = fixture();
     await expect(settings.roomAccess("!room:example.org", "restricted", [])).rejects.toThrow("valid space ID");
@@ -192,6 +239,7 @@ describe("Matrix room and space administration", () => {
   it("creates encrypted rooms and unencrypted space containers", async () => {
     const { sdk, settings } = fixture();
     await settings.createRoom(" Private room ", false, true, false);
+    expect(sdk.createRoom).toHaveBeenCalledWith(expect.objectContaining({ power_level_content_override: { events: { "org.matrix.msc3401.call.member": 0, "m.call.member": 0 } } }));
     expect(sdk.createRoom).toHaveBeenCalledWith(expect.objectContaining({ name: "Private room", visibility: Visibility.Private, initial_state: [{ type: EventType.RoomEncryption, state_key: "", content: { algorithm: "m.megolm.v1.aes-sha2" } }] }));
     await settings.createRoom("Space", true, true, true);
     expect(sdk.createRoom).toHaveBeenLastCalledWith(expect.objectContaining({ creation_content: { type: "m.space" }, initial_state: [] }));

@@ -1,6 +1,6 @@
 ﻿import { describe, expect, it, vi } from "vitest";
 import type { MatrixClient } from "matrix-js-sdk";
-import { MatrixCallDriver } from "./MatrixCallDriver";
+import { MatrixCallDriver, mountMatrixCall } from "./MatrixCallDriver";
 function fixture() {
   const sendStateEvent = vi.fn().mockResolvedValue({ event_id: "$membership" });
   const sendEvent = vi.fn().mockResolvedValue({ event_id: "$call" });
@@ -8,6 +8,17 @@ function fixture() {
   return { driver: new MatrixCallDriver(client, "!call:test"), sendStateEvent, sendEvent };
 }
 describe("call widget driver", () => {
+  it("explains missing room call permission before loading the widget", () => {
+    const maySendStateEvent = vi.fn(() => false);
+    const client = {
+      getRoom: () => ({ getMyMembership: () => "join", currentState: { maySendStateEvent } }),
+      getUserId: () => "@member:test",
+    } as unknown as MatrixClient;
+    const iframe = {} as HTMLIFrameElement;
+    expect(() => mountMatrixCall(client, iframe, "!call:test", false, () => {})).toThrow("Ask a room admin");
+    expect(maySendStateEvent).toHaveBeenCalledWith("org.matrix.msc3401.call.member", "@member:test");
+    expect(iframe.src).toBeUndefined();
+  });
   it("rejects sends to another room and unrelated chat events", async () => {
     const { driver, sendEvent } = fixture();
     await expect(driver.sendEvent("m.call.notify", {}, null, "!other:test")).rejects.toThrow("outside");

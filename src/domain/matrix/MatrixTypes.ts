@@ -92,6 +92,7 @@ export interface MatrixMessage {
   timestamp: number;
   type: MatrixMessageType;
   body: string;
+  canRetryDecryption?: boolean;
   poll?: PollDefinition;
   membershipChange?: "join" | "leave";
   attachment?: MessageAttachment;

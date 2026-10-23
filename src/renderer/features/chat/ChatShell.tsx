@@ -118,6 +118,7 @@ export function ChatShell() {
   const selectSpace = (id: string | null) => {
     setSpaceId(id);
     if (id === null) { runtime.clearSelectedRoom(); return; }
+    void refreshSpace(id);
     const space = spaces.find(space => space.id === id);
     const ids = id ? new Set([...(space?.childRoomIds ?? []), ...(spaceRooms[id] ?? []).map(room => room.id)]) : null;
     const next = rooms.find(room => room.membership === "join" && !room.isSpace && (ids ? ids.has(room.id) : !serverRooms.has(room.id) && !room.isDirectClosed));

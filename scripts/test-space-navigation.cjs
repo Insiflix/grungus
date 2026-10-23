@@ -141,17 +141,25 @@ app.whenReady().then(async () => {
     const hoverPoint = await evaluate(`(() => {
       const row = document.querySelector('[aria-label="Open text channel general"]').closest('.channel-row-actions');
       const actions = row.querySelector('.channel-inline-actions');
-      if (getComputedStyle(actions).opacity !== '0') throw new Error('Channel actions must be hidden before hover');
+      if (getComputedStyle(actions).display !== 'none') throw new Error('Channel actions must be hidden before hover');
+      const badge = document.createElement('i'); badge.className = 'unread-badge';
+      row.querySelector('.channel-row').append(badge);
+      const inset = row.getBoundingClientRect().right - badge.getBoundingClientRect().right;
+      if (inset < 6 || inset > 10) throw new Error('Unread indicator must sit at the right edge, got inset ' + inset);
       if (!row.querySelector('[aria-label="Settings for general"]')) throw new Error('Admin settings gear missing');
       const voice = document.querySelector('[aria-label="Join voice channel Lounge"]').closest('.channel-row-actions');
       if (voice.querySelector('.channel-settings')) throw new Error('Non-admin channel shows settings');
       const bounds = row.getBoundingClientRect(); return { x: Math.round(bounds.left + 20), y: Math.round(bounds.top + bounds.height / 2) };
     })()`);
+    await screenshot('channel-unread-alignment');
     window.webContents.sendInputEvent({ type: 'mouseMove', ...hoverPoint });
     await evaluate('new Promise(resolve => requestAnimationFrame(() => requestAnimationFrame(resolve)))');
     await evaluate(`(() => {
       const row = document.querySelector('[aria-label="Open text channel general"]').closest('.channel-row-actions');
-      if (getComputedStyle(row.querySelector('.channel-inline-actions')).opacity !== '1') throw new Error('Channel actions did not appear on hover');
+      if (getComputedStyle(row.querySelector('.channel-inline-actions')).display !== 'flex') throw new Error('Channel actions did not appear on hover');
+      const badge = row.querySelector('.unread-badge');
+      if (badge.getBoundingClientRect().right > row.querySelector('.channel-inline-actions').getBoundingClientRect().left) throw new Error('Unread indicator overlaps channel actions');
+      badge.remove();
       if (getComputedStyle(row).backgroundColor === 'rgba(0, 0, 0, 0)') throw new Error('Channel wrapper lacks hover background');
       if (getComputedStyle(row.querySelector('.channel-row')).backgroundColor !== 'rgba(0, 0, 0, 0)') throw new Error('Channel button masks full-width hover');
     })()`);
@@ -219,6 +227,21 @@ app.whenReady().then(async () => {
     await waitFor('!document.querySelector(".membership-toast")');
     window.setSize(760, 700);
     await screenshot("groups-narrow");
+    await evaluate('window.navigationFixture.showDecryptionNotices()');
+    await waitFor('document.querySelectorAll(".message-decryption").length === 2');
+    await evaluate('document.querySelector(".message-decryption button").click()');
+    await waitFor('!!document.querySelector(".message-decryption [role=alert]")');
+    await evaluate(`(() => {
+      if (document.querySelectorAll('.message-decryption button').length !== 1) throw new Error('Pre-join messages must not offer retry');
+      const alert = document.querySelector('.message-decryption [role=alert]');
+      if (!alert.closest('.message-row__content')) throw new Error('Decryption error escaped message column');
+      for (const row of document.querySelectorAll('.timeline .message-row')) {
+        if (row.children.length !== 2) throw new Error('Decryption error added an extra grid cell');
+        if (row.querySelector('.message-decryption__content').getBoundingClientRect().width < 140) throw new Error('Decryption text squeezed into avatar column');
+      }
+      if (document.querySelectorAll('.message-decryption__content span').length !== 2) throw new Error('Decryption text duplicated');
+    })()`);
+    await screenshot('decryption-notices-narrow');
     console.log(JSON.stringify({ passed: true, checks: ["DM initial/reopen/delayed-media bottom positioning", "manual history scrolling", "compact DM gap", "full-height sidebar", "compact chat rows", "channel tab hide/reopen/new message", "dashboard cleanup", "create/vote/end poll", "separate group chats", "create and open server", "public channel discovery and join", "voice participants", "send text during voice call", "voice channel view", "group call view"], screenshots: path.join(app.getPath("temp"), "grungus-*.png") }));
     app.exit(0);
   } catch (error) { console.error(error); app.exit(1); }

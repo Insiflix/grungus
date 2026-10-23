@@ -58,4 +58,16 @@ describe("chat search", () => {
     await waitFor(() => expect((screen.getByRole("button", { name: "Join voice channel Lounge" }) as HTMLButtonElement).disabled).toBe(false));
     expect(onJoinVoice).not.toHaveBeenCalled();
   });
+  it("allows a join attempt when the hierarchy omits the channel access rule", async () => {
+    const voice = { ...base, id: "!voice", name: "Garle Girk", roomType: "org.matrix.msc3417.call", membership: "leave" as const };
+    mocks.discovered["!server"] = [voice];
+    const onJoinVoice = vi.fn();
+    render(<RoomSidebar space={{ ...base, id: "!server", isSpace: true }} onJoinVoice={onJoinVoice} onOpenIdentity={vi.fn()} onOpenSettings={vi.fn()} onManageSpace={vi.fn()} />);
+    const channel = screen.getByRole("button", { name: "Join voice channel Garle Girk" }) as HTMLButtonElement;
+    expect(channel.disabled).toBe(false);
+    expect(channel.querySelector(".lucide-lock-keyhole")).toBeNull();
+    fireEvent.click(channel);
+    await waitFor(() => expect(onJoinVoice).toHaveBeenCalledWith(voice));
+    expect(mocks.joinRoom).toHaveBeenCalledWith(voice.id, undefined);
+  });
 });

@@ -1,4 +1,5 @@
 import { membershipChange } from "./MatrixMembershipChanges";
+import { canRetryDecryption, decryptionFailureMessage } from "./MatrixDecryption";
 import { parsePoll } from "./MatrixPolls";
 import type { EncryptedAttachment } from "../../domain/messaging/Attachments";
 import { isHiddenTimelineEvent } from "./MatrixTimelinePolicy";
@@ -94,7 +95,7 @@ export class MatrixMessageMapper {
       mappedBody = "Message deleted";
     } else if (encryptedFailure) {
       mappedType = "encrypted";
-      mappedBody = "Unable to decrypt this message";
+      mappedBody = decryptionFailureMessage(event.decryptionFailureReason);
     } else if (encryptedPending) {
       mappedType = "encrypted";
       mappedBody = "Waiting for encryption keys…";
@@ -122,6 +123,7 @@ export class MatrixMessageMapper {
       timestamp: Number.isFinite(rawTimestamp) ? rawTimestamp : Date.now(),
       type: mappedType,
       body: mappedBody,
+      ...(mappedType === "encrypted" ? { canRetryDecryption: encryptedFailure && canRetryDecryption(event.decryptionFailureReason) } : {}),
       ...(poll ? { poll } : {}),
       ...(membership ? { membershipChange: membership === "join" ? "join" as const : "leave" as const } : {}),
       ...(["image", "video", "audio", "file"].includes(mappedType) ? (() => {

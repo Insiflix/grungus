@@ -24,13 +24,18 @@ const calls = [{ roomId: voice.id, name: voice.name, participants: 2, members },
 const pollListeners = new Set<(snapshot: PollSnapshot) => void>();
 let pollState: PollSnapshot = { counts: {}, totalVoters: 0, ownAnswers: [], ended: false, canEnd: true, loading: false, incomplete: false };
 const publishPoll = () => { for (const listener of pollListeners) listener(pollState); };
-Object.assign(window, { navigationFixture: { showMembershipNotices: () => {
+Object.assign(window, { navigationFixture: { showDecryptionNotices: () => {
+  const roomId = snapshot.selectedRoomId!;
+  const message: MatrixMessage = { id: "$prejoin", roomId, sender: members[0], timestamp: Date.now(), type: "encrypted", body: "Message sent before you joined.", canRetryDecryption: false, edited: false, replyTo: null, reactions: [], sendState: "sent", isOwn: false, isRedacted: false };
+  update({ timelines: { ...snapshot.timelines, [roomId]: [message, { ...message, id: "$missingkey", body: "The sender's device has not shared the encryption key for this message yet.", canRetryDecryption: true }] } });
+}, showMembershipNotices: () => {
   const roomId = snapshot.selectedRoomId!;
   const message: MatrixMessage = { id: "$joined", roomId, sender: members[0], timestamp: Date.now(), type: "membership", membershipChange: "join", body: "Alice joined the room.", edited: false, replyTo: null, reactions: [], sendState: "sent", isOwn: false, isRedacted: false };
   update({ timelines: { ...snapshot.timelines, [roomId]: [message, { ...message, id: "$left", membershipChange: "leave", body: "Bob left the room." }] } });
   membershipNotices.publish("join", { name: "The Forest", isSpace: true });
 }, populateDm: () => update({ timelines: { ...snapshot.timelines, [dm.id]: Array.from({ length: 40 }, (_, index): MatrixMessage => ({ id: 'dm-message-' + index, roomId: dm.id, sender: { id: '@alice:example', displayName: 'Alice', avatarUrl: null }, timestamp: index * 60_000, type: 'text', body: 'Message ' + index, edited: false, replyTo: null, reactions: [], sendState: 'sent', isOwn: false, isRedacted: false })) } }), incomingChannelMessage: () => update({ rooms: snapshot.rooms.map(room => room.id === general.id ? { ...room, lastMessageTimestamp: 300 } : room) }) } });
 export const runtime = {
+  retryMessage: async () => { throw new Error("The sender's device has not shared the encryption key for this message yet."); },
   observeUserVerification: (_id: string, listener: (status: string) => void) => { listener("verified"); return () => {}; },
   subscribe: (listener: () => void) => { listeners.add(listener); return () => listeners.delete(listener); },
   getSnapshot: () => snapshot,
@@ -58,7 +63,7 @@ export const useMatrixSnapshot = () => useSyncExternalStore(runtime.subscribe, r
 export const useMatrixRooms = (filter = "") => ({ ...useMatrixSnapshot(), ...runtime, rooms: snapshot.rooms.filter(room => room.name.toLowerCase().includes(filter.toLowerCase())) });
 export const useMatrixRoom = (id: string | null) => useMatrixSnapshot().rooms.find(room => room.id === id) ?? null;
 export const useMatrixSession = () => ({ session: { userId: "@you:example" }, profile: { displayName: "You", avatarUrl: null }, sync: { state: "ready" }, clearError() {} });
-export const useMatrixTimeline = (id: string) => ({ messages: useMatrixSnapshot().timelines[id] ?? [], members, typingMembers: [], loadOlder: async () => false, createPoll: (input: PollInput) => runtime.createPoll(id, input), sendMessage: async (body: string) => { const message: MatrixMessage = { id: crypto.randomUUID(), roomId: id, sender: { id: "@you:example", displayName: "You", avatarUrl: null }, timestamp: Date.now(), type: "text", body, edited: false, replyTo: null, reactions: [], sendState: "sent", isOwn: true, isRedacted: false }; update({ timelines: { ...snapshot.timelines, [id]: [...(snapshot.timelines[id] ?? []), message] } }); }, sendAttachment: async () => {}, getUploadLimit: async () => null, setTyping() {}, toggleReaction: async () => {}, editMessage: async () => {}, deleteMessage: async () => {}, togglePin: async () => {} });
+export const useMatrixTimeline = (id: string) => ({ retryMessage: runtime.retryMessage, messages: useMatrixSnapshot().timelines[id] ?? [], members, typingMembers: [], loadOlder: async () => false, createPoll: (input: PollInput) => runtime.createPoll(id, input), sendMessage: async (body: string) => { const message: MatrixMessage = { id: crypto.randomUUID(), roomId: id, sender: { id: "@you:example", displayName: "You", avatarUrl: null }, timestamp: Date.now(), type: "text", body, edited: false, replyTo: null, reactions: [], sendState: "sent", isOwn: true, isRedacted: false }; update({ timelines: { ...snapshot.timelines, [id]: [...(snapshot.timelines[id] ?? []), message] } }); }, sendAttachment: async () => {}, getUploadLimit: async () => null, setTyping() {}, toggleReaction: async () => {}, editMessage: async () => {}, deleteMessage: async () => {}, togglePin: async () => {} });
 export const observeCalls = (listener: (calls: unknown[]) => void) => { listener(calls); return () => {}; };
 export const directCalls = { subscribe: (listener: (state: null) => void) => { listener(null); return () => {}; } };
 export const matrixNotifications = { viewedRoom: null };

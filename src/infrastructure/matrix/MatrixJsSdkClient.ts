@@ -14,6 +14,7 @@ import type { MessageAttachment } from "../../domain/messaging/Attachments";
 import { MatrixDirectCalls } from "./MatrixDirectCalls";
 import { directInvitePeer } from "./MatrixDirectRooms";
 import { collectTimelineEvents, loadLatestRoomEvents, oldestLoadedTimeline } from "./MatrixTimelineLoader";
+import { retryFailedDecryption } from "./MatrixDecryption";
 import { createMentionContent } from "../../domain/messaging/Mentions";
 import { closedDirectRoomIds, closedDirectRoomsEvent } from "./MatrixClosedDirectRooms";
 import type { ICallProvider, CallOptions } from "../../domain/calls/ICallProvider";
@@ -437,6 +438,7 @@ export class MatrixJsSdkClient implements IMatrixClient, ICallProvider {
     if (!roomId) {
       const created = await client.createRoom({
         is_direct: true, invite: [peer], preset: Preset.TrustedPrivateChat,
+        power_level_content_override: { events: { "org.matrix.msc3401.call.member": 0, "m.call.member": 0 } },
         initial_state: [{ type: EventType.RoomEncryption, state_key: "", content: { algorithm: "m.megolm.v1.aes-sha2" } }],
       });
       this.assertCurrent(client);
@@ -623,7 +625,16 @@ export class MatrixJsSdkClient implements IMatrixClient, ICallProvider {
     return event?.getId() ? new PendingMessageError(message, event.getId()!) : cause instanceof Error ? cause : new Error(message);
   }
   async retryMessage(roomId: string, eventId: string): Promise<void> {
+    const client = this.requireClient();
     const room = this.requireRoom(roomId);
+    const received = room.findEventById(eventId);
+    if (received?.isDecryptionFailure()) {
+      if (room.getMyMembership() !== "join") throw new Error("Join this room before retrying decryption.");
+      await retryFailedDecryption(client, received);
+      this.assertCurrent(client);
+      this.handleDecrypted(received);
+      return;
+    }
     const event = this.pendingEvents(roomId).find(event => event.getId() === eventId);
     if (!event || event.status !== EventStatus.NOT_SENT || event.getSender() !== this.requireClient().getUserId()) throw new Error("This message is already sent or cannot be retried.");
     await this.requireClient().resendEvent(event, room);
