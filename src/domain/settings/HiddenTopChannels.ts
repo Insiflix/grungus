@@ -20,7 +20,7 @@
     const next = { ...this.snapshot }; delete next[roomId]; this.save(next);
   }
   private save(next: Readonly<Record<string, number>>) {
-    localStorage.setItem(this.key, JSON.stringify(next));
+    try { localStorage.setItem(this.key, JSON.stringify(next)); } catch { /* Keep the change for this session. */ }
     this.snapshot = next; this.publish();
   }
   private publish() { for (const listener of this.listeners) listener(); }

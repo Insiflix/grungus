@@ -131,11 +131,11 @@ export class MatrixSettings {
     client.setPushRules(await client.getPushRules());
   }
   async keyword(word: string, remove = false) {
+    if (!word.trim()) throw new Error("Enter a keyword.");
     const client = this.client();
     const id = `dev.grungus.keyword.${encodeURIComponent(word.trim())}`;
     if (remove) await client.deletePushRule("global", PushRuleKind.ContentSpecific, id);
     else {
-      if (!word.trim()) throw new Error("Enter a keyword.");
       await client.addPushRule("global", PushRuleKind.ContentSpecific, id, {
         pattern: word.trim(), actions: [PushRuleActionName.Notify, { set_tweak: TweakName.Highlight, value: true }, { set_tweak: TweakName.Sound, value: "default" }],
       });

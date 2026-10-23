@@ -18,7 +18,7 @@ export function secureStorageAvailable(storage: { isEncryptionAvailable(): boole
 export function isPersistedSession(value: unknown): value is PersistedMatrixSession {
   if (!value || typeof value !== "object") return false;
   const session = value as Record<string, unknown>;
-  if (!["homeserverUrl", "serverName", "accessToken", "userId", "deviceId"].every(key => typeof session[key] === "string" && (session[key] as string).length > 0 && (session[key] as string).length < 65536) || (session.refreshToken !== undefined && typeof session.refreshToken !== "string")) return false;
+  if (!["homeserverUrl", "serverName", "accessToken", "userId", "deviceId"].every(key => typeof session[key] === "string" && (session[key] as string).length > 0 && (session[key] as string).length < 65536) || (session.refreshToken !== undefined && (typeof session.refreshToken !== "string" || session.refreshToken.length >= 65536))) return false;
   try {
     secureHomeserverUrl(session.homeserverUrl as string);
     if (session.oauth !== undefined) {

@@ -115,7 +115,7 @@ export function LoginScreen() {
                         onClick={() => startSso(provider.id)}
                         disabled={busy}
                       >
-                        {provider.iconUrl && <img src={provider.iconUrl} alt="" />}
+                        {provider.iconUrl && <img src={provider.iconUrl} alt="" referrerPolicy="no-referrer" />}
                         {provider.name}
                       </button>
                     ))}
