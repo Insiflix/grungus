@@ -80,6 +80,13 @@ describe("MatrixMessageMapper", () => {
   it("keeps pending encrypted messages visible", () => {
     const event = new MatrixEvent({ event_id: "$encrypted", room_id: room.roomId, sender: "@alice:example", type: "m.room.encrypted", content: {}, origin_server_ts: 1 });
     expect(mapper.map(event, room)?.type).toBe("encrypted");
+    expect(mapper.map(event, room)?.canRetryDecryption).toBe(false);
+  });
+  it("does not offer a decryption retry for a message sent before joining", () => {
+    const event = new MatrixEvent({ event_id: "$old", room_id: room.roomId, sender: "@alice:example", type: "m.room.encrypted", content: {}, origin_server_ts: 1 });
+    vi.spyOn(event, "isDecryptionFailure").mockReturnValue(true);
+    vi.spyOn(event, "decryptionFailureReason", "get").mockReturnValue("HISTORICAL_MESSAGE_USER_NOT_JOINED" as never);
+    expect(mapper.map(event, room)).toMatchObject({ type: "encrypted", body: "Message sent before you joined.", canRetryDecryption: false });
   });
   it.each([
     ["m.text", "text"],

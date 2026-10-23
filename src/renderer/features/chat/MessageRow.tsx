@@ -62,8 +62,13 @@ export function MessageRow({ message, grouped, onReact, onMediaLoad, onAction, o
           </header>
         )}
         {message.replyTo && <div className="reply-context">↳ Reply to {message.replyTo.slice(0, 10)}…</div>}
-        {message.type === "poll" && message.poll && !message.isRedacted ? <PollMessage message={message} /> : message.attachment && !message.isRedacted ? <AttachmentMessage sender={message.sender} timestamp={timestamp} attachment={message.attachment} inline={prefs.showInlineMedia} onLoad={onMediaLoad} /> : gif ? <GifMessage key={gif} url={gif} onLoad={onMediaLoad} /> : <div className={special ? "message-special" : message.type === "notice" ? "message-notice" : ""}>
-          {message.type === "encrypted" && <LockIcon />}
+        {message.type === "encrypted" ? <div className="message-decryption">
+          <LockIcon size={14} aria-hidden="true" />
+          <div className="message-decryption__content">
+            <span role={error ? "alert" : undefined}>{error || message.body}</span>
+            {message.canRetryDecryption && onRetry && <button type="button" aria-label="Retry decryption" disabled={recovering} onClick={() => void recover(onRetry)}>{recovering ? "Retrying…" : "Retry"}</button>}
+          </div>
+        </div> : message.type === "poll" && message.poll && !message.isRedacted ? <PollMessage message={message} /> : message.attachment && !message.isRedacted ? <AttachmentMessage sender={message.sender} timestamp={timestamp} attachment={message.attachment} inline={prefs.showInlineMedia} onLoad={onMediaLoad} /> : gif ? <GifMessage key={gif} url={gif} sender={message.sender} timestamp={timestamp} onLoad={onMediaLoad} /> : <div className={special ? "message-special" : message.type === "notice" ? "message-notice" : ""}>
           {message.type === "emote" && <em>* {message.sender.displayName} </em>}
           <MessageText message={message} convertEmoji={prefs.convertEmoji && (message.type === "text" || message.type === "notice" || message.type === "emote")} />
         </div>}
@@ -94,8 +99,8 @@ export function MessageRow({ message, grouped, onReact, onMediaLoad, onAction, o
             {message.sendState === "sending" ? "Sending…" : message.sendState}
           </span>
         )}
+        {error && message.type !== "encrypted" && <p className="message-row__error" role="alert">{error}</p>}
       </div>
-      {error && <p role="alert">{error}</p>}
       {actionable && (
         <div className="message-actions" role="toolbar" aria-label="Quick message actions">
           {[['👍', 'thumbs up'], ['🙏', 'folded hands'], ['💀', 'skull']].map(([emoji, label]) => <button type="button" className="message-actions__emoji" key={emoji} onClick={() => react(emoji)} aria-label={`React with ${label}`} data-tooltip={`React with ${emoji}`}>{emoji}</button>)}

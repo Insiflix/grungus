@@ -1,6 +1,8 @@
 import { ConditionKind, EventType, MatrixError, MatrixEvent, Preset, PushRuleKind, PushRuleActionName, RoomState, TweakName, Visibility, type AuthDict, type MatrixClient, type IContent } from "matrix-js-sdk";
 import { membershipNotices } from "../../domain/matrix/MembershipNotices";
 import { blockedUsers } from "../../domain/settings/BlockedUsers";
+import { JoinRule, RestrictedAllowType } from "matrix-js-sdk/lib/@types/partials";
+import type { RoomJoinRulesEventContent } from "matrix-js-sdk/lib/@types/state_events";
 
 export interface SettingsAuthentication {
   session?: string;
@@ -171,6 +173,7 @@ export class MatrixSettings {
     const response = await client.createRoom({
       name: name.trim(), preset: isPublic ? Preset.PublicChat : Preset.PrivateChat,
       visibility: Visibility.Private, creation_content: space ? { type: "m.space" } : {},
+      ...(!space && { power_level_content_override: { events: { "org.matrix.msc3401.call.member": 0, "m.call.member": 0 } } }),
       initial_state: !space && encrypted ? [{ type: EventType.RoomEncryption, state_key: "", content: { algorithm: "m.megolm.v1.aes-sha2" } }] : [],
     });
     this.assertCurrent(client);
@@ -182,16 +185,32 @@ export class MatrixSettings {
     const client = this.client();
     const space = client.getRoom(spaceId);
     if (!space?.currentState.maySendStateEvent(EventType.SpaceChild, client.getUserId() ?? "")) throw new Error("Your role cannot create channels in this server.");
+    const joinRules: RoomJoinRulesEventContent = access === "private" ? { join_rule: JoinRule.Restricted, allow: [{ type: RestrictedAllowType.RoomMembership, room_id: spaceId }] } : { join_rule: access === "public" ? JoinRule.Public : JoinRule.Invite };
     const response = await client.createRoom({
       name: name.trim(), preset: access === "public" ? Preset.PublicChat : Preset.PrivateChat, visibility: access === "public" ? Visibility.Public : Visibility.Private,
       room_version: "10", creation_content: voice ? { type: "org.matrix.msc3417.call" } : {},
+      power_level_content_override: { events: { "org.matrix.msc3401.call.member": 0, "m.call.member": 0 } },
       initial_state: [
-        { type: EventType.RoomJoinRules, state_key: "", content: access === "private" ? { join_rule: "restricted", allow: [{ type: "m.room_membership", room_id: spaceId }] } : { join_rule: access } },
+        { type: EventType.RoomJoinRules, state_key: "", content: joinRules },
         { type: EventType.SpaceParent, state_key: spaceId, content: { via: [client.getDomain()!], canonical: true } },
         { type: EventType.RoomEncryption, state_key: "", content: { algorithm: "m.megolm.v1.aes-sha2" } },
       ],
     });
     this.assertCurrent(client);
+    try {
+      const matches = (content: IContent) => content.join_rule === joinRules.join_rule && (access !== "private" || content.allow?.some((rule: IContent) => rule.type === "m.room_membership" && rule.room_id === spaceId));
+      const saved = await client.getStateEvent(response.room_id, EventType.RoomJoinRules, "");
+      this.assertCurrent(client);
+      if (!matches(saved)) {
+        await client.sendStateEvent(response.room_id, EventType.RoomJoinRules, joinRules, "");
+        this.assertCurrent(client);
+        const updated = await client.getStateEvent(response.room_id, EventType.RoomJoinRules, "");
+        this.assertCurrent(client);
+        if (!matches(updated)) throw new Error("The homeserver did not apply the selected access.");
+      }
+    } catch {
+      throw new Error(`Channel created (${response.room_id}), but its access could not be verified. Open this room's Security & access settings and save the intended access before adding it to the server. Do not create it again.`);
+    }
     try { await this.spaceChild(spaceId, response.room_id); }
     catch { throw new Error(`Channel created (${response.room_id}), but linking it to the server failed. Add this room ID in Server settings → Rooms instead of creating it again.`); }
     return response.room_id;
@@ -275,6 +294,19 @@ export class MatrixSettings {
       next.users = { ...power.users, [user]: level };
     } else next[key] = level;
     await this.roomState(id, EventType.RoomPowerLevels, next);
+  }
+  async allowMemberCalls(id: string): Promise<void> {
+    const client = this.client();
+    const room = client.getRoom(id);
+    if (room?.getMyMembership() !== "join" || !room.currentState.maySendStateEvent(EventType.RoomPowerLevels, client.getUserId() ?? "")) {
+      throw new Error("A room administrator must enable calls for members.");
+    }
+    const power = await client.getStateEvent(id, EventType.RoomPowerLevels, "");
+    this.assertCurrent(client);
+    await client.sendStateEvent(id, EventType.RoomPowerLevels, {
+      ...power, events: { ...power.events, "org.matrix.msc3401.call.member": 0, "m.call.member": 0 },
+    }, "");
+    this.assertCurrent(client);
   }
   async roomMember(id: string, user: string, action: "invite" | "kick" | "ban" | "unban", reason?: string) {
     if (!/^@[^:\s]+:\S+$/.test(user)) throw new Error("Enter a full Matrix ID.");

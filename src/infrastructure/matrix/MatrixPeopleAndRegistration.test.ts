@@ -250,7 +250,7 @@ describe("people and invitations", () => {
     vi.spyOn(event, "isDecryptionFailure").mockReturnValue(true);
     sdk.on.mock.calls.find(([name]) => name === MatrixEventEvent.Decrypted)?.[1]?.(event);
     expect(removed).not.toHaveBeenCalled();
-    expect(updated).toHaveBeenCalledWith(expect.objectContaining({ id: "$missing-key", type: "encrypted", body: "Unable to decrypt this message" }));
+    expect(updated).toHaveBeenCalledWith(expect.objectContaining({ id: "$missing-key", type: "encrypted", body: expect.stringContaining("Unable to decrypt this message") }));
   });
 
   it("closes only the chosen duplicate DM and can reopen it without leaving or creating rooms", async () => {

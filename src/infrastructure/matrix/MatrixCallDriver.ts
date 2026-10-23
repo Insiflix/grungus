@@ -86,6 +86,10 @@ export class MatrixCallDriver extends WidgetDriver {
 export function mountMatrixCall(client: MatrixClient, iframe: HTMLIFrameElement, roomId: string, video: boolean, onClose: () => void, onReady?: () => void, onJoined?: () => void, options: CallOptions = {}) {
   const widgetId = `grungus-call-${crypto.randomUUID()}`;
   const room = client.getRoom(roomId);
+  if (!room || room.getMyMembership() !== "join") throw new Error("Join this room before calling");
+  if (!room.currentState.maySendStateEvent("org.matrix.msc3401.call.member", client.getUserId()!)) {
+    throw new Error("Your role cannot join calls in this room. Ask a room admin to update Grungus, then open Room settings → Roles & permissions → Allow members to join calls.");
+  }
   const direct = isConversationCall(room, client.getRooms());
   const joining = Boolean(room && client.matrixRTC.getActiveRoomSession(room)?.memberships.length);
   const url = elementCallUrl(window.location.href, roomId, client.getUserId()!, client.getDeviceId()!, client.getHomeserverUrl(), video, widgetId, direct, joining, options.skipLobby);

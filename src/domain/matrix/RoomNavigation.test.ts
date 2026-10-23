@@ -13,5 +13,7 @@ describe("server navigation", () => {
     expect(canJoinChannel({ ...base, membership: "leave", joinRule: "public" })).toBe(true);
     expect(canJoinChannel({ ...base, membership: "leave", joinRule: "restricted" })).toBe(true);
     expect(canJoinChannel({ ...base, membership: "leave", joinRule: "invite" })).toBe(false);
+    expect(canJoinChannel({ ...base, membership: "leave", joinRule: undefined })).toBe(true);
+    expect(canJoinChannel({ ...base, membership: "ban", joinRule: "public" })).toBe(false);
   });
 });
