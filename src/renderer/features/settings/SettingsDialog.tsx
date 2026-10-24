@@ -20,7 +20,7 @@ const tabs = [
   { id: "voice", name: "Voice & video", hint: "microphone camera speaker noise echo", icon: Mic },
   { id: "rooms", name: "Rooms & spaces", hint: "create manage administration members permissions", icon: UsersRound },
   { id: "keyboard", name: "Keyboard", hint: "shortcuts navigation", icon: Keyboard },
-  { id: "about", name: "Help & about", hint: "version diagnostics sync server", icon: Info },
+  { id: "about", name: "Help & about", hint: "version diagnostics sync server logs folder path", icon: Info },
 ] as const;
 type Tab = typeof tabs[number]["id"];
 
@@ -104,6 +104,14 @@ export function SettingsDialog({ onClose, onOpenIdentity, onManageRoom }: { onCl
           {tab === "rooms" && <RoomListSettings {...panelProps} onManageRoom={onManageRoom} />}
           {tab === "keyboard" && <SettingsSection title="Keyboard shortcuts"><dl className="settings-shortcuts"><dt>Open settings</dt><dd>Ctrl / ⌘ + ,</dd><dt>Find a room</dt><dd>Ctrl / ⌘ + K</dd><dt>Close a dialog</dt><dd>Escape</dd><dt>Send message</dt><dd>Enter, or Ctrl / ⌘ + Enter when configured</dd><dt>New line</dt><dd>Shift + Enter</dd><dt>Emoji suggestions</dt><dd>Type : then use ↑ / ↓ and Enter or Tab</dd></dl></SettingsSection>}
           {tab === "about" && <>
+            {window.desktop?.logs && <SettingsSection title="Application logs">
+              <p>Logs are saved locally across restarts. Up to five files of 2 MB are kept, with automatic cleanup after seven days. Verbose debug output is excluded.</p>
+              <p>Known credential fields are masked. Review logs before sharing them; diagnostics may include server addresses and account identifiers.</p>
+              <div className="settings-actions">
+                <button className="button button--secondary" disabled={busy} onClick={() => void execute(() => window.desktop!.logs.openFolder(), "Log folder opened.")}>Open log folder</button>
+                <button className="button button--secondary" disabled={busy} onClick={() => void execute(async () => { const logPath = await window.desktop!.logs.getPath(); await window.desktop!.clipboard.writeText(logPath); }, "Log path copied.")}>Copy log path</button>
+              </div>
+            </SettingsSection>}
             <SettingsSection title="Grungus Matrix"><p>A Matrix client for your corner of the forest.</p><dl className="settings-shortcuts"><dt>Version</dt><dd>{__APP_VERSION__}</dd><dt>Homeserver</dt><dd>{session?.homeserverUrl}</dd><dt>Matrix ID</dt><dd>{session?.userId}</dd><dt>Device</dt><dd>{session?.deviceId}</dd><dt>Connection</dt><dd>{sync.state}</dd></dl></SettingsSection>
             <SettingsSection title="Connection & diagnostics"><button className="button button--secondary" disabled={busy} onClick={() => void execute(async () => { if (!matrixSettings.retrySync()) throw new Error("Sync is already running; no retry is needed."); }, "Reconnecting…")}>Retry connection</button><button className="button button--secondary" onClick={() => void execute(() => navigator.clipboard.writeText(JSON.stringify({ version: __APP_VERSION__, homeserver: session?.homeserverUrl, deviceId: session?.deviceId, sync: sync.state, platform: window.desktop?.platform ?? navigator.platform }, null, 2)), "Diagnostics copied. No access tokens or message content included.")}>Copy diagnostics</button></SettingsSection>
           </>}

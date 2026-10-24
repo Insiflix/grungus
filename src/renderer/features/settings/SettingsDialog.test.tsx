@@ -37,6 +37,21 @@ afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 const showSettings = () => render(<><PreferenceEffects /><SettingsDialog onClose={vi.fn()} onOpenIdentity={vi.fn()} onManageRoom={vi.fn()} /></>);
 
 describe("account settings interactions", () => {
+  it("opens the log folder, copies its path, and reports file manager failures", async () => {
+    const user = userEvent.setup();
+    const openFolder = vi.fn().mockResolvedValue(undefined);
+    const getPath = vi.fn().mockResolvedValue("/state/grungus/logs");
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    vi.stubGlobal("desktop", { logs: { openFolder, getPath }, clipboard: { writeText } });
+    showSettings(); await user.click(screen.getByRole("button", { name: "Help & about" }));
+    await user.click(screen.getByRole("button", { name: "Open log folder" }));
+    expect(openFolder).toHaveBeenCalledOnce();
+    await user.click(screen.getByRole("button", { name: "Copy log path" }));
+    await waitFor(() => expect(writeText).toHaveBeenCalledWith("/state/grungus/logs"));
+    openFolder.mockRejectedValue(new Error("File manager unavailable"));
+    await user.click(screen.getByRole("button", { name: "Open log folder" }));
+    expect((await screen.findByRole("alert")).textContent).toContain("File manager unavailable");
+  });
   it("stops capture if camera permission resolves after closing the settings preview", async () => {
     const user = userEvent.setup();
     let grant!: (stream: MediaStream) => void;

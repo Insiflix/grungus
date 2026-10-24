@@ -13,6 +13,10 @@ ipcRenderer.on("matrix-auth:callback", (_event, url: string) => {
 });
 
 const bridge: DesktopBridge = {
+  logs: {
+    getPath: () => ipcRenderer.invoke("logs:path"),
+    openFolder: () => ipcRenderer.invoke("logs:open"),
+  },
   notifications: {
     isSupported: () => ipcRenderer.invoke("notifications:supported"),
     show: value => ipcRenderer.invoke("notifications:show", value),

@@ -1,4 +1,6 @@
 import { SsoCallback } from "./ssoCallback.js";
+import { RotatingLog, logDirectory, captureMainConsole } from "./logging.js";
+import { registerLoggingIpc } from "./loggingIpc.js";
 import { startAutoUpdates } from "./updates.js";
 import { writeClipboardImage } from "./imageClipboard.js";
 import { registerNotifications } from "./notifications.js";
@@ -46,6 +48,7 @@ let desktopCapture: DesktopCaptureBroker | null = null;
 let mainWindow: BrowserWindow | null = null;
 let windowsIconPath = process.execPath;
 let pendingAuthCallback: string | null = null;
+let persistentLog: RotatingLog;
 const sessionOperations = new SessionOperationQueue();
 const ssoCallback = new SsoCallback(url => {
   if (!mainWindow || mainWindow.isDestroyed()) return;
@@ -165,6 +168,13 @@ function createWindow(): void {
     relaunchCommand: isPackaged ? `"${process.execPath}"` : `"${process.execPath}" "${app.getAppPath()}"`,
   });
   mainWindow.removeMenu();
+  mainWindow.webContents.on("console-message", details => {
+    persistentLog.write(details.level, "renderer", `${details.message}\n${details.sourceId}:${details.lineNumber}`);
+  });
+  mainWindow.webContents.on("render-process-gone", (_event, details) => {
+    console.error("Renderer process exited", details.reason, details.exitCode);
+    persistentLog.flush();
+  });
   const publishWindowState = () => mainWindow?.webContents.send("window:state-changed", { maximized: mainWindow.isMaximized() });
   mainWindow.on("maximize", publishWindowState);
   mainWindow.on("unmaximize", publishWindowState);
@@ -202,6 +212,7 @@ function createWindow(): void {
 }
 
 function registerIpc(): void {
+  registerLoggingIpc(ipcMain, () => mainWindow, isTrustedRendererUrl, persistentLog, directory => shell.openPath(directory));
   registerNotifications(ipcMain, () => mainWindow, isTrustedRendererUrl, path.join(app.getAppPath(), isPackaged ? "dist" : "public", "grungus.png"));
   registerWindowControls(ipcMain, () => mainWindow, isTrustedRendererUrl);
   ipcMain.handle("clipboard:write-text", (event, text: unknown) => {
@@ -243,6 +254,17 @@ function registerIpc(): void {
 if (!app.requestSingleInstanceLock()) {
   app.quit();
 } else {
+  const originalWarn = console.warn.bind(console);
+  persistentLog = new RotatingLog(logDirectory(process.platform, process.env, app.getPath("home"), !isPackaged), {
+    onError: error => originalWarn("File logging is unavailable; console logging will continue.", error),
+  });
+  captureMainConsole(persistentLog);
+  console.info(`${APP_NAME} ${app.getVersion()} starting`, process.platform, process.arch, `Electron ${process.versions.electron}`);
+  // Monitor without changing Node's normal fatal-exception behavior.
+  process.on("uncaughtExceptionMonitor", error => { console.error("Uncaught main-process exception", error); persistentLog.flush(); });
+  process.on("exit", () => persistentLog.close());
+  app.on("will-quit", () => { console.info("Application quitting"); persistentLog.close(); });
+  app.on("child-process-gone", (_event, details) => console.error("Child process exited", details.type, details.reason, details.exitCode));
   app.on("second-instance", (_event, argv) => consumeProtocolArg(argv));
   app.on("open-url", (event, url) => {
     event.preventDefault();

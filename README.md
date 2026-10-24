@@ -169,6 +169,16 @@ npm run build:dir
 - Push notifications and background sync while the app is closed
 - Native incoming-call notifications
 
+## Local application logs
+
+Electron saves main-process and renderer console output (info, warnings and errors) locally, including uncaught renderer errors and process exits. Debug output is excluded. The console remains available. Files rotate at 2 MiB, with at most five files (10 MiB total); rotation also occurs on the next write after the UTC date changes. Files last modified more than seven days ago are removed at startup and hourly while running. A bounded 256 KiB buffer drops excess entries during logging bursts and records the number dropped. Filesystem failures disable file logging for that run without interrupting the application.
+
+- Windows: `%LOCALAPPDATA%\Grungus\logs`
+- Linux: `$XDG_STATE_HOME/grungus/logs`, defaulting to `~/.local/state/grungus/logs`
+- macOS: `~/Library/Logs/Grungus`
+
+Development uses a separate `Grungus Dev` / `grungus-dev` directory. In **Settings → Help & about → Application logs**, use **Open log folder** to collect `grungus.log` and its numbered archives, or **Copy log path**. Logs stay local; nothing is uploaded. Known credential fields and bearer tokens are masked before writing, but logs can include server URLs and account identifiers: review them before sharing. Logging is diagnostic output, not a transcript of chat messages.
+
 ## Tests
 
 The focused Vitest suite covers Matrix event-to-domain message mapping, live-timeline room-state mapping, registration and UI authentication, invitations, DM creation/reuse, runtime event propagation, recovery-key validation, explicit identity reset confirmation, SAS comparisons and cancellation, and late decryption updates. Multi-device verification and recovery still require end-to-end testing against a live homeserver.

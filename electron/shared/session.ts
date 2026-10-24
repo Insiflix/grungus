@@ -19,6 +19,10 @@ export interface SessionStoreResult {
 }
 
 export interface DesktopBridge {
+  logs: {
+    getPath(): Promise<string>;
+    openFolder(): Promise<void>;
+  };
   notifications: {
     isSupported(): Promise<boolean>;
     show(notification: DesktopNotification): Promise<void>;
