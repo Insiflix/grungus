@@ -71,6 +71,25 @@ describe("Element Call camera and display capture adapter", () => {
     await listener({ source: parent, origin: "http://localhost", data });
     expect(postMessage).toHaveBeenLastCalledWith(expect.objectContaining({ shareError: expect.any(String) }), "http://localhost");
   });
+  it("applies microphone processing only for authenticated host settings and reports failures", async () => {
+    const configure = vi.fn().mockResolvedValue(undefined);
+    const postMessage = vi.fn();
+    const parent = { postMessage };
+    let receive!: (event: object) => Promise<void>;
+    const context = { navigator: { mediaDevices: { getUserMedia: vi.fn() } }, parent, location: { hash: "#?widgetId=test&grungusAudio=%7B%22inputGain%22%3A80%7D&parentUrl=http%3A%2F%2Flocalhost%2F" }, URL, URLSearchParams, window: { grungusAudio: { configure }, addEventListener: (type: string, listener: typeof receive) => { if (type === "message") receive = listener; } } };
+    runInNewContext(readFileSync("scripts/element-call-media.js", "utf8").replace("__GRUNGUS_CAMERA_PRESETS__", JSON.stringify(cameraQualityPresets)), context);
+    expect(configure).toHaveBeenCalledWith({ inputGain: 80 });
+    configure.mockClear();
+    const data = { type: "grungus:audio-settings", widgetId: "test", options: { inputGain: 120, advancedNoiseSuppression: true } };
+    for (const event of [{ source: {}, origin: "http://localhost", data }, { source: parent, origin: "https://evil.test", data }, { source: parent, origin: "http://localhost", data: { ...data, widgetId: "other" } }]) await receive(event);
+    expect(configure).not.toHaveBeenCalled();
+    await receive({ source: parent, origin: "http://localhost", data });
+    expect(configure).toHaveBeenCalledWith(data.options);
+    expect(postMessage).toHaveBeenLastCalledWith(expect.objectContaining({ audioError: null }), "http://localhost");
+    configure.mockRejectedValue(new Error("Device unavailable"));
+    await receive({ source: parent, origin: "http://localhost", data });
+    expect(postMessage).toHaveBeenLastCalledWith(expect.objectContaining({ audioError: expect.any(String) }), "http://localhost");
+  });
   it("applies camera presets while preserving device choice and microphone settings", async () => {
     const { media, getUserMedia } = fixture();
     await media.getUserMedia({ audio: { echoCancellation: true }, video: { deviceId: { exact: "camera" } } } as never);

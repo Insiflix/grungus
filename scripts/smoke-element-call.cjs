@@ -59,7 +59,7 @@ app.whenReady().then(async () => {
       window.__smokeShareRequest({ id:'capture-test', audioRequested:true, systemAudioSupported:true, sources:[{ id:'screen:test', name:'Testbildschirm', kind:'screen', thumbnail:'data:image/svg+xml,<svg xmlns="http://www.w3.org/2000/svg" width="320" height="180"></svg>' }] });
       await new Promise(resolve => setTimeout(resolve, 100));
       const dialog = document.querySelector('dialog.screen-picker');
-      const confirm = [...dialog.querySelectorAll('button')].find(button => button.textContent === 'Jetzt teilen');
+      const confirm = [...dialog.querySelectorAll('button')].find(button => button.textContent === 'Share now');
       const unselectedDisabled = confirm.disabled;
       dialog.querySelector('.screen-picker__sources button').click();
       await new Promise(resolve => setTimeout(resolve, 50));

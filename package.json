@@ -29,6 +29,7 @@
     "build:app": "npm run typecheck && vite build && tsc -p tsconfig.electron.json",
     "build": "npm run build:app && electron-builder --publish never",
     "build:dir": "npm run typecheck && vite build && tsc -p tsconfig.electron.json && electron-builder --dir",
+    "test:microphone": "node scripts/test-microphone.mjs",
     "test:call": "node scripts/smoke-element-call.mjs",
     "test:security": "vite build && tsc -p tsconfig.electron.json && node scripts/test-packaged-security.mjs",
     "icons": "node scripts/generate-icons.cjs"
@@ -85,6 +86,7 @@
     "@ffmpeg/core": "^0.12.10",
     "@ffmpeg/ffmpeg": "^0.12.15",
     "@matrix-org/matrix-sdk-crypto-wasm": "^18.8.0",
+    "@sapphi-red/web-noise-suppressor": "^0.4.1",
     "@tanstack/react-query": "^5.102.8",
     "axios": "^1.20.0",
     "electron-updater": "^6.8.9",

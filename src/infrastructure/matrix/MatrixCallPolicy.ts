@@ -1,3 +1,4 @@
+import { microphoneOptions } from "../desktop/Microphone";
 import { loadCameraQuality } from "../../domain/calls/CameraQuality";
 import type { Room } from "matrix-js-sdk";
 ﻿import { EventDirection, EventKind, MatrixCapabilities, WidgetEventCapability, type Capability } from "matrix-widget-api";
@@ -27,7 +28,7 @@ export function elementCallUrl(parentUrl: string, roomId: string, userId: string
   else if (url.protocol === "http:" && url.hostname === "127.0.0.1") url.hostname = "localhost";
   else if (url.protocol === "http:" && url.hostname === "localhost") url.hostname = "127.0.0.1";
   else throw new Error("Call widgets require a supported isolated application origin");
-  url.hash = "?" + new URLSearchParams({ widgetId, parentUrl, roomId, userId, deviceId, baseUrl, intent: `${joining ? "join_existing" : "start_call"}${direct ? "_dm" : ""}${video ? "" : "_voice"}`, theme: "dark", background: "solid", lang: "de", header: "none", confineToRoom: "true", hideScreensharing: "false", grungusCameraQuality: loadCameraQuality(), e2eEnabled: "true" });
+  url.hash = "?" + new URLSearchParams({ widgetId, parentUrl, roomId, userId, deviceId, baseUrl, intent: `${joining ? "join_existing" : "start_call"}${direct ? "_dm" : ""}${video ? "" : "_voice"}`, theme: "dark", background: "solid", lang: "de", header: "none", confineToRoom: "true", hideScreensharing: "false", grungusCameraQuality: loadCameraQuality(), grungusAudio: JSON.stringify(microphoneOptions()), e2eEnabled: "true" });
   if (skipLobby) url.hash += "&skipLobby=true";
   return url.href;
 }

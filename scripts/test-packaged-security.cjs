@@ -2,6 +2,8 @@ const { app, BrowserWindow, protocol, net, ipcMain } = require("electron");
 const path = require("node:path");
 const { pathToFileURL } = require("node:url");
 protocol.registerSchemesAsPrivileged([{ scheme: "grungus-app", privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true, stream: true } }]);
+app.commandLine.appendSwitch("use-fake-device-for-media-stream");
+app.commandLine.appendSwitch("autoplay-policy", "no-user-gesture-required");
 app.setName("grungus-isolated-security-test");
 app.whenReady().then(async () => {
   const { assertTrustedAppSender } = await import("../dist-electron/ipcSecurity.js");
@@ -39,6 +41,20 @@ app.whenReady().then(async () => {
       return {parentDomBlocked,parentBridgeBlocked,noBridge:typeof desktop==='undefined',secure:isSecureContext,csp:!!document.querySelector('meta[http-equiv="Content-Security-Policy"]')};
     })()`);
     if (!Object.values(isolation).every(Boolean)) throw new Error("Packaged origin isolation failed: " + JSON.stringify(isolation));
+    const microphone = await call.executeJavaScript(`(async () => {
+      if (!window.grungusAudio) throw new Error('Packaged microphone processor did not load');
+      const warnings=[]; addEventListener('grungus:audio-warning', event => warnings.push(event.detail));
+      await window.grungusAudio.configure({advancedNoiseSuppression:true});
+      const stream = await navigator.mediaDevices.getUserMedia({audio:true});
+      try {
+        await new Promise(resolve => setTimeout(resolve,500));
+        if (warnings.length) throw new Error(warnings.join(', '));
+        if (stream.getAudioTracks()[0].readyState !== 'live') throw new Error('Packaged microphone output ended');
+      } finally { stream.getTracks().forEach(track => track.stop()); }
+      return true;
+    })().catch(error => ({error:error.message}))`);
+    if (microphone !== true) throw new Error(JSON.stringify(microphone));
+    console.log("PASS: packaged call microphone processing and RNNoise worklet/WASM load within the restricted call origin.");
     await window.webContents.executeJavaScript(`(async () => {
       const {FFmpeg} = await import('/media-codecs/controller/index.js');
       const codec = new FFmpeg();

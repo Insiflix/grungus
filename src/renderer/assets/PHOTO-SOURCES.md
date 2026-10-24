@@ -33,3 +33,8 @@ The user also supplied these source-gallery pages alongside the Discord images:
 - https://www.joelsartore.com/ani113-00013/
 
 Photo Ark images: credit Joel Sartore / Photo Ark. Source pixels are preserved.
+
+Frosted-glass backgrounds supplied by the user (original JPEGs preserved):
+
+- `toad-hoarfrost.jpg`: https://i.pinimg.com/originals/1c/6c/b5/1c6cb548f5d0858309560124e32af61a.jpg
+- `toad-icebound.jpg`: https://i.pinimg.com/originals/33/ea/62/33ea62fc345c50a89706f67b1d93169c.jpg

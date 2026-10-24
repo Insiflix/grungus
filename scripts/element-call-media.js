@@ -1,8 +1,9 @@
-﻿// Loaded before Element Call: keep its device controls, adapt capture constraints locally.
+// Loaded before Element Call: keep its device controls, adapt capture constraints locally.
 (() => {
   const presets = __GRUNGUS_CAMERA_PRESETS__;
   const params = new URLSearchParams(location.hash.replace(/^#\??/, ""));
   const parentOrigin = new URL(params.get("parentUrl")).origin;
+  try { void window.grungusAudio?.configure(JSON.parse(params.get("grungusAudio") || "{}")).catch(() => {}); } catch { /* Use speech defaults for malformed settings. */ }
   let quality = params.get("grungusCameraQuality") || "720p";
   if (!Object.hasOwn(presets, quality)) quality = "720p";
   const cameraTracks = new Set();
@@ -13,6 +14,7 @@
     return { width: { ideal: preset.width, max: preset.width }, height: { ideal: preset.height, max: preset.height }, frameRate: { ideal: preset.frameRate, max: preset.frameRate } };
   };
   const sendStatus = (data) => parent.postMessage({ type: "grungus:media-status", widgetId: params.get("widgetId"), ...data }, parentOrigin);
+  window.addEventListener("grungus:audio-warning", event => sendStatus({ audioError: event.detail }));
   // Track the actual media connections, including publisher/subscriber reconnects.
   const connections = new Set();
   if (window.RTCPeerConnection) {
@@ -74,6 +76,14 @@
   window.addEventListener("message", async (event) => {
     const data = event.data;
     const fromHost = event.source === parent && event.origin === parentOrigin && data?.widgetId === params.get("widgetId");
+    if (fromHost && data.type === "grungus:audio-settings") {
+      try {
+        if (!window.grungusAudio) throw new Error("Microphone processing is unavailable. Rejoin the call.");
+        await window.grungusAudio.configure(data.options);
+        sendStatus({ audioError: null });
+      } catch { sendStatus({ audioError: "Microphone settings could not be applied. Rejoin the call and retry." }); }
+      return;
+    }
     if (fromHost && data.type === "grungus:connection-stats") {
       sendStatus({ pingMs: await connectionPing() });
       return;

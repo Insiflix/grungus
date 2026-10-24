@@ -27,6 +27,9 @@ export interface Preferences {
   echoCancellation: boolean;
   noiseSuppression: boolean;
   autoGainControl: boolean;
+  advancedNoiseSuppression: boolean;
+  voiceFilter: boolean;
+  inputGain: number;
 }
 
 export const defaultPreferences: Readonly<Preferences> = {
@@ -38,6 +41,7 @@ export const defaultPreferences: Readonly<Preferences> = {
   notificationPreviews: false, notificationSound: false,
   audioInput: "", videoInput: "", audioOutput: "",
   echoCancellation: true, noiseSuppression: true, autoGainControl: true,
+  advancedNoiseSuppression: false, voiceFilter: true, inputGain: 100,
 };
 
 export function parsePreferences(value: unknown): Preferences {
@@ -48,6 +52,7 @@ export function parsePreferences(value: unknown): Preferences {
     const candidate = raw[key];
     if (typeof result[key] === "boolean" && typeof candidate === "boolean") Object.assign(result, { [key]: candidate });
   }
+  if (typeof raw.inputGain === "number" && Number.isFinite(raw.inputGain)) result.inputGain = Math.max(0, Math.min(200, raw.inputGain));
   if (isTheme(raw.theme)) result.theme = raw.theme;
   if (raw.roomSort === "name" || raw.roomSort === "unread") result.roomSort = raw.roomSort;
   if (typeof raw.fontSize === "number" && Number.isFinite(raw.fontSize)) result.fontSize = Math.max(12, Math.min(22, raw.fontSize));

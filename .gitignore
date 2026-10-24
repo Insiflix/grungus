@@ -11,3 +11,5 @@ artifacts/
 .env.*.local
 public/element-call/
 public/media-codecs/
+
+public/audio/

@@ -1,3 +1,5 @@
+import { microphoneOptions } from "../../../infrastructure/desktop/Microphone";
+import { preferences } from "../../../domain/settings/Preferences";
 import type { ICallProvider, CallHandle } from "../../../domain/calls/ICallProvider";
 import { CameraQualitySelect } from "./CameraQualitySelect";
 import { isCameraQuality, loadCameraQuality, saveCameraQuality, type CameraQuality } from "../../../domain/calls/CameraQuality";
@@ -29,8 +31,17 @@ export function CallPanel({ roomId, name, video, mode = "group", autoJoin = mode
     const timer = setInterval(poll, 5000);
     return () => clearInterval(timer);
   }, [joined, roomId]);
-  const [minimized, setMinimized] = useState(false);
   const [loading, setLoading] = useState(true);
+  useEffect(() => {
+    const update = () => {
+      if (!frame.current?.src || loading) return;
+      const url = new URL(frame.current.src);
+      frame.current.contentWindow?.postMessage({ type: "grungus:audio-settings", widgetId: new URLSearchParams(url.hash.slice(2)).get("widgetId"), options: microphoneOptions() }, url.origin);
+    };
+    update();
+    return preferences.subscribe(update);
+  }, [loading, roomId]);
+  const [minimized, setMinimized] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [devices, setDevices] = useState({ audio_enabled: true, video_enabled: video });
   const [deafened, setDeafened] = useState(false);
@@ -84,6 +95,7 @@ export function CallPanel({ roomId, name, video, mode = "group", autoJoin = mode
       if (!frame.current || event.source !== frame.current.contentWindow || event.origin !== new URL(frame.current.src).origin || data?.type !== "grungus:media-status" || data.widgetId !== widgetId) return;
       if (Object.hasOwn(data, "pingMs")) setPing(typeof data.pingMs === "number" && Number.isFinite(data.pingMs) && data.pingMs >= 0 ? Math.round(data.pingMs) : null);
       if (isCameraQuality(data.quality)) { clearTimeout(qualityTimeout.current); setQualityPending(false); setQuality(data.quality); if (!data.qualityError) saveCameraQuality(data.quality); setError(data.qualityError ?? null); }
+      if (typeof data.audioError === "string") setError(data.audioError);
       if (typeof data.fullscreenError === "string") setError(data.fullscreenError);
       if (typeof data.sharing === "boolean") setSharing({ active: data.sharing, audio: Boolean(data.systemAudio) });
       if (typeof data.sharing === "boolean" || data.shareAction || data.shareError) {

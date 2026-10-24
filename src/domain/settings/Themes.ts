@@ -20,6 +20,8 @@ export const themes = [
   { id: "puddle", name: "Puddle", description: "A round companion with cool night tones" },
   { id: "velvet", name: "Velvet", description: "Muted plum and a toad in the spotlight" },
   { id: "toad-gaze", name: "Toad Gaze", description: "Bright eyes peering out of the dark" },
+  { id: "hoarfrost", name: "Hoarfrost", description: "Icy blue glass over a frost-covered toad" },
+  { id: "icebound", name: "Icebound", description: "Silver frost and a quiet close-up" },
 ] as const;
 
 export type Theme = typeof themes[number]["id"];
