@@ -13,12 +13,13 @@ if (!process.versions.electron) {
 } else {
   const { app, BrowserWindow, ipcMain, protocol, shell } = require('electron');
   protocol.registerSchemesAsPrivileged([{ scheme: 'grungus-notification-test', privileges: { standard: true, secure: true } }]);
+  app.setName('Grungus Dev');
   app.setAppUserModelId('dev.grungus.matrix.development');
   // Keep the test browser profile separate from the running Matrix session.
   app.setPath('userData', require('node:fs').mkdtempSync(path.join(require('node:os').tmpdir(), 'grungus-notification-')));
   app.whenReady().then(async () => {
     if (process.platform === 'win32') {
-      const shortcut = path.join(app.getPath('appData'), 'Microsoft/Windows/Start Menu/Programs/Grungus.lnk');
+      const shortcut = path.join(app.getPath('appData'), 'Microsoft/Windows/Start Menu/Programs/Grungus Dev.lnk');
       const identity = shell.readShortcutLink(shortcut);
       if (identity.target !== process.execPath || identity.appUserModelId !== 'dev.grungus.matrix.development' || !identity.icon) throw new Error('Start the Grungus development app before testing notifications. Its Windows shortcut must match this runtime.');
       console.log('PASS: Grungus shortcut matches the branded runtime, app identity, and custom icon.');

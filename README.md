@@ -48,7 +48,7 @@ Element Call embedded / MatrixRTC
 - `src/renderer/features/` — login, room navigation, timeline, composer, and local-echo UI.
 - `src/renderer/styles/` — Tailwind CSS 4 entry point plus reusable frozen-glass design tokens and desktop layout.
 
-On Windows, `npm run dev` creates a separate Grungus-branded development executable beside the installed Electron runtime. Its embedded product name and icon ensure the taskbar and Windows notification header show Grungus. The original Electron executable is preserved. `public/grungus.png` is the icon source; `npm run icons` rebuilds the ICO without modifying the PNG. Restart development after regenerating icons to refresh the branded executable.
+On Windows, `npm run dev` creates a separate Grungus-branded development executable beside the installed Electron runtime. Its embedded product name is **Grungus Dev**, with its own Start Menu shortcut and taskbar/notification identity. Development uses a separate `grungus-matrix-dev` profile under Electron's app-data directory (`%APPDATA%` on Windows), including its own sign-in, encryption database, settings and cache. The installed profile is never copied into development; sign in separately on the first dev launch. Both apps can run at the same time. Development registers only `grungus-matrix-dev://` links, leaving the installed app's `grungus-matrix://` handler untouched. The original Electron executable is preserved. `public/grungus.png` is the icon source; `npm run icons` rebuilds the ICO without modifying the PNG. Restart development after regenerating icons to refresh the branded executable.
 
 With the development app running, `npm run test:notification -- --examples` sends real Windows test notifications, including labeled DM and channel examples. Message notifications use the sender's name/avatar for DMs and the channel name/server avatar for channels; missing avatars use initials.
 
@@ -122,7 +122,7 @@ Prerequisites: a current Node.js LTS release and npm.
 
 For another homeserver, enter its server name (for example `example.org`) or a complete homeserver URL. Discovery is attempted first; a direct URL is validated against `/_matrix/client/versions` when no usable `.well-known` record exists. Password login is shown only when supported by that server.
 
-Custom protocol registration is most reliable in an installed production build. Development mode registers the protocol for the current Electron executable, but some Windows/browser combinations may require approving the callback or using the packaged build once.
+Custom protocol registration is most reliable in an installed production build. Development mode registers its separate `grungus-matrix-dev://` protocol for the current Electron executable, but some Windows/browser combinations may require approving the callback or using the packaged build once.
 
 ## Commands
 

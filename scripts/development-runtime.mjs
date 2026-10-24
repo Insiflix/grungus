@@ -13,17 +13,17 @@ export async function developmentRuntime() {
   const icon = path.resolve('public/grungus.ico');
   const executable = await fs.stat(electronPath);
   const version = createHash('sha256').update(await fs.readFile(icon))
-    .update(`${executable.size}:${executable.mtimeMs}:Grungus:v2`).digest('hex').slice(0, 12);
-  const brandedPath = path.join(path.dirname(electronPath), `grungus-${version}.exe`);
+    .update(`${executable.size}:${executable.mtimeMs}:Grungus Dev:v3`).digest('hex').slice(0, 12);
+  const brandedPath = path.join(path.dirname(electronPath), `grungus-dev-${version}.exe`);
   try { await fs.access(brandedPath); return brandedPath; } catch { /* Generate once per runtime/icon version. */ }
   const temporary = `${brandedPath}.${process.pid}.tmp.exe`;
   await fs.copyFile(electronPath, temporary);
   const require = createRequire(import.meta.url);
   const editor = path.join(path.dirname(require.resolve('electron-winstaller/package.json')), 'vendor/rcedit.exe');
   const result = spawnSync(editor, [temporary, '--set-icon', icon,
-    '--set-version-string', 'ProductName', 'Grungus',
-    '--set-version-string', 'FileDescription', 'Grungus',
-    '--set-version-string', 'InternalName', 'Grungus',
+    '--set-version-string', 'ProductName', 'Grungus Dev',
+    '--set-version-string', 'FileDescription', 'Grungus Dev',
+    '--set-version-string', 'InternalName', 'Grungus Dev',
     '--set-version-string', 'OriginalFilename', path.basename(brandedPath),
   ], { windowsHide: true, encoding: 'utf8' });
   if (result.error || result.status !== 0) {
@@ -32,7 +32,7 @@ export async function developmentRuntime() {
   }
   const binary = await fs.readFile(temporary);
   fixVersionStringLengths(binary, {
-    ProductName: 'Grungus', FileDescription: 'Grungus', InternalName: 'Grungus',
+    ProductName: 'Grungus Dev', FileDescription: 'Grungus Dev', InternalName: 'Grungus Dev',
     OriginalFilename: path.basename(brandedPath),
   });
   await fs.writeFile(temporary, binary);

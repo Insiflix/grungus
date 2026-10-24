@@ -9,7 +9,7 @@ import { assertTrustedAppSender } from "./ipcSecurity.js";
 import { secureStorageAvailable, isPersistedSession, SessionOperationQueue } from "./sessionSecurity.js";
 import { secureMessageUrl, secureExternalUrl } from "./shared/urls.js";
 import { app, BrowserWindow, clipboard, ipcMain, safeStorage, shell, session, protocol, net, desktopCapturer } from "electron";
-import { promises as fs } from "node:fs";
+import { mkdirSync, promises as fs } from "node:fs";
 import path from "node:path";
 import { createHash } from "node:crypto";
 import { fileURLToPath, pathToFileURL } from "node:url";
@@ -25,13 +25,22 @@ const __dirname = path.dirname(__filename);
 // reports isPackaged=true even when its default app loader runs our source tree.
 const isPackaged = app.isPackaged && !process.defaultApp;
 
-// Keep development windows separate from installed/pinned application groups.
+// Configure identity and storage before Chromium sessions or the instance lock.
+// Development must never reuse the installed app's credentials, crypto DB or cache.
+const APP_NAME = isPackaged ? "Grungus" : "Grungus Dev";
 const APP_ID = isPackaged ? "dev.grungus.matrix" : "dev.grungus.matrix.development";
+if (!isPackaged) {
+  app.setName(APP_NAME);
+  const developmentProfile = path.join(app.getPath("appData"), "grungus-matrix-dev");
+  mkdirSync(developmentProfile, { recursive: true });
+  app.setPath("userData", developmentProfile);
+  app.setPath("sessionData", developmentProfile);
+}
 if (process.platform === "win32") app.setAppUserModelId(APP_ID);
 
 protocol.registerSchemesAsPrivileged([{ scheme: "grungus-app", privileges: { standard: true, secure: true, supportFetchAPI: true, corsEnabled: true, stream: true } }]);
 
-const PROTOCOL = "grungus-matrix";
+const PROTOCOL = isPackaged ? "grungus-matrix" : "grungus-matrix-dev";
 const SESSION_FILE = "matrix-session.bin";
 let desktopCapture: DesktopCaptureBroker | null = null;
 let mainWindow: BrowserWindow | null = null;
@@ -125,6 +134,7 @@ function isTrustedRendererUrl(url: string): boolean {
 function createWindow(): void {
   const assetDirectory = path.join(app.getAppPath(), isPackaged ? "dist" : "public");
   mainWindow = new BrowserWindow({
+    title: APP_NAME,
     width: 1440,
     height: 900,
     minWidth: 980,
@@ -151,7 +161,7 @@ function createWindow(): void {
     appId: APP_ID,
     appIconPath: windowsIconPath,
     appIconIndex: 0,
-    relaunchDisplayName: "Grungus",
+    relaunchDisplayName: APP_NAME,
     relaunchCommand: isPackaged ? `"${process.execPath}"` : `"${process.execPath}" "${app.getAppPath()}"`,
   });
   mainWindow.removeMenu();
@@ -270,10 +280,10 @@ if (!app.requestSingleInstanceLock()) {
       }
       // Match Electron's automatic notification shortcut name and working directory.
       // Windows toast delivery requires a Start Menu shortcut matching the AUMID.
-      const shortcut = path.join(app.getPath("appData"), "Microsoft", "Windows", "Start Menu", "Programs", "Grungus.lnk");
+      const shortcut = path.join(app.getPath("appData"), "Microsoft", "Windows", "Start Menu", "Programs", `${APP_NAME}.lnk`);
       if (!shell.writeShortcutLink(shortcut, "create", {
         target: process.execPath, args: `"${app.getAppPath()}"`, cwd: path.dirname(process.execPath),
-        description: "Grungus", appUserModelId: APP_ID,
+        description: APP_NAME, appUserModelId: APP_ID,
         toastActivatorClsid: app.toastActivatorCLSID,
         icon: windowsIconPath, iconIndex: 0,
       })) console.warn("Unable to register the development notification shortcut");
