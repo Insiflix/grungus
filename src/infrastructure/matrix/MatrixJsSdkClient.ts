@@ -37,6 +37,7 @@ import {
   RoomStateEvent,
   SyncState,
   EventStatus,
+  NotificationCountType,
   type MatrixClient,
   type MatrixEvent,
   type Room,
@@ -140,6 +141,7 @@ export class MatrixJsSdkClient implements IMatrixClient, ICallProvider {
   private pendingDirectRooms = new Map<string, string>();
   private readonly membershipChanges = new WeakMap<Room, number>();
   private readonly timelineLoads = new Map<string, Promise<MatrixMessage[]>>();
+  private readonly readReceiptJobs = new Map<string, Promise<void>>();
   private closedDirectRooms = new Set<string>();
   private closedDirectRoomQueue: Promise<void> = Promise.resolve();
 
@@ -398,12 +400,47 @@ export class MatrixJsSdkClient implements IMatrixClient, ICallProvider {
 
   async searchUsers(term: string): Promise<MatrixUser[]> {
     const client = this.requireClient();
-    const response = await client.searchUserDirectory({ term: term.trim(), limit: 20 });
-    this.assertCurrent(client);
-    return response.results.filter((user) => user.user_id !== client.getUserId()).map((user) => ({
-      id: user.user_id, displayName: user.display_name || user.user_id,
-      avatarUrl: this.resolveMediaUrl(user.avatar_url ?? null, 80, 80),
+    const query = term.trim();
+    if (!query) return [];
+    const known = new Map<string, { displayName: string; avatarUrl: string | null }>();
+    for (const user of client.getUsers?.() ?? []) {
+      known.set(user.userId, { displayName: user.displayName || user.userId, avatarUrl: user.avatarUrl || null });
+    }
+    for (const room of client.getRooms()) {
+      if (room.getMyMembership() !== "join") continue;
+      for (const member of room.getMembers?.() ?? []) {
+        if (!["join", "invite"].includes(member.membership ?? "")) continue;
+        const previous = known.get(member.userId);
+        known.set(member.userId, {
+          displayName: previous?.displayName !== member.userId && previous?.displayName || member.name || member.userId,
+          avatarUrl: previous?.avatarUrl || member.getMxcAvatarUrl() || null,
+        });
+      }
+    }
+    const matches = new Map([...known].filter(([id, user]) =>
+      `${id} ${user.displayName}`.toLocaleLowerCase().includes(query.toLocaleLowerCase())));
+    let directoryError: unknown;
+    try {
+      const response = await client.searchUserDirectory({ term: query, limit: 20 });
+      for (const user of response.results) {
+        const local = known.get(user.user_id);
+        matches.set(user.user_id, { displayName: local?.displayName || user.display_name || user.user_id,
+          avatarUrl: local?.avatarUrl || user.avatar_url || null });
+      }
+    } catch (error) { directoryError = error; }
+    // Full IDs also work when the homeserver directory omits an SSO account.
+    if (/^@[^\s:]+:[^\s]+$/.test(query) && !matches.has(query)) {
+      matches.set(query, known.get(query) ?? { displayName: query, avatarUrl: null });
+    }
+    matches.delete(client.getUserId() ?? "");
+    if (!matches.size && directoryError) throw directoryError;
+    const users = await Promise.all([...matches].slice(0, 20).map(async ([id, user]) => {
+      const profile = await client.getProfileInfo(id).catch(() => null);
+      return { id, displayName: profile?.displayname || user.displayName,
+        avatarUrl: this.resolveMediaUrl(profile?.avatar_url || user.avatarUrl, 80, 80) };
     }));
+    this.assertCurrent(client);
+    return users;
   }
 
   private validateUserId(userId: string): void {
@@ -692,10 +729,38 @@ export class MatrixJsSdkClient implements IMatrixClient, ICallProvider {
     await this.requireClient().sendTyping(roomId, typing, 8_000);
   }
 
-  async sendReadReceipt(roomId: string, eventId: string): Promise<void> {
+  sendReadReceipt(roomId: string, eventId?: string): Promise<void> {
+    const client = this.requireClient();
+    // Serialize updates so an earlier request cannot overwrite a newer marker.
+    const job = (this.readReceiptJobs.get(roomId) ?? Promise.resolve()).catch(() => undefined).then(() => {
+      this.assertCurrent(client);
+      return this.writeReadMarker(roomId, eventId);
+    });
+    this.readReceiptJobs.set(roomId, job);
+    void job.finally(() => { if (this.readReceiptJobs.get(roomId) === job) this.readReceiptJobs.delete(roomId); }).catch(() => undefined);
+    return job;
+  }
+
+  private async writeReadMarker(roomId: string, eventId?: string): Promise<void> {
+    const client = this.requireClient();
     const room = this.requireRoom(roomId);
-    const event = room.findEventById(eventId);
-    if (event) await this.requireClient().sendReadReceipt(event);
+    // Mark through protocol events as well as visible messages. Local echoes
+    // must never become read markers, even when they follow the latest message.
+    const isSent = (event: MatrixEvent) => Boolean(event.getId()) && !event.getId()!.startsWith("~") &&
+      !room.hasPendingEvent?.(event.getId()!) && (event.status == null || event.status === EventStatus.SENT);
+    const latest = () => [...room.getLiveTimeline().getEvents()].reverse().find(isSent);
+    const event = latest() ?? (eventId ? room.findEventById(eventId) : undefined);
+    const id = event?.getId();
+    if (!event || !id || !isSent(event)) return;
+    const publicReceipt = preferences.getSnapshot().sendReadReceipts;
+    await client.setRoomReadMarkers(roomId, id, publicReceipt ? event : undefined, publicReceipt ? undefined : event);
+    this.assertCurrent(client);
+    // Do not clear notifications for activity that arrived while sending.
+    if (latest()?.getId() === id) {
+      room.setUnreadNotificationCount(NotificationCountType.Total, 0);
+      room.setUnreadNotificationCount(NotificationCountType.Highlight, 0);
+      this.emitRoomUpdate(room);
+    }
   }
 
   async addReaction(roomId: string, eventId: string, key: string): Promise<string> {

@@ -70,7 +70,7 @@ export function GrungusHome({ rooms, calls, channelServers, onOpen, onJoinVoice,
   };
 
   return <div className="grungus-home">
-    <header className="home-header"><h1>Home</h1><button type="button" className="button button--secondary button--compact" onClick={onAddPeople}><UserPlus size={16} /> Add people</button></header>
+    <header className="home-header"><h1>Home</h1><button type="button" className="button home-add-people" onClick={onAddPeople}><UserPlus size={16} /> Add people</button></header>
     <div className="home-columns">
       <section className="home-contacts" aria-labelledby="home-contacts-title">
         <div className="home-section-heading"><h2 id="home-contacts-title"><Users size={19} /> Contacts</h2><div className="home-filters" aria-label="Filter contacts"><button type="button" aria-pressed={!onlineOnly} onClick={() => setOnlineOnly(false)}>All</button><button type="button" aria-pressed={onlineOnly} onClick={() => setOnlineOnly(true)}>Online</button></div></div>

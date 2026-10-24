@@ -205,3 +205,7 @@ Both Element Call and classic Matrix calls can share screens. Electron presents 
 `npm run test:call` also checks changing a live synthetic camera to 360p and screen-picker selection/audio consent, without recording a real desktop. Unit tests cover native capture decisions and the media adapter. Hearing real system audio at another participant remains a manual end-to-end check.
 
 The pre-join preview uses a centered responsive window with a solid background and explicit cancel button. Minimizing becomes available only after the widget reports joining the call. Browser smoke checks use the actual CallPanel component and verify visible join controls at desktop and narrow sizes, camera quality, screen-source consent, and the preview-to-call layout transition.
+
+## Splash screen quotes
+
+Edit `src/config/splash-quotes.json` before building to customize the splash screen. List each quote as a string in the `quotes` array. One quote is picked randomly at startup and stays visible while the saved session is restored. Quotes are bundled with the app and work offline; rebuild to ship changes. Blank entries are ignored, and an empty list falls back to "Every conversation starts with a little hello."

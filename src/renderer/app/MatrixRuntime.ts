@@ -4,7 +4,6 @@ import { hiddenTopChannels } from "../../domain/settings/HiddenTopChannels";
 import type { MessageAttachment } from "../../domain/messaging/Attachments";
 import type { IMatrixAuthProvider } from "../../domain/matrix/IMatrixAuthProvider";
 import type { IMatrixClient } from "../../domain/matrix/IMatrixClient";
-import { preferences } from "../../domain/settings/Preferences";
 import type { MessageSearchQuery, MessageSearchResults } from "../../domain/messaging/MessageSearch";
 import type {
   MatrixAuthCapabilities,
@@ -303,10 +302,14 @@ export class MatrixRuntime {
   setRoomChatVisible(roomId: string, visible: boolean): void {
     if (!visible) { this.hiddenRoomChats.add(roomId); return; }
     this.hiddenRoomChats.delete(roomId);
-    const latest = this.snapshot.timelines[roomId]?.at(-1);
-    if (this.snapshot.selectedRoomId === roomId && latest?.sendState === "sent" && preferences.getSnapshot().sendReadReceipts) {
-      void this.client.sendReadReceipt(roomId, latest.id).catch(() => undefined);
-    }
+    this.markViewedRoomRead(roomId);
+  }
+
+  private markViewedRoomRead(roomId: string): void {
+    if (this.snapshot.selectedRoomId !== roomId || this.hiddenRoomChats.has(roomId)) return;
+    if (typeof document !== "undefined" && (!document.hasFocus() || document.visibilityState === "hidden")) return;
+    const latest = [...(this.snapshot.timelines[roomId] ?? [])].reverse().find(message => message.sendState === "sent");
+    void this.client.sendReadReceipt(roomId, latest?.id).catch(() => undefined);
   }
 
   selectRoom(roomId: string): void {
@@ -324,17 +327,11 @@ export class MatrixRuntime {
       const merged = [...new Map([...(this.snapshot.timelines[roomId] ?? []), ...messages].map(message => [message.id, message])).values()]
         .sort((left, right) => left.timestamp - right.timestamp);
       this.update({ timelines: { ...this.snapshot.timelines, [roomId]: merged } });
-      const latest = merged.at(-1);
-      if (this.snapshot.selectedRoomId === roomId && !this.hiddenRoomChats.has(roomId) && latest?.sendState === "sent" && preferences.getSnapshot().sendReadReceipts) {
-        void this.client.sendReadReceipt(roomId, latest.id).catch(() => undefined);
-      }
+      this.markViewedRoomRead(roomId);
     }).catch(error => {
       if (this.snapshot.session === session) this.update({ error: `Unable to refresh messages: ${messageOf(error)}` });
     });
-    const latest = timelines[roomId]?.at(-1);
-    if (!this.hiddenRoomChats.has(roomId) && latest?.sendState === "sent" && preferences.getSnapshot().sendReadReceipts) {
-      void this.client.sendReadReceipt(roomId, latest.id);
-    }
+    this.markViewedRoomRead(roomId);
   }
 
   discoverSpaceRooms(spaceId: string): Promise<void> {
@@ -553,6 +550,7 @@ export class MatrixRuntime {
     this.update({
       timelines: { ...this.snapshot.timelines, [message.roomId]: next },
     });
+    this.markViewedRoomRead(message.roomId);
   }
 
   private update(patch: Partial<MatrixRuntimeSnapshot>): void {

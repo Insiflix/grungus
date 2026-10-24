@@ -6,6 +6,7 @@ import { MatrixJsSdkClient } from "./MatrixJsSdkClient";
 import { closedDirectRoomsEvent } from "./MatrixClosedDirectRooms";
 import * as oauthSessions from "./MatrixOAuth";
 import { OAuth2 } from "matrix-js-sdk/lib/oauth/index.js";
+import { preferences } from "../../domain/settings/Preferences";
 
 vi.mock("matrix-js-sdk", async (importOriginal) => ({
   ...await importOriginal<typeof import("matrix-js-sdk")>(), createClient: vi.fn(),
@@ -47,7 +48,7 @@ function setup() {
     getJoinedRooms: vi.fn(async () => ({ joined_rooms: rooms.filter(room => room.getMyMembership() === "join").map(room => room.roomId) })),
     getUserId: () => session.userId,
     getHomeserverUrl: () => session.homeserverUrl,
-    getProfileInfo: vi.fn(async () => ({ displayname: "My display name", avatar_url: "mxc://example.org/my-avatar" })),
+    getProfileInfo: vi.fn(async (id: string) => id === session.userId ? { displayname: "My display name", avatar_url: "mxc://example.org/my-avatar" } : {} as { displayname?: string; avatar_url?: string }),
     getAccountData: (type: string) => ({ getContent: () => type === closedDirectRoomsEvent ? closed : direct }),
     setAccountData: vi.fn(async (type: string, value: Record<string, string[]>) => { if (type === closedDirectRoomsEvent) closed = { rooms: value.rooms }; else direct = value; }),
     createRoom: vi.fn(async () => { const room = sdkRoom("!new:example.org"); rooms.push(room); return { room_id: room.roomId }; }),
@@ -478,6 +479,90 @@ describe("people and invitations", () => {
     const client = new MatrixJsSdkClient(); await client.start(session);
     expect(await client.searchUsers(" Alice ")).toEqual([{ id: "@alice:example.org", displayName: "Alice", avatarUrl: null }]);
     expect(sdk.searchUserDirectory).toHaveBeenCalledWith({ term: "Alice", limit: 20 });
+  });
+
+  it("finds shared-room SSO users by partial name and loads their global profile", async () => {
+    const { sdk, rooms } = setup();
+    const room = sdkRoom("!shared:example.org");
+    room.getMembers = () => [{ userId: "@keycloak-123:example.org", name: "Leon Languste", membership: "join", getMxcAvatarUrl: () => null }] as never;
+    rooms.push(room);
+    sdk.searchUserDirectory.mockResolvedValueOnce({ results: [] });
+    sdk.getProfileInfo.mockImplementation(async () => ({ displayname: "Leon Languste", avatar_url: "mxc://example.org/leon" }));
+    const client = new MatrixJsSdkClient(); await client.start(session);
+    expect(await client.searchUsers("langus")).toEqual([{ id: "@keycloak-123:example.org", displayName: "Leon Languste", avatarUrl: expect.stringContaining("/example.org/leon") }]);
+  });
+
+  it("hydrates full IDs absent from the directory and keeps results when profiles fail", async () => {
+    const { sdk } = setup();
+    sdk.searchUserDirectory.mockResolvedValue({ results: [] });
+    sdk.getProfileInfo.mockResolvedValueOnce({ displayname: "SSO user", avatar_url: "mxc://example.org/sso" });
+    const client = new MatrixJsSdkClient(); await client.start(session);
+    expect(await client.searchUsers("@sso:example.org")).toEqual([{ id: "@sso:example.org", displayName: "SSO user", avatarUrl: expect.stringContaining("/example.org/sso") }]);
+    sdk.getProfileInfo.mockRejectedValueOnce(new Error("Private profile"));
+    expect(await client.searchUsers("@sso:example.org")).toEqual([{ id: "@sso:example.org", displayName: "@sso:example.org", avatarUrl: null }]);
+  });
+
+  it.each([true, false])("marks through hidden server events with public receipts=%s", async publicReceipt => {
+    const { sdk, rooms } = setup();
+    const room = sdkRoom("!read:example.org"); rooms.push(room);
+    const event = new MatrixEvent({ event_id: "$call-state", room_id: room.roomId, type: "m.call.member", content: {} });
+    const pending = new MatrixEvent({ event_id: "~pending", room_id: room.roomId, type: EventType.RoomMessage, content: {} });
+    pending.setStatus(EventStatus.NOT_SENT);
+    const timeline = room.getLiveTimeline();
+    room.getLiveTimeline = () => ({ ...timeline, getEvents: () => [event, pending] }) as never;
+    room.setUnreadNotificationCount = vi.fn();
+    const setRoomReadMarkers = vi.fn(async () => ({}));
+    Object.assign(sdk, { setRoomReadMarkers });
+    const pref = vi.spyOn(preferences, "getSnapshot").mockReturnValue({ ...preferences.getSnapshot(), sendReadReceipts: publicReceipt });
+    try {
+      const client = new MatrixJsSdkClient(); await client.start(session);
+      const updated = vi.fn(); client.subscribe("roomUpdated", updated);
+      await client.sendReadReceipt(room.roomId);
+      expect(setRoomReadMarkers).toHaveBeenCalledWith(room.roomId, "$call-state", publicReceipt ? event : undefined, publicReceipt ? undefined : event);
+      expect(room.setUnreadNotificationCount).toHaveBeenCalledTimes(2);
+      expect(updated).toHaveBeenCalledWith(expect.objectContaining({ unreadCount: 0, highlightCount: 0 }));
+    } finally { pref.mockRestore(); }
+  });
+
+  it("preserves unread counts when a read request fails or newer activity arrives", async () => {
+    const { sdk, rooms } = setup();
+    const room = sdkRoom("!read:example.org"); rooms.push(room);
+    const events = [new MatrixEvent({ event_id: "$first", type: EventType.RoomMessage, content: {} })];
+    room.getLiveTimeline = () => ({ getEvents: () => events }) as never;
+    room.setUnreadNotificationCount = vi.fn();
+    const setRoomReadMarkers = vi.fn(async () => ({}));
+    Object.assign(sdk, { setRoomReadMarkers });
+    const client = new MatrixJsSdkClient(); await client.start(session);
+    setRoomReadMarkers.mockRejectedValueOnce(new Error("Offline"));
+    await expect(client.sendReadReceipt(room.roomId)).rejects.toThrow("Offline");
+    expect(room.setUnreadNotificationCount).not.toHaveBeenCalled();
+    let finish!: (value: {}) => void;
+    setRoomReadMarkers.mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    const reading = client.sendReadReceipt(room.roomId);
+    await vi.waitFor(() => expect(finish).toBeTypeOf("function"));
+    events.push(new MatrixEvent({ event_id: "$new", type: EventType.RoomMessage, content: {} }));
+    finish({}); await reading;
+    expect(room.setUnreadNotificationCount).not.toHaveBeenCalled();
+  });
+
+  it("serializes read markers and uses the current server event for queued reads", async () => {
+    const { sdk, rooms } = setup();
+    const room = sdkRoom("!read:example.org"); rooms.push(room);
+    const events = [new MatrixEvent({ event_id: "$first", type: EventType.RoomMessage, content: {} })];
+    const timeline = room.getLiveTimeline();
+    room.getLiveTimeline = () => ({ ...timeline, getEvents: () => events }) as never;
+    room.setUnreadNotificationCount = vi.fn();
+    let finish!: (value: {}) => void;
+    const setRoomReadMarkers = vi.fn(async (_roomId: string, _eventId: string) => ({})).mockImplementationOnce(() => new Promise(resolve => { finish = resolve; }));
+    Object.assign(sdk, { setRoomReadMarkers });
+    const client = new MatrixJsSdkClient(); await client.start(session);
+    const first = client.sendReadReceipt(room.roomId);
+    await vi.waitFor(() => expect(finish).toBeTypeOf("function"));
+    events.push(new MatrixEvent({ event_id: "$new", type: EventType.RoomMessage, content: {} }));
+    const second = client.sendReadReceipt(room.roomId);
+    expect(setRoomReadMarkers).toHaveBeenCalledTimes(1);
+    finish({}); await Promise.all([first, second]);
+    expect(setRoomReadMarkers.mock.calls.map(call => call[1])).toEqual(["$first", "$new"]);
   });
 
   it("retries saving a created DM without creating a second room", async () => {

@@ -59,6 +59,9 @@ button:focus-visible, input:focus-visible, textarea:focus-visible {
 .brand-mark--large { width: 68px; height: 68px; }
 
 .splash-screen {
+  /* Keep the default splash palette independent of the selected theme. */
+  --text: #eff5f4;
+  --text-muted: #a8c1bf;
   height: 100%;
   display: flex;
   flex-direction: column;
@@ -67,7 +70,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible {
   gap: 12px;
   padding: 24px;
   text-align: center;
-  background: radial-gradient(circle at 50% 40%, rgba(139, 153, 134, 0.14), transparent 28%);
+  background: radial-gradient(ellipse at center, #102c32, #061217 70%);
   color: var(--text-muted);
 }
 .splash-screen__icon { position: relative; margin-bottom: 18px; }
@@ -90,7 +93,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible {
   animation: splash-bounce 1.8s ease-in-out infinite;
 }
 .splash-screen__name { color: var(--text); font-size: 14px; letter-spacing: .24em; }
-.splash-screen__message { margin: 0; font-size: 13px; }
+.splash-screen__message { margin: 0; max-width: 40ch; font-size: 14px; line-height: 1.6; overflow-wrap: anywhere; }
 @keyframes splash-bounce {
   0%, 100% { transform: translateY(0) rotate(-3deg); }
   50% { transform: translateY(-12px) rotate(3deg); }
@@ -173,8 +176,10 @@ button:focus-visible, input:focus-visible, textarea:focus-visible {
 .button:disabled { opacity: .52; cursor: wait; }
 .button--primary { margin-top: 8px; color: #111411; background: linear-gradient(180deg, #b9c6b5, #93a490); box-shadow: inset 0 1px 0 rgba(255,255,255,.55), 0 8px 24px rgba(88, 104, 84, .22); }
 .button--secondary { border-color: var(--border-strong); background: var(--surface-2); }
-.button--secondary:hover:not(:disabled) { background: var(--surface-3); }
+.button--secondary:hover:not(:disabled) { color: var(--text); background: var(--surface-3); }
 .button--compact { min-height: 36px; padding: 0 13px; color: #111411; background: var(--accent); }
+.button--secondary.button--compact { color: var(--text); background: var(--surface-2); }
+.button--secondary.button--compact:hover:not(:disabled) { background: var(--surface-3); }
 .browser-auth { display: flex; flex-direction: column; gap: 10px; }
 .browser-auth .button--primary { width: 100%; }
 .identity-providers { display: grid; grid-template-columns: repeat(2, 1fr); gap: 8px; }
@@ -458,7 +463,7 @@ body {
   background: rgba(4, 25, 32, .56);
   backdrop-filter: blur(20px);
 }
-.rail-servers { display: flex; flex-direction: column; align-items: center; gap: 10px; min-height: 0; overflow-y: auto; overflow-x: hidden; width: 100%; }
+.rail-servers { display: flex; flex-direction: column; align-items: center; gap: 10px; min-height: 0; overflow-y: auto; overflow-x: hidden; width: calc(100% + 18px); padding-inline: 9px; }
 .rail-servers .rail-button { flex-shrink: 0; }
 .rail-button { color: var(--text-soft); }
 .rail-button.is-active { background: rgba(175,216,211,.13); border-color: var(--border-strong); }
@@ -567,7 +572,6 @@ body {
 .login-screen::before { display: none; }
 .login-panel { background: rgba(12,33,41,.52); border-color: var(--border-strong); backdrop-filter: blur(26px); }
 .login-ambient { display: none; }
-.splash-screen { background: radial-gradient(ellipse at center, #102c32, #061217 70%); }
 @media (max-width: 1080px) {
   .app-shell { grid-template-columns: 60px 220px minmax(0,1fr); }
   .room-header { gap: 10px; padding-inline: 14px; }
@@ -898,6 +902,7 @@ button:disabled { cursor: default; }
 .settings-content { padding: 26px 32px 36px; min-height: 0; overflow-y: auto; overscroll-behavior: contain; }
 .settings-content > h2 { margin: 0 0 24px; font-size: 22px; }
 .settings-content p { color: var(--text-soft); line-height: 1.65; font-size: 13px; overflow-wrap: anywhere; }
+.settings-content p { margin: 0 0 14px; }
 .settings-section { padding: 0 0 26px; margin: 0 0 26px; border-bottom: 1px solid var(--border); }
 .settings-section:last-child { border: 0; padding-bottom: 0; margin-bottom: 0; }
 .settings-section h3 { margin: 0 0 14px; font-size: 15px; letter-spacing: -.01em; }
@@ -977,7 +982,6 @@ button:disabled { cursor: default; }
 :root[data-theme="light"] :is(.empty-chat, .timeline__inner) { text-shadow: none; }
 :root[data-theme="light"] .settings-content :is(select, .themed-select__trigger) { color-scheme: light; }
 :root[data-theme="light"] :is(.room-search, .room-search input, .auth-form input, .join-room input) { color: var(--text); background: var(--surface-2); }
-:root[data-theme="light"] .splash-screen { background: radial-gradient(ellipse at center, #f8faf9, #e9efec 70%); }
 @media (max-width: 720px) {
   .settings-dialog { width: calc(100vw - 16px); height: calc(100dvh - 16px); border-radius: 14px; }
   .settings-header { padding: 18px; }
@@ -1299,6 +1303,8 @@ button:disabled { cursor: default; }
 .room-sidebar .room-row__copy { gap: 2px; }
 .home-header { display: flex; align-items: center; justify-content: space-between; gap: 12px; margin-bottom: 20px; }
 .home-header h1 { margin: 0; font-size: 22px; }
+.home-add-people { min-height: 36px; padding: 0 13px; border-color: var(--border); border-radius: 9px; color: var(--text-soft); background: transparent; font-size: 13px; font-weight: 550; transition: color .16s, background-color .16s, border-color .16s; }
+.home-add-people:hover:not(:disabled) { transform: none; color: var(--text); background: var(--surface-3); border-color: var(--border-strong); }
 @media (hover: none) { .dm-tab__close { opacity: 1; } }
 .composer-add-menu { padding: 5px; }
 .composer-add-menu button { display: block; width: 100%; border: 0; border-radius: 6px; padding: 10px; background: transparent; color: var(--text); text-align: left; cursor: pointer; }

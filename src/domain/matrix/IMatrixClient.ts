@@ -74,7 +74,7 @@ export interface IMatrixClient extends MatrixEventSource {
   setMessagePinned(roomId: string, eventId: string, pinned: boolean): Promise<void>;
 
   setTyping(roomId: string, typing: boolean): Promise<void>;
-  sendReadReceipt(roomId: string, eventId: string): Promise<void>;
+  sendReadReceipt(roomId: string, eventId?: string): Promise<void>;
 
   addReaction(roomId: string, eventId: string, key: string): Promise<string>;
   removeReaction(roomId: string, reactionEventId: string): Promise<void>;

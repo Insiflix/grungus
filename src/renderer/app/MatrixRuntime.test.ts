@@ -154,6 +154,34 @@ describe("SSO session lifecycle", () => {
 });
 
 describe("MatrixRuntime event bridge", () => {
+  it("marks empty timelines read and reads incoming messages without reopening", async () => {
+    const client = new FakeClient();
+    const runtime = new MatrixRuntime(client, auth);
+    const room: MatrixRoom = { id: "!chat:example", name: "Chat", avatarUrl: null, topic: null, unreadCount: 4, highlightCount: 4, isEncrypted: true, membership: "join", memberCount: 2 };
+    client.rooms = [room]; client.emit("roomsChanged", client.rooms);
+    runtime.selectRoom(room.id);
+    expect(client.sendReadReceipt).toHaveBeenCalledWith(room.id, undefined);
+    await Promise.resolve(); await Promise.resolve();
+    const message: MatrixMessage = { id: "$incoming", roomId: room.id, sender: { id: "@alice:example", displayName: "Alice", avatarUrl: null }, timestamp: 1, type: "text", body: "Hello", edited: false, replyTo: null, reactions: [], sendState: "sent", isOwn: false, isRedacted: false };
+    client.emit("messageAdded", message);
+    expect(client.sendReadReceipt).toHaveBeenLastCalledWith(room.id, message.id);
+    client.sendReadReceipt.mockClear();
+    runtime.clearSelectedRoom();
+    client.emit("messageAdded", { ...message, id: "$unviewed" });
+    expect(client.sendReadReceipt).not.toHaveBeenCalled();
+  });
+
+  it("reads the last sent message even when a failed local send follows it", () => {
+    const client = new FakeClient();
+    const runtime = new MatrixRuntime(client, auth);
+    const room: MatrixRoom = { id: "!chat:example", name: "Chat", avatarUrl: null, topic: null, unreadCount: 4, highlightCount: 4, isEncrypted: true, membership: "join", memberCount: 2 };
+    const message: MatrixMessage = { id: "$sent", roomId: room.id, sender: { id: "@alice:example", displayName: "Alice", avatarUrl: null }, timestamp: 1, type: "text", body: "Hello", edited: false, replyTo: null, reactions: [], sendState: "sent", isOwn: false, isRedacted: false };
+    client.rooms = [room]; client.timelines[room.id] = [message, { ...message, id: "~failed", sendState: "failed", timestamp: 2 }];
+    client.emit("roomsChanged", client.rooms);
+    runtime.selectRoom(room.id);
+    expect(client.sendReadReceipt).toHaveBeenLastCalledWith(room.id, "$sent");
+  });
+
   it("does not mark hidden voice chat read on selection or refresh, and reads new messages on reopening", async () => {
     const client = new FakeClient();
     const runtime = new MatrixRuntime(client, auth);
