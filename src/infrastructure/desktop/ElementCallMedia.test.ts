@@ -12,7 +12,7 @@ function fixture(document = { querySelector: vi.fn(), documentElement: { toggleA
   const context = { document, navigator: { mediaDevices: { getUserMedia, getDisplayMedia } }, parent, location: { origin: "http://localhost", hash: "#?widgetId=test&grungusCameraQuality=720p&parentUrl=http%3A%2F%2Flocalhost%2F" }, URL, URLSearchParams, window: { addEventListener: (_event: string, callback: typeof listener) => { listener = callback; } } };
   const source = readFileSync("scripts/element-call-media.js", "utf8").replace("__GRUNGUS_CAMERA_PRESETS__", JSON.stringify(cameraQualityPresets));
   runInNewContext(source, context);
-  return { media: context.navigator.mediaDevices, camera, screen, getUserMedia, getDisplayMedia, postMessage, parent, listener };
+  return { media: context.navigator.mediaDevices, camera, screen, getUserMedia, getDisplayMedia, postMessage, parent, listener, window: context.window };
 }
 describe("Element Call camera and display capture adapter", () => {
   it("reports selected WebRTC round-trip times only to the authenticated host", async () => {
@@ -130,4 +130,26 @@ describe("Element Call camera and display capture adapter", () => {
     await receive({ source: parent, origin: "http://localhost", data });
     expect(postMessage).toHaveBeenLastCalledWith(expect.objectContaining({ deafenError: expect.any(String) }), "http://localhost");
   });
+});
+
+it("applies per-user gain, preserves deafen, and restores settings after reconnect", async () => {
+  const f = fixture();
+  const register = (f.window as typeof f.window & { grungusRegisterParticipant: (user: string, identity: string, participant: object | null) => void }).grungusRegisterParticipant;
+  const alice = { setVolume: vi.fn() }, bob = { setVolume: vi.fn() };
+  const output = alice.setVolume;
+  register("@alice:test", "alice-device", alice); register("@bob:test", "bob-device", bob);
+  const update = (volume: number, muted = false, origin = "http://localhost") => f.listener({ source: f.parent, origin, data: { type: "grungus:participant-audio", widgetId: "test", requestId: "request", userId: "@alice:test", volume, muted } });
+  await update(180, false, "https://evil.test"); expect(output).not.toHaveBeenCalled();
+  await update(180);
+  expect(output).toHaveBeenCalledWith(1.8, "microphone");
+  alice.setVolume(0); await update(160); expect(output).toHaveBeenLastCalledWith(1.6, "screen_share_audio");
+  expect(output).toHaveBeenCalledWith(0, "microphone");
+  alice.setVolume(1); expect(output).toHaveBeenLastCalledWith(1.6, "microphone");
+  await update(160, true); expect(output).toHaveBeenLastCalledWith(0, "screen_share_audio");
+  register("@alice:test", "alice-device", null);
+  register("@alice:test", "alice-device", alice);
+  await update(150); expect(output).toHaveBeenCalledWith(1.5, "microphone");
+  const reconnect = { setVolume: vi.fn() }; register("@alice:test", "alice-device", reconnect);
+  expect(reconnect.setVolume).not.toBeUndefined();
+  await update(201); expect(f.postMessage).toHaveBeenLastCalledWith(expect.objectContaining({ participantAudio: expect.objectContaining({ error: expect.any(String) }) }), "http://localhost");
 });

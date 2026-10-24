@@ -1,8 +1,9 @@
 // Shared by the desktop renderer and isolated Element Call frame. No audio leaves this device.
 (() => {
   const base = new URL('./', document.currentScript.src);
-  let options = { echoCancellation: true, noiseSuppression: true, autoGainControl: true, advancedNoiseSuppression: false, voiceFilter: true, inputGain: 100 };
+  let options = { echoCancellation: true, noiseSuppression: true, autoGainControl: true, advancedNoiseSuppression: false, voiceFilter: true, inputGain: 100, inputGate: false, inputThresholdDb: -45, inputCloseDb: -50, inputHoldMs: 200 };
   const sessions = new Set();
+  const meters = new WeakMap();
   let revision = 0;
   const nativeConstraints = () => ({ echoCancellation: options.echoCancellation, noiseSuppression: options.noiseSuppression && !options.advancedNoiseSuppression, autoGainControl: options.autoGainControl, channelCount: { ideal: 1 }, sampleRate: { ideal: 48000 } });
   const report = (message) => window.dispatchEvent(new CustomEvent('grungus:audio-warning', { detail: message }));
@@ -18,6 +19,15 @@
       const filter = context.createBiquadFilter();
       filter.type = 'highpass'; filter.frequency.value = 75; filter.Q.value = .707;
       const gain = context.createGain();
+      await context.audioWorklet.addModule(new URL('microphone-gate.js', base).href);
+      const gate = new AudioWorkletNode(context, 'grungus-microphone-gate', { channelCount: 1, outputChannelCount: [1] });
+      let meter = { db: -100, open: !options.inputGate };
+      gate.port.onmessage = event => { meter = event.data; };
+      gate.onprocessorerror = () => {
+        report('Input sensitivity stopped working. Rejoin the call or restart the microphone test.');
+        // Fail closed rather than unexpectedly sending audio below the threshold.
+        gate.disconnect();
+      };
       const limiter = context.createDynamicsCompressor();
       limiter.threshold.value = -6; limiter.knee.value = 6; limiter.ratio.value = 12;
       limiter.attack.value = .003; limiter.release.value = .15;
@@ -28,12 +38,13 @@
       const close = () => {
         if (closed) return;
         closed = true; sessions.delete(session);
-        input.stop(); source.disconnect(); filter.disconnect(); gain.disconnect(); limiter.disconnect();
+        input.stop(); source.disconnect(); filter.disconnect(); gain.disconnect(); limiter.disconnect(); gate.disconnect(); gate.port.postMessage('destroy'); gate.port.close();
         denoiser?.destroy(); denoiser?.disconnect();
         void context.close().catch(() => {});
       };
       const decorateTrack = track => {
         outputs.add(track);
+        meters.set(track, () => meter);
         const stop = track.stop.bind(track), clone = track.clone.bind(track);
         track.stop = () => { stop(); outputs.delete(track); if (!outputs.size) close(); };
         track.clone = () => decorateTrack(clone());
@@ -74,15 +85,17 @@
         if (closed) return;
         await input.applyConstraints({ ...nativeConstraints(), noiseSuppression: useDenoiser ? false : options.noiseSuppression });
         if (closed) return;
-        source.disconnect(); filter.disconnect(); gain.disconnect(); limiter.disconnect(); denoiser?.disconnect();
+        source.disconnect(); filter.disconnect(); gain.disconnect(); gate.disconnect(); limiter.disconnect(); denoiser?.disconnect();
         let tail = source;
         if (useDenoiser) { tail.connect(denoiser); tail = denoiser; }
         // A gentle rumble filter and peak limiter retain natural voice without an aggressive gate.
         filter.frequency.setTargetAtTime(options.voiceFilter ? 75 : 0, context.currentTime, .02);
         tail.connect(filter); filter.connect(gain);
         gain.gain.setTargetAtTime(options.inputGain / 100, context.currentTime, .02);
-        if (options.voiceFilter) { gain.connect(limiter); limiter.connect(destination); }
-        else gain.connect(destination);
+        gate.port.postMessage({ enabled: options.inputGate, thresholdDb: options.inputThresholdDb, closeDb: options.inputCloseDb, holdMs: options.inputHoldMs });
+        gain.connect(gate);
+        if (options.voiceFilter) { gate.connect(limiter); limiter.connect(destination); }
+        else gate.connect(destination);
       };
       const session = { update: () => chain = chain.catch(() => {}).then(update), close };
       sessions.add(session);
@@ -100,8 +113,10 @@
   };
   const configure = async next => {
     const before = JSON.stringify(options);
-    for (const key of ['echoCancellation', 'noiseSuppression', 'autoGainControl', 'advancedNoiseSuppression', 'voiceFilter']) if (typeof next?.[key] === 'boolean') options[key] = next[key];
+    for (const key of ['echoCancellation', 'noiseSuppression', 'autoGainControl', 'advancedNoiseSuppression', 'voiceFilter', 'inputGate']) if (typeof next?.[key] === 'boolean') options[key] = next[key];
     if (Number.isFinite(next?.inputGain)) options.inputGain = Math.max(0, Math.min(200, next.inputGain));
+    for (const [key, min, max] of [['inputThresholdDb', -90, 0], ['inputCloseDb', -90, 0], ['inputHoldMs', 0, 1000]]) if (Number.isFinite(next?.[key])) options[key] = Math.max(min, Math.min(max, next[key]));
+    options.inputCloseDb = Math.min(options.inputCloseDb, options.inputThresholdDb);
     if (JSON.stringify(options) === before) return;
     const current = ++revision;
     const results = await Promise.allSettled([...sessions].map(session => session.update()));
@@ -119,5 +134,5 @@
     };
   }
   window.addEventListener('pagehide', () => { for (const session of sessions) session.close(); });
-  window.grungusAudio = { configure };
+  window.grungusAudio = { configure, getLevel: track => meters.get(track)?.() };
 })();

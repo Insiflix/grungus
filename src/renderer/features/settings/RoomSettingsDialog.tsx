@@ -1,3 +1,4 @@
+import { AvatarEditor } from "../../components/common/AvatarEditor";
 import { ThemedSelect } from "../../components/common/ThemedSelect";
 import { ThemedAutocomplete } from "../../components/common/ThemedAutocomplete";
 import { useCallback, useEffect, useRef, useState } from "react";
@@ -31,13 +32,14 @@ export function RoomSettingsDialog({ roomId, onClose }: { roomId: string; onClos
     <header className="settings-header"><div><span className="eyebrow">{room?.space ? "SPACE SETTINGS" : "ROOM SETTINGS"}</span><h2 id="room-settings-title">{room?.name ?? "Room settings"}</h2></div><button className="icon-button" aria-label="Close room settings" disabled={busy} onClick={close}><X /></button></header>
     <div className="settings-layout"><nav className="settings-nav" aria-label="Room settings categories">{tabs.map((tab) => <button key={tab.id} aria-current={category === tab.id ? "page" : undefined} disabled={busy} onClick={() => { setCategory(tab.id); setError(null); setNotice(null); }}>{tab.name}</button>)}</nav><div className="settings-content" aria-busy={busy}>
       {error && <p className="error-banner" role="alert">{error}</p>}{notice && <p className="success-banner" role="status">{notice}</p>}{busy && <p role="status">Saving…</p>}
-      {!room ? <><p>Loading room settings…</p>{error && <button className="button button--secondary" onClick={() => void execute(reload, "Room loaded.", false)}>Retry</button>}</> : <RoomSettingsPanel key={`${roomId}:${category}`} category={category} room={room} busy={busy} execute={execute} onClose={onClose} />}
+      {!room ? <><p>Loading room settings…</p>{error && <button className="button button--secondary" onClick={() => void execute(reload, "Room loaded.", false)}>Retry</button>}</> : <RoomSettingsPanel key={`${roomId}:${category}`} category={category} room={room} busy={busy} execute={execute} onClose={onClose} onAvatarSaved={reload} />}
     </div></div>
   </dialog>;
 }
 
-function RoomSettingsPanel({ category, room, busy, execute, onClose }: { category: Category; room: RoomSettings; busy: boolean; execute: (action: () => Promise<unknown>, success?: string, refresh?: boolean) => Promise<void>; onClose: () => void }) {
+function RoomSettingsPanel({ category, room, busy, execute, onClose, onAvatarSaved }: { category: Category; room: RoomSettings; busy: boolean; execute: (action: () => Promise<unknown>, success?: string, refresh?: boolean) => Promise<void>; onClose: () => void; onAvatarSaved: () => Promise<void> }) {
   const [name, setName] = useState(room.name);
+  const [avatarFile, setAvatarFile] = useState<File | null>(null);
   const [topic, setTopic] = useState(room.topic);
   const [target, setTarget] = useState("");
   const [reason, setReason] = useState("");
@@ -54,13 +56,16 @@ function RoomSettingsPanel({ category, room, busy, execute, onClose }: { categor
   const [level, setLevel] = useState(Number(room.power.events_default ?? 0));
   const [roleLevel, setRoleLevel] = useState(0);
   const [leaveConfirmed, setLeaveConfirmed] = useState(false);
+  const [deletionPlan, setDeletionPlan] = useState<Awaited<ReturnType<typeof matrixSettings.prepareServerDeletion>> | null>(null);
+  const [deleteConfirmation, setDeleteConfirmation] = useState("");
   const [removeAlias, setRemoveAlias] = useState<string | null>(null);
   const [child, setChild] = useState("");
   const [removeChild, setRemoveChild] = useState<string | null>(null);
   const unavailable = <p className="settings-permission-note">Your role cannot change these settings. Ask a room administrator for permission.</p>;
   if (category === "general") return <>
+    {avatarFile && <AvatarEditor file={avatarFile} onClose={() => setAvatarFile(null)} onSave={async file => { await matrixSettings.roomAvatar(room.id, file); await onAvatarSaved(); }} />}
     <SettingsSection title="Details">{!room.canDetails && unavailable}<form className="settings-form" onSubmit={(event) => { event.preventDefault(); void execute(() => matrixSettings.roomDetails(room.id, name, topic)); }}><label>{room.space ? "Space" : "Room"} name<input required value={name} disabled={busy || !room.canDetails} onChange={(event) => setName(event.target.value)} /></label><label>Topic<textarea rows={4} value={topic} disabled={busy || !room.canDetails} onChange={(event) => setTopic(event.target.value)} /></label><button className="button button--primary" disabled={busy || !room.canDetails}>Save details</button></form></SettingsSection>
-    <SettingsSection title="Avatar"><div className="settings-actions"><label className="button button--secondary settings-file">Upload avatar<input type="file" accept="image/png,image/jpeg,image/webp,image/gif" disabled={busy || !room.canAvatar} onChange={(event) => { const file = event.target.files?.[0]; event.target.value = ""; if (file) void execute(() => matrixSettings.roomAvatar(room.id, file), "Avatar updated."); }} /></label><button className="button button--secondary" disabled={busy || !room.canAvatar || !room.avatar} onClick={() => void execute(() => matrixSettings.roomAvatar(room.id, null), "Avatar removed.")}>Remove avatar</button></div></SettingsSection>
+    <SettingsSection title="Avatar"><div className="settings-actions"><label className="button button--secondary settings-file">Upload avatar<input type="file" accept="image/png,image/jpeg,image/webp,image/gif" disabled={busy || !room.canAvatar} onChange={(event) => { const file = event.target.files?.[0]; event.target.value = ""; if (file) setAvatarFile(file); }} /></label><button className="button button--secondary" disabled={busy || !room.canAvatar || !room.avatar} onClick={() => void execute(() => matrixSettings.roomAvatar(room.id, null), "Avatar removed.")}>Remove avatar</button></div></SettingsSection>
   </>;
   if (category === "members") return <>
     <SettingsSection title="Invite people"><form className="settings-form" onSubmit={(event) => { event.preventDefault(); void execute(async () => { await matrixSettings.roomMember(room.id, target.trim(), "invite"); setTarget(""); }, "Invitation sent."); }}><label>Matrix ID<input required value={target} placeholder="@user:example.org" disabled={busy || !room.canInvite} onChange={(event) => setTarget(event.target.value)} /></label><button className="button button--primary" disabled={busy || !room.canInvite}>Invite</button></form></SettingsSection>
@@ -90,6 +95,9 @@ function RoomSettingsPanel({ category, room, busy, execute, onClose }: { categor
   return <>
     <SettingsSection title="Room information"><label className="settings-field">Internal room ID<input value={room.id} readOnly onFocus={(event) => event.target.select()} /></label><button className="button button--secondary" onClick={() => void execute(() => navigator.clipboard.writeText(room.id), "Room ID copied.", false)}>Copy room ID</button><p>Your power level: {room.level}</p></SettingsSection>
     <RoomUpgradeSettings room={room} busy={busy} execute={execute} />
+    {room.space && <SettingsSection title="Delete server"><p>Close this server and all its channels, remove their members, and leave them. This cannot be undone. Matrix history may remain on other devices and homeservers.</p>
+      {!deletionPlan ? <button className="button settings-danger" disabled={busy || !room.canPermissions || !room.canKick} onClick={() => void execute(async () => { setDeletionPlan(await matrixSettings.prepareServerDeletion(room.id)); }, "Review the channels below before deleting.", false)}>Delete server and all channels?</button> : <div className="settings-danger-zone"><p>The following rooms will be closed:</p><ul>{deletionPlan.map(item => <li key={item.id}>{item.name}</li>)}</ul><label className="settings-field">Type {room.name} to confirm<input value={deleteConfirmation} disabled={busy} onChange={event => setDeleteConfirmation(event.target.value)} autoComplete="off" /></label><div className="settings-actions"><button className="button settings-danger" disabled={busy || deleteConfirmation !== room.name} onClick={() => void execute(async () => { await matrixSettings.deleteServer(room.id); onClose(); }, "Server deleted.", false)}>Permanently delete server and channels</button><button className="button button--secondary" disabled={busy} onClick={() => { setDeletionPlan(null); setDeleteConfirmation(""); }}>Cancel</button></div></div>}
+    </SettingsSection>}
     <SettingsSection title={`Leave this ${room.space ? "space" : "room"}`}><p>You may need a new invitation to rejoin a private room. Leaving a space does not automatically leave its rooms.</p><SettingsToggle title="I want to leave" checked={leaveConfirmed} onChange={setLeaveConfirmed} disabled={busy} /><button className="button settings-danger" disabled={busy || !leaveConfirmed} onClick={() => void execute(async () => { await matrixSettings.leaveRoom(room.id); onClose(); }, "Left room.", false)}>Leave {room.space ? "space" : "room"}</button></SettingsSection>
   </>;
 }

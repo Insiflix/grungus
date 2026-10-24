@@ -1,6 +1,6 @@
 ﻿// @vitest-environment jsdom
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
-import { act, cleanup, render, screen, waitFor } from "@testing-library/react";
+import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { SettingsAuthRequired } from "../../../infrastructure/matrix/MatrixSettings";
 import { preferences } from "../../../domain/settings/Preferences";
@@ -51,6 +51,20 @@ describe("account settings interactions", () => {
     openFolder.mockRejectedValue(new Error("File manager unavailable"));
     await user.click(screen.getByRole("button", { name: "Open log folder" }));
     expect((await screen.findByRole("alert")).textContent).toContain("File manager unavailable");
+  });
+  it("persists input sensitivity and sends thresholds to the microphone pipeline", async () => {
+    const configure = vi.fn().mockResolvedValue(undefined);
+    vi.stubGlobal("grungusAudio", { configure });
+    const user = userEvent.setup();
+    render(<VoiceSettings busy={false} onOpenIdentity={vi.fn()} execute={async () => true} />);
+    expect(screen.getByRole("slider", { name: "Start transmitting above" })).toHaveProperty("disabled", true);
+    await user.click(screen.getByRole("switch", { name: /^Custom input sensitivity/ }));
+    await waitFor(() => expect(preferences.getSnapshot().inputGate).toBe(true));
+    const threshold = screen.getByRole("slider", { name: "Start transmitting above" });
+    expect(threshold).toHaveProperty("disabled", false);
+    fireEvent.change(threshold, { target: { value: "-44" } });
+    await waitFor(() => expect(preferences.getSnapshot().inputThresholdDb).toBe(-44));
+    expect(configure).toHaveBeenLastCalledWith(expect.objectContaining({ inputGate: true, inputThresholdDb: -44, inputCloseDb: -50, inputHoldMs: 200 }));
   });
   it("stops capture if camera permission resolves after closing the settings preview", async () => {
     const user = userEvent.setup();

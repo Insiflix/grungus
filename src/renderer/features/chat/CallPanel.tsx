@@ -1,3 +1,4 @@
+import { participantAudio } from "../../../domain/calls/ParticipantAudio";
 import { microphoneOptions } from "../../../infrastructure/desktop/Microphone";
 import { preferences } from "../../../domain/settings/Preferences";
 import type { ICallProvider, CallHandle } from "../../../domain/calls/ICallProvider";
@@ -18,6 +19,34 @@ export function CallPanel({ roomId, name, video, mode = "group", autoJoin = mode
   const frame = useRef<HTMLIFrameElement>(null);
   const [joined, setJoined] = useState(false);
   const [ping, setPing] = useState<number | null>(null);
+  useEffect(() => {
+    if (!joined || !frame.current) return;
+    const element = frame.current;
+    const url = new URL(element.src);
+    const widgetId = new URLSearchParams(url.hash.slice(2)).get("widgetId");
+    const pending = new Map<string, { resolve: () => void; reject: (error: Error) => void; timer: ReturnType<typeof setTimeout> }>();
+    const receive = (event: MessageEvent) => {
+      if (event.source !== element.contentWindow || event.origin !== url.origin || event.data?.type !== "grungus:media-status" || event.data.widgetId !== widgetId) return;
+      const result = event.data.participantAudio;
+      const request = result && pending.get(result.requestId);
+      if (!request) return;
+      clearTimeout(request.timer); pending.delete(result.requestId);
+      if (result.success) request.resolve(); else request.reject(new Error(result.error || "Unable to adjust participant audio."));
+    };
+    window.addEventListener("message", receive);
+    const unregister = participantAudio.register(roomId, (userId, settings) => new Promise<void>((resolve, reject) => {
+      const requestId = crypto.randomUUID();
+      const timer = setTimeout(() => { pending.delete(requestId); reject(new Error("Audio controls did not respond. Rejoin the channel and retry.")); }, 5000);
+      pending.set(requestId, { resolve, reject, timer });
+      element.contentWindow?.postMessage({ type: "grungus:participant-audio", widgetId, requestId, userId, ...settings }, url.origin);
+    }));
+    return () => {
+      unregister(); window.removeEventListener("message", receive);
+      for (const request of pending.values()) { clearTimeout(request.timer); request.reject(new Error("The voice call ended.")); }
+      pending.clear();
+    };
+  }, [joined, roomId]);
+
   const connectionTooltip = !joined ? "Connecting to voice..." : ping === null ? "Ping unavailable" : `Ping: ${ping} ms`;
   useEffect(() => {
     setPing(null);

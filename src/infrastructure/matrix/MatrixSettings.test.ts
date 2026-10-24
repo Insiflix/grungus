@@ -288,3 +288,80 @@ describe("membership leave notifications", () => {
     expect(membershipNotices.getSnapshot()).toBeNull();
   });
 });
+
+describe("server deletion", () => {
+  function deletionFixture() {
+    const { sdk, settings } = fixture();
+    Object.assign(sdk, { getRoom: () => ({ isSpaceRoom: () => true }), kick: vi.fn().mockResolvedValue({}), leave: vi.fn().mockResolvedValue({}) });
+    const room = { id: "!server:example.org", name: "Forest", space: true, ownId: "@me:example.org", level: 100, power: { users: { "@me:example.org": 100 }, events: { "m.room.message": 0 } }, canPermissions: true, canAccess: true, canGuestAccess: true, canKick: true, canChildren: true, members: [{ id: "@me:example.org", name: "Me", level: 100, membership: "join" }, { id: "@other:example.org", name: "Alice", level: 0, membership: "join" }], children: [{ id: "!channel:example.org", name: "General" }] };
+    const child = { ...room, id: "!channel:example.org", name: "General", space: false, children: [] };
+    vi.spyOn(settings, "room").mockImplementation(async id => (id === room.id ? room : child) as unknown as Awaited<ReturnType<typeof settings.room>>);
+    const leave = vi.spyOn(settings, "leaveRoom").mockResolvedValue(undefined);
+    return { sdk: sdk as typeof sdk & { kick: ReturnType<typeof vi.fn> }, settings, room, child, leave };
+  }
+  it("closes every channel, removes members, unlinks children, and leaves the server last", async () => {
+    const f = deletionFixture();
+    await f.settings.deleteServer(f.room.id);
+    expect(f.sdk.sendStateEvent).toHaveBeenCalledWith(f.child.id, "m.room.join_rules", { join_rule: "invite" }, "");
+    expect(f.sdk.sendStateEvent).toHaveBeenCalledWith(f.child.id, "m.room.power_levels", expect.objectContaining({ users_default: -1, events_default: 100, invite: 100, events: { "m.room.message": 100 } }), "");
+    expect(f.sdk.kick).toHaveBeenCalledWith(f.child.id, "@other:example.org", expect.any(String));
+    expect(f.sdk.sendStateEvent).toHaveBeenCalledWith(f.room.id, "m.space.child", {}, f.child.id);
+    expect(f.leave.mock.calls).toEqual([[f.child.id], [f.room.id]]);
+  });
+  it("refuses the entire deletion before any mutation if a channel cannot be managed", async () => {
+    const f = deletionFixture(); f.child.canKick = false;
+    await expect(f.settings.deleteServer(f.room.id)).rejects.toThrow("permission");
+    expect(f.sdk.sendStateEvent).not.toHaveBeenCalled(); expect(f.sdk.kick).not.toHaveBeenCalled(); expect(f.leave).not.toHaveBeenCalled();
+  });
+  it("refuses to remove an administrator with equal power", async () => {
+    const f = deletionFixture(); f.child.members[1].level = 100;
+    await expect(f.settings.deleteServer(f.room.id)).rejects.toThrow("permission");
+    expect(f.sdk.sendStateEvent).not.toHaveBeenCalled();
+  });
+  it("does not leave rooms after a failed member removal", async () => {
+    const f = deletionFixture(); f.sdk.kick.mockRejectedValueOnce(new Error("Forbidden"));
+    await expect(f.settings.deleteServer(f.room.id)).rejects.toThrow("Deletion stopped");
+    expect(f.leave).not.toHaveBeenCalled();
+  });
+});
+
+describe("server invite permissions", () => {
+  function inviteFixture(level: number, required = 50, targetMembership?: string) {
+    const { sdk, settings } = fixture();
+    // Real /state responses may omit room_id and must still be evaluated.
+    const events = [
+      { type: EventType.RoomCreate, state_key: "", sender: "@owner:example.org", content: { room_version: "11", creator: "@owner:example.org" } },
+      { type: EventType.RoomPowerLevels, state_key: "", content: { invite: required, users: { "@me:example.org": level } } },
+      { type: EventType.RoomMember, state_key: "@me:example.org", content: { membership: "join" } },
+      ...(targetMembership ? [{ type: EventType.RoomMember, state_key: "@target:example.org", content: { membership: targetMembership } }] : []),
+    ];
+    const roomState = vi.fn().mockResolvedValue(events);
+    Object.assign(sdk, { getRoom: () => ({ getMyMembership: () => "join" }), roomState });
+    return { sdk, settings, events, roomState };
+  }
+  it.each([[0, false], [49, false], [50, true], [100, true]])("compares power level %s against the server invite threshold", async (level, expected) => {
+    const f = inviteFixture(level as number);
+    expect(await f.settings.canInviteToRoom("!server:example.org", "@target:example.org")).toBe(expected);
+  });
+  it.each(["join", "invite", "ban"])("omits targets who are already %s", async membership => {
+    const f = inviteFixture(100, 50, membership);
+    expect(await f.settings.canInviteToRoom("!server:example.org", "@target:example.org")).toBe(false);
+  });
+  it("uses refreshed power levels rather than an earlier permission result", async () => {
+    const f = inviteFixture(50);
+    expect(await f.settings.canInviteToRoom("!server:example.org", "@target:example.org")).toBe(true);
+    f.events[1].content = { invite: 100, users: { "@me:example.org": 50 } };
+    expect(await f.settings.canInviteToRoom("!server:example.org", "@target:example.org")).toBe(false);
+  });
+  it("requires a confirmed joined membership in the fresh state", async () => {
+    const f = inviteFixture(100);
+    f.roomState.mockResolvedValue(f.events.filter(event => event.type !== EventType.RoomMember));
+    expect(await f.settings.canInviteToRoom("!server:example.org", "@target:example.org")).toBe(false);
+  });
+  it("does not load unrelated settings endpoints to determine invite permissions", async () => {
+    const f = inviteFixture(100);
+    await f.settings.canInviteToRoom("!server:example.org", "@target:example.org");
+    expect(f.sdk.getStateEvent).not.toHaveBeenCalled();
+    expect(f.roomState).toHaveBeenCalledExactlyOnceWith("!server:example.org");
+  });
+});

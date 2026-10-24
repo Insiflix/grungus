@@ -100,7 +100,7 @@ export function GrungusHome({ rooms, calls, channelServers, onOpen, onJoinVoice,
         <section aria-labelledby="home-voice-title"><h3 id="home-voice-title"><Volume2 size={16} /> In voice <span>{voiceCalls.length}</span></h3>
           {voiceCalls.map(({ call, room }) => <div className="home-voice-card" key={room.id}>
             <button type="button" className="home-activity-card" onClick={() => onOpen(room.id)}><Avatar name={channelServers.get(room.id)!.name} url={channelServers.get(room.id)!.avatarUrl} /><span><strong>{room.name}</strong><small>{channelServers.get(room.id)!.name} · {call.participants} in voice</small></span></button>
-            {call.members && call.members.length > 0 && <div className="home-voice-members">{call.members.map(member => <span key={member.id} title={member.displayName}><Avatar name={member.displayName} url={member.avatarUrl} size="small" /><small>{member.displayName}</small></span>)}</div>}
+            {call.members && call.members.length > 0 && <div className="home-voice-members">{call.members.map(member => <span key={member.id} title={member.displayName} data-profile-user-id={member.id} data-voice-room-id={call.roomId}><Avatar name={member.displayName} url={member.avatarUrl} size="small" /><small>{member.displayName}</small></span>)}</div>}
             <button type="button" className="button button--secondary button--compact" disabled={callActive} onClick={() => onJoinVoice(room)}>Join voice</button>
           </div>)}
           {voiceCalls.length === 0 && <p className="home-empty">No one is in your voice channels right now.</p>}

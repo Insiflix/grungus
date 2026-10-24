@@ -6,6 +6,8 @@ All microphone captures share `scripts/microphone-processing.js`, loaded before 
 
 Defaults request native WebRTC echo cancellation, noise suppression, automatic gain, mono capture and 48 kHz. A 75 Hz high-pass filter reduces rumble and a compressor limits loud peaks. Gain is adjustable from 0–200%. Existing saved choices are preserved; Restore recommended audio resets processing choices. Actual native constraints depend on the browser and device.
 
+Custom input sensitivity is an optional sample-clock AudioWorklet noise gate, applied after noise suppression, the rumble filter and manual gain, before the peak limiter. Opening and closing thresholds are independently adjustable (-90 to 0 dBFS, closing cannot exceed opening) with a 0?1000 ms hold. Fast attack and soft release reduce clicks; separate thresholds avoid chatter. It starts disabled. The test shows the pre-gate RMS dBFS level and whether audio is passing, even when output is silent. These are digital levels, not calibrated acoustic dB SPL. The gate silences the outgoing samples; RTP keepalives/comfort noise can still be transmitted.
+
 Optional RNNoise uses `@sapphi-red/web-noise-suppressor` (MIT; RNNoise worklet incorporates the Apache-2.0 licensed shiguredo WASM build). All library, worklet and WASM files ship locally. Native noise suppression is bypassed while RNNoise runs to avoid double filtering. Initialization/processor failures warn and fall back to standard noise suppression. RNNoise stays off by default because extra suppression can affect clean speech and music.
 
 The local preview includes outgoing processing, but cannot reproduce codec artifacts, packet loss, the remote volume or remote hardware. Subjective quality still needs a listening check in a real two-person call.

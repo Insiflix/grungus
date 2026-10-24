@@ -154,7 +154,7 @@ export function ChatShell() {
 
   return (
     <main className="app-shell">
-      <ProfileActions onVerification={() => { setUserVerificationOpen(true); setIdentityOpen(true); }} />
+      <ProfileActions onCall={room => { setSpaceId(null); startCall(room, false); }} callActive={Boolean(call || directCall)} onVerification={() => { setUserVerificationOpen(true); setIdentityOpen(true); }} />
       <MembershipToast />
       <WorkspaceRail spaces={spaces} selectedSpaceId={spaceId} onSelectSpace={selectSpace} onCreateServer={() => setCreatingServer(true)} />
       <RoomSidebar onManageChannel={setManagedRoomId} voiceDockRef={setVoiceDock} key={spaceId ?? "home"} space={activeSpace ?? null} calls={roomCalls} callActive={Boolean(call || directCall)} onJoinVoice={room => startCall(room, false)} discoveryPending={spaceId ? discovery[spaceId]?.pending : false} discoveryError={spaceId ? discovery[spaceId]?.error : undefined} onRetryDiscovery={() => { if (spaceId) void refreshSpace(spaceId); }} onOpenIdentity={() => setIdentityOpen(true)} onOpenSettings={() => setSettingsOpen(true)} onManageSpace={() => { if (activeSpace) setManagedRoomId(activeSpace.id); }} />

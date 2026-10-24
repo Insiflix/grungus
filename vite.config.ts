@@ -2,12 +2,12 @@ import { cameraQualityPresets } from "./src/domain/calls/CameraQuality";
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 import tailwindcss from "@tailwindcss/vite";
-import { cpSync, mkdirSync, readFileSync, writeFileSync } from "node:fs";
+import { cpSync, mkdirSync, readFileSync, readdirSync, writeFileSync } from "node:fs";
 import { resolve } from "node:path";
 function bundleMicrophoneAudio() {
   const target = resolve("public/audio");
   mkdirSync(target, { recursive: true });
-  cpSync(resolve("scripts/microphone-processing.js"), resolve(target, "microphone-processing.js"));
+  for (const file of ["microphone-processing.js", "microphone-gate.js"]) cpSync(resolve("scripts", file), resolve(target, file));
   mkdirSync(resolve(target, "vendor/rnnoise"), { recursive: true });
   for (const asset of ["index.js", "rnnoise.wasm", "rnnoise_simd.wasm", "rnnoise/workletProcessor.js"]) cpSync(resolve("node_modules/@sapphi-red/web-noise-suppressor/dist", asset), resolve(target, "vendor", asset));
   cpSync(resolve("node_modules/@sapphi-red/web-noise-suppressor/LICENSE"), resolve(target, "LICENSE-web-noise-suppressor"));
@@ -17,6 +17,21 @@ function bundleElementCall() {
   const target = resolve("public/element-call");
   mkdirSync(target, { recursive: true });
   cpSync(resolve("node_modules/@element-hq/element-call-embedded/dist"), target, { recursive: true });
+  // Pin the bridge to the installed Element mapping and fail loudly on API changes.
+  const participantHook = "subscribe(e=>{let n=t.value.connection?.transport.livekit_service_url;";
+  let hooked = false;
+  for (const name of readdirSync(resolve(target, "assets"))) {
+    if (!name.endsWith(".js")) continue;
+    const file = resolve(target, "assets", name);
+    let source = readFileSync(file, "utf8");
+    if (!source.includes(participantHook)) continue;
+    const audioMix = "webAudioMix:!1,singlePeerConnection:!0";
+    if (!source.includes(audioMix)) throw new Error("Element Call Web Audio bridge needs updating.");
+    source = source.replace(participantHook, "subscribe(e=>{window.grungusRegisterParticipant?.(t.value.membership.userId,t.value.membership.rtcBackendIdentity,e);let n=t.value.connection?.transport.livekit_service_url;")
+      .replace(audioMix, "webAudioMix:!0,singlePeerConnection:!0");
+    writeFileSync(file, source); hooked = true;
+  }
+  if (!hooked) throw new Error("Element Call participant audio bridge needs updating.");
   cpSync(resolve("public/audio"), resolve(target, "audio"), { recursive: true });
   for (const license of ["LICENSE-AGPL-3.0", "LICENSE-COMMERCIAL"]) cpSync(resolve("node_modules/@element-hq/element-call-embedded", license), resolve(target, license));
   writeFileSync(resolve(target, "config.json"), JSON.stringify({ matrix_rtc_mode: "compatibility", media_quality: { video: { max_resolution: 1080, max_bitrate: 3000000, max_framerate: 30 }, screen_share: { max_resolution: 1440, max_bitrate: 5000000, max_framerate: 30 } } }));

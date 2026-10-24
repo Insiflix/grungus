@@ -30,6 +30,10 @@ export interface Preferences {
   advancedNoiseSuppression: boolean;
   voiceFilter: boolean;
   inputGain: number;
+  inputGate: boolean;
+  inputThresholdDb: number;
+  inputCloseDb: number;
+  inputHoldMs: number;
 }
 
 export const defaultPreferences: Readonly<Preferences> = {
@@ -42,6 +46,7 @@ export const defaultPreferences: Readonly<Preferences> = {
   audioInput: "", videoInput: "", audioOutput: "",
   echoCancellation: true, noiseSuppression: true, autoGainControl: true,
   advancedNoiseSuppression: false, voiceFilter: true, inputGain: 100,
+  inputGate: false, inputThresholdDb: -45, inputCloseDb: -50, inputHoldMs: 200,
 };
 
 export function parsePreferences(value: unknown): Preferences {
@@ -53,6 +58,8 @@ export function parsePreferences(value: unknown): Preferences {
     if (typeof result[key] === "boolean" && typeof candidate === "boolean") Object.assign(result, { [key]: candidate });
   }
   if (typeof raw.inputGain === "number" && Number.isFinite(raw.inputGain)) result.inputGain = Math.max(0, Math.min(200, raw.inputGain));
+  for (const [key, min, max] of [["inputThresholdDb", -90, 0], ["inputCloseDb", -90, 0], ["inputHoldMs", 0, 1000]] as const) if (typeof raw[key] === "number" && Number.isFinite(raw[key])) result[key] = Math.max(min, Math.min(max, raw[key]));
+  result.inputCloseDb = Math.min(result.inputCloseDb, result.inputThresholdDb);
   if (isTheme(raw.theme)) result.theme = raw.theme;
   if (raw.roomSort === "name" || raw.roomSort === "unread") result.roomSort = raw.roomSort;
   if (typeof raw.fontSize === "number" && Number.isFinite(raw.fontSize)) result.fontSize = Math.max(12, Math.min(22, raw.fontSize));

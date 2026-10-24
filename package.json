@@ -23,6 +23,7 @@
     "test:notification": "tsc -p tsconfig.electron.json && node scripts/test-notification.cjs",
     "test:typing": "node scripts/test-typing-performance.mjs",
     "test:pickers": "node scripts/test-picker-performance.mjs",
+    "test:avatars": "node scripts/test-avatar-editor.mjs",
     "test:chat": "tsc -p tsconfig.electron.json && node scripts/test-chat-interactions.mjs",
     "test:spaces": "node scripts/test-space-navigation.mjs",
     "test:media": "tsc -p tsconfig.electron.json && node scripts/test-media-playback.mjs",

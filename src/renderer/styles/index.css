@@ -330,7 +330,7 @@ button:focus-visible, input:focus-visible, textarea:focus-visible {
 .message-actions__divider { height: 23px; width: 1px; margin: 0 3px; background: var(--border-strong); }
 .message-actions button:hover { color: var(--text); background: var(--surface-3); }
 .message-row:focus-within .message-actions { display: flex; }
-.message-context-menu { position: fixed; z-index: 1200; width: min(248px, calc(100vw - 16px)); max-height: calc(100vh - 16px); overflow: auto; padding: 7px; border: 1px solid var(--border-strong); border-radius: 10px; color: var(--text); background: var(--surface-1); box-shadow: 0 12px 40px #0008; }
+.message-context-menu { font-size: 14px; position: fixed; z-index: 1200; width: min(248px, calc(100vw - 16px)); max-height: calc(100vh - 16px); overflow: auto; padding: 7px; border: 1px solid var(--border-strong); border-radius: 10px; color: var(--text); background: var(--surface-1); box-shadow: 0 12px 40px #0008; }
 .message-context-menu > button { display: flex; align-items: center; justify-content: space-between; width: 100%; padding: 9px 10px; border: 0; border-radius: 5px; background: transparent; color: inherit; text-align: left; cursor: pointer; }
 .message-context-menu > button svg { width: 17px; height: 17px; }
 .message-context-menu button:hover, .message-context-menu button:focus-visible { background: var(--accent-soft); outline: 2px solid var(--border-strong); }
@@ -521,7 +521,7 @@ body {
 .voice-members { display: grid; gap: 7px; margin: 6px 0 12px; padding: 0 5px 0 34px; list-style: none; }
 .voice-members li { display: flex; min-width: 0; align-items: center; gap: 8px; color: var(--text-soft); font-size: 12px; }
 .voice-members .avatar { width: 24px; height: 24px; }
-.voice-members li > span { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.voice-members li > span:not(.avatar) { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .channel-notice, .channel-empty { margin: 6px; color: var(--text-muted); font-size: 11px; line-height: 1.5; }
 .channel-notice button { border: 0; background: transparent; color: var(--accent); cursor: pointer; text-decoration: underline; }
 .create-channel-dialog { position: fixed; inset: 0; margin: auto; width: min(440px, calc(100vw - 32px)); max-height: calc(100dvh - 32px); overflow: auto; padding: 24px; border: 1px solid var(--border-strong); border-radius: 14px; color: var(--text); background: var(--bg-base); }
@@ -1393,3 +1393,32 @@ button:disabled { cursor: default; }
 .membership-toast { position: fixed; z-index: 1100; bottom: 24px; right: 24px; display: flex; align-items: center; gap: 10px; max-width: min(420px, calc(100vw - 32px)); padding: 12px 14px; border: 1px solid var(--border-strong); border-radius: 12px; color: var(--text); background: var(--glass-heavy); box-shadow: var(--shadow-soft); backdrop-filter: blur(18px); font-size: 13px; }
 .membership-toast > svg { flex-shrink: 0; color: var(--accent); }
 .membership-toast > span { min-width: 0; overflow-wrap: anywhere; }
+
+/* Avatar dimensions stay independent of list text clipping and transparent pixels. */
+.avatar { aspect-ratio: 1; }
+.avatar img { display: block; min-width: 0; object-position: center; }
+.avatar-editor { position: fixed; inset: 0; margin: auto; max-height: calc(100dvh - 32px); overflow: auto; width: min(390px, calc(100vw - 32px)); padding: 24px; border: 1px solid var(--border-strong); border-radius: 14px; color: var(--text); background: var(--bg-base); box-shadow: var(--shadow-lg); }
+.avatar-editor::backdrop { background: #0009; }
+.avatar-editor h2 { margin: 0 0 8px; font-size: 20px; font-weight: 700; }
+.avatar-editor p { color: var(--text-soft); font-size: 12px; }
+.avatar-editor__preview { display: block; width: min(280px, 100%); height: auto; margin: 18px auto; border-radius: 50%; touch-action: none; cursor: grab; background: repeating-conic-gradient(#ffffff20 0% 25%, #00000020 0% 50%) 50% / 16px 16px; box-shadow: 0 0 0 2px var(--border-strong); }
+.avatar-editor__controls { display: flex; align-items: center; gap: 12px; margin: 22px 0; color: var(--text-muted); }
+.avatar-editor__controls > svg { flex-shrink: 0; }
+.avatar-editor__controls input[type=range] { appearance: none; flex: 1; min-width: 0; height: 4px; margin: 0; border: 0; border-radius: 999px; background: var(--border-strong); cursor: pointer; }
+.avatar-editor__controls input[type=range]::-webkit-slider-thumb { appearance: none; width: 16px; height: 16px; border-radius: 50%; background: var(--text); box-shadow: 0 1px 3px #0004; }
+.avatar-editor__controls input[type=range]::-moz-range-thumb { width: 16px; height: 16px; border: 0; border-radius: 50%; background: var(--text); box-shadow: 0 1px 3px #0004; }
+.avatar-editor__controls input:disabled { opacity: .45; cursor: default; }
+.avatar-editor__rotate { display: grid; place-items: center; flex-shrink: 0; width: 32px; height: 32px; margin-left: 12px; padding: 0; border: 0; border-radius: 6px; background: transparent; color: inherit; cursor: pointer; }
+.avatar-editor__rotate:hover { color: var(--text); background: var(--surface-3); }
+.avatar-editor__rotate:disabled { opacity: .45; cursor: default; }
+.avatar-editor .settings-actions { margin-top: 16px; }
+.profile-actions-menu { width: min(208px, calc(100vw - 16px)); padding: 4px; }
+.profile-actions-menu > button { padding: 7px 8px; min-height: 30px; gap: 12px; }
+.profile-actions-menu > button svg { width: 15px; height: 15px; }
+.profile-actions-menu p { margin: 4px; font-size: 11px; }
+.profile-actions-menu__servers { max-height: 150px; overflow: auto; padding: 3px 0 3px 10px; border-left: 1px solid var(--border-strong); }
+.profile-actions-menu__servers button { display: block; width: 100%; padding: 7px; color: var(--text); background: transparent; border: 0; border-radius: 4px; text-align: left; cursor: pointer; }
+.profile-actions-menu__volume { display: grid; gap: 7px; padding: 8px; border-bottom: 1px solid var(--border); }
+.profile-actions-menu__volume input { width: 100%; accent-color: var(--accent); }
+
+.avatar-editor .button { margin-top: 0; padding: 10px 12px; min-height: 36px; font-size: 12px; }

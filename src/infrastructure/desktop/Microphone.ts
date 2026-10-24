@@ -1,12 +1,12 @@
 import { preferences, type Preferences } from "../../domain/settings/Preferences";
 
-export type MicrophoneOptions = Pick<Preferences, "echoCancellation" | "noiseSuppression" | "autoGainControl" | "advancedNoiseSuppression" | "voiceFilter" | "inputGain">;
+export type MicrophoneOptions = Pick<Preferences, "echoCancellation" | "noiseSuppression" | "autoGainControl" | "advancedNoiseSuppression" | "voiceFilter" | "inputGain" | "inputGate" | "inputThresholdDb" | "inputCloseDb" | "inputHoldMs">;
 declare global {
-  interface Window { grungusAudio?: { configure: (options: MicrophoneOptions) => Promise<void> } }
+  interface Window { grungusAudio?: { configure: (options: MicrophoneOptions) => Promise<void>; getLevel: (track: MediaStreamTrack) => { db: number; open: boolean } | undefined } }
 }
 export function microphoneOptions(prefs = preferences.getSnapshot()): MicrophoneOptions {
-  const { echoCancellation, noiseSuppression, autoGainControl, advancedNoiseSuppression, voiceFilter, inputGain } = prefs;
-  return { echoCancellation, noiseSuppression, autoGainControl, advancedNoiseSuppression, voiceFilter, inputGain };
+  const { echoCancellation, noiseSuppression, autoGainControl, advancedNoiseSuppression, voiceFilter, inputGain, inputGate, inputThresholdDb, inputCloseDb, inputHoldMs } = prefs;
+  return { echoCancellation, noiseSuppression, autoGainControl, advancedNoiseSuppression, voiceFilter, inputGain, inputGate, inputThresholdDb, inputCloseDb, inputHoldMs };
 }
 export async function configureMicrophone(options: MicrophoneOptions) {
   if (!window.grungusAudio) throw new Error("Microphone processing is unavailable. Please restart Grungus.");

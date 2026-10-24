@@ -7,6 +7,7 @@ export function MicrophoneTest({ prefs, disabled }: { prefs: Preferences; disabl
   const [starting, setStarting] = useState(false);
   const [mirror, setMirror] = useState(true);
   const [level, setLevel] = useState(0);
+  const [gateLevel, setGateLevel] = useState<{ db: number; open: boolean } | null>(null);
   const [recording, setRecording] = useState(false);
   const [clip, setClip] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
@@ -28,7 +29,7 @@ export function MicrophoneTest({ prefs, disabled }: { prefs: Preferences; disabl
     }
     if (monitor.current) { monitor.current.pause(); monitor.current.srcObject = null; }
   };
-  const stop = () => { release(); setActive(false); setStarting(false); setRecording(false); setLevel(0); };
+  const stop = () => { release(); setActive(false); setStarting(false); setRecording(false); setLevel(0); setGateLevel(null); };
   useEffect(() => { stop(); clearClip(); return () => { release(); if (clipUrl.current) URL.revokeObjectURL(clipUrl.current); }; }, [prefs.audioInput]);
   useEffect(() => {
     let cancelled = false;
@@ -61,6 +62,7 @@ export function MicrophoneTest({ prefs, disabled }: { prefs: Preferences; disabl
         if (resources.current !== current) return;
         analyser.getFloatTimeDomainData(samples);
         const peak = samples.reduce((max, value) => Math.max(max, Math.abs(value)), 0);
+        setGateLevel(window.grungusAudio?.getLevel(stream!.getAudioTracks()[0]) ?? null);
         setLevel(Math.min(100, Math.round(peak * 100)));
         current.frame = requestAnimationFrame(tick);
       };
@@ -107,7 +109,7 @@ export function MicrophoneTest({ prefs, disabled }: { prefs: Preferences; disabl
       {active && typeof MediaRecorder !== "undefined" && <button className="button button--secondary" onClick={record}>{recording ? "Finish recording" : "Record 10-second sample"}</button>}
     </div>
     <audio ref={monitor} autoPlay />
-    {active && <div><label>Microphone level <meter aria-label="Microphone level" min={0} max={100} high={90} value={level} /> {level}%</label><p role="status">{recording ? "Recording locally… Live mirror is paused." : level >= 95 ? "Input is too loud. Reduce microphone gain." : "Microphone test active."}</p></div>}
+    {active && <div><label>Microphone level <meter aria-label="Microphone level" min={0} max={100} high={90} value={level} /> {level}%</label>{gateLevel && <p>Input before gate: {gateLevel.db.toFixed(1)} dBFS <meter aria-label="Input level before gate" min={-100} max={0} value={gateLevel.db} /> {prefs.inputGate ? gateLevel.open ? "Passing microphone audio" : "Below threshold - microphone audio blocked" : "Custom sensitivity off"}</p>}<p role="status">{recording ? "Recording locally… Live mirror is paused." : level >= 95 ? "Input is too loud. Reduce microphone gain." : "Microphone test active."}</p></div>}
     {clip && <div><p>Your processed microphone recording (stored locally until you close settings):</p><audio ref={playback} src={clip} controls onPlay={() => setMirror(false)} /></div>}
     {error && <p className="settings-inline-error" role="alert">{error}</p>}
   </div>;

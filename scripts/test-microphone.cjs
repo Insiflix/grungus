@@ -29,8 +29,21 @@ app.whenReady().then(async () => {
       assert(stream.getAudioTracks()[0] !== native, 'Raw microphone published');
       const analyser = sourceContext.createAnalyser(); analyser.fftSize=2048;
       sourceContext.createMediaStreamSource(stream).connect(analyser);
-      const rms = async () => { await pause(300); const data=new Float32Array(analyser.fftSize); analyser.getFloatTimeDomainData(data); return Math.sqrt(data.reduce((sum,x)=>sum+x*x,0)/data.length); };
+      const rms = async (settleMs = 300) => { await pause(settleMs); const data=new Float32Array(analyser.fftSize); analyser.getFloatTimeDomainData(data); return Math.sqrt(data.reduce((sum,x)=>sum+x*x,0)/data.length); };
       const normal = await rms(); assert(normal > .01, 'Output is silent: '+normal);
+      await window.grungusAudio.configure({ inputGate:true, inputThresholdDb:-30, inputCloseDb:-40, inputHoldMs:200 });
+      assert(await rms() > .01, 'Gate does not open above threshold');
+      volume.gain.value = .02;
+      assert(await rms() > .001, 'Gate did not hold open between thresholds');
+      volume.gain.value = .001;
+      const gatedSilence = await rms(800); assert(gatedSilence < .000001, 'Gate did not suppress audio below the closing threshold: '+JSON.stringify({rms:gatedSilence,meter:window.grungusAudio.getLevel(stream.getAudioTracks()[0])}));
+      const beforeGate = window.grungusAudio.getLevel(stream.getAudioTracks()[0]);
+      assert(beforeGate && beforeGate.db > -90 && !beforeGate.open, 'Pre-gate dB meter is unavailable or measures gated silence');
+      volume.gain.value = .02;
+      assert(await rms() < .000001, 'Gate reopened below its opening threshold');
+      volume.gain.value = .1;
+      assert(await rms() > .01, 'Gate did not reopen above threshold');
+      await window.grungusAudio.configure({ inputGate:false });
       await window.grungusAudio.configure({ inputGain:0 }); const muted = await rms(); assert(muted < .0001, 'Gain does not control outgoing audio: '+muted);
       await window.grungusAudio.configure({ inputGain:100, advancedNoiseSuppression:true }); await pause(500);
       assert(warnings.length===0, 'RNNoise fallback: '+warnings.join(', '));
@@ -73,7 +86,7 @@ app.whenReady().then(async () => {
     require('node:fs').mkdirSync('artifacts', {recursive:true});
     require('node:fs').writeFileSync('artifacts/microphone-settings.png', (await win.webContents.capturePage()).toPNG());
     console.log('PASS: settings microphone mirror, recording playback and Stop release the native input.');
-    console.log('PASS: real Web Audio output, live gain, local RNNoise worklet/WASM, bypass, clone cleanup and CSP.', result);
+    console.log('PASS: real Web Audio output, live gain, local RNNoise worklet/WASM, dB gate/hysteresis, pre-gate meter, bypass, clone cleanup and CSP.', result);
     clearTimeout(timer); win.destroy(); app.exit(0);
   } catch (error) { console.error(error?.stack || error?.message || JSON.stringify(error)); clearTimeout(timer); app.exit(1); }
 });

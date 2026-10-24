@@ -1,3 +1,4 @@
+import { participantAudio } from "../../../domain/calls/ParticipantAudio";
 // @vitest-environment jsdom
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { act, cleanup, fireEvent, render, screen, waitFor } from "@testing-library/react";
@@ -143,4 +144,19 @@ describe("voice channel controls", () => {
     expect(f.hangup).toHaveBeenCalledTimes(1);
     f.unmount(); f.dock.remove();
   });
+});
+
+it("sends participant gain to the current widget and only accepts its acknowledgement", async () => {
+  const f = fixture();
+  const post = vi.spyOn(f.frame.contentWindow!, "postMessage");
+  let finished = false;
+  const request = participantAudio.set(f.props.roomId, "@alice:test", { volume: 150, muted: false }).then(() => { finished = true; });
+  const data = post.mock.calls.find(call => call[0].type === "grungus:participant-audio")![0];
+  expect(data).toMatchObject({ widgetId: "test", userId: "@alice:test", volume: 150 });
+  act(() => window.dispatchEvent(new MessageEvent("message", { source: f.frame.contentWindow, origin: "https://evil.test", data: { type: "grungus:media-status", widgetId: "test", participantAudio: { requestId: data.requestId, success: true } } })));
+  await Promise.resolve(); expect(finished).toBe(false);
+  f.status({ participantAudio: { requestId: data.requestId, success: true } });
+  await request; expect(finished).toBe(true);
+  f.unmount(); f.dock.remove();
+  expect(participantAudio.connected(f.props.roomId)).toBe(false);
 });

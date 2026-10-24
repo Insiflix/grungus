@@ -18,6 +18,13 @@ describe("persisted preferences", () => {
     preferences.setAccount("other-account"); preferences.setAccount("theme-account");
     expect(preferences.getSnapshot().theme).toBe(id);
   });
+  it("validates and persists custom input sensitivity", () => {
+    expect(parsePreferences({ inputGate: true, inputThresholdDb: -999, inputCloseDb: 100, inputHoldMs: 5000 })).toMatchObject({ inputGate: true, inputThresholdDb: -90, inputCloseDb: -90, inputHoldMs: 1000 });
+    expect(parsePreferences({ inputThresholdDb: NaN, inputHoldMs: "100" })).toMatchObject({ inputThresholdDb: -45, inputHoldMs: 200 });
+    preferences.update({ inputGate: true, inputThresholdDb: -35, inputCloseDb: -42, inputHoldMs: 300 });
+    preferences.reload();
+    expect(preferences.getSnapshot()).toMatchObject({ inputGate: true, inputThresholdDb: -35, inputCloseDb: -42, inputHoldMs: 300 });
+  });
   it("validates stored values and clamps font sizes", () => {
     expect(parsePreferences({ theme: "invalid", fontSize: 999, showAvatars: "false", sendTyping: false })).toMatchObject({ theme: "forest", fontSize: 22, showAvatars: true, sendTyping: false });
     expect(parsePreferences(null)).toEqual(defaultPreferences);

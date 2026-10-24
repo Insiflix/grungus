@@ -45,7 +45,7 @@ export function SpaceChannels({ rooms, selectedRoomId, calls, onOpen, callActive
             </div>}
             </div>
             {voice && call && <ul className="voice-members" aria-label={`People in ${room.name}`}>
-              {call.members?.map(member => <li key={member.id}><Avatar name={member.displayName} url={member.avatarUrl} size="small" /><span>{member.displayName}</span></li>)}
+              {call.members?.map(member => <li key={member.id} data-profile-user-id={member.id} data-voice-room-id={room.id}><Avatar name={member.displayName} url={member.avatarUrl} size="small" /><span>{member.displayName}</span></li>)}
               {!call.members?.length && <li>{call.participants} in voice</li>}
             </ul>}
           </div>;

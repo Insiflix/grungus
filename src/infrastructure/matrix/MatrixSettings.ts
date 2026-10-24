@@ -216,13 +216,33 @@ export class MatrixSettings {
     return response.room_id;
   }
 
+  async canInviteToRoom(id: string, targetUserId: string): Promise<boolean> {
+    const client = this.client();
+    const ownId = client.getUserId();
+    if (!ownId || ownId === targetUserId || client.getRoom(id)?.getMyMembership() !== "join") return false;
+    const events = await client.roomState(id);
+    this.assertCurrent(client);
+    // /state responses need not include room_id. RoomState ignores events
+    // without it, so attach the room whose state was explicitly requested.
+    const state = new RoomState(id);
+    state.setStateEvents(events.map(event => new MatrixEvent({ ...event, room_id: id })));
+    const ownMember = state.getMember(ownId);
+    if (ownMember?.membership !== "join") return false;
+    const targetMembership = state.getMember(targetUserId)?.membership;
+    if (["join", "invite", "ban"].includes(targetMembership ?? "")) return false;
+    const power = state.getStateEvents(EventType.RoomPowerLevels, "")?.getContent() ?? {};
+    const required = power.invite ?? 0;
+    if (typeof required !== "number" || !Number.isSafeInteger(required)) return false;
+    return ownMember.powerLevel >= required;
+  }
+
   async room(id: string) {
     const client = this.client();
     const room = client.getRoom(id);
     if (!room || room.getMyMembership() !== "join") throw new Error("Join this room before managing it.");
     const events = await client.roomState(id);
     const authoritativeState = new RoomState(id);
-    authoritativeState.setStateEvents(events.map((event) => new MatrixEvent(event)));
+    authoritativeState.setStateEvents(events.map((event) => new MatrixEvent({ ...event, room_id: id })));
     const state = (type: string): IContent => events.find((event) => event.type === type && event.state_key === "")?.content ?? {};
     const ownId = client.getUserId()!;
     const power: IContent = state(EventType.RoomPowerLevels);
@@ -345,6 +365,57 @@ export class MatrixSettings {
     if (!/^![^:\s]+:\S+$/.test(child) || id === child) throw new Error("Enter another room’s full room ID.");
     const via = child.slice(child.indexOf(":") + 1);
     await this.roomState(id, EventType.SpaceChild, remove ? {} : { via: [via], suggested: true }, child);
+  }
+  /** Preflight the entire hierarchy before making any destructive change. */
+  async prepareServerDeletion(id: string) {
+    const client = this.client();
+    const visited = new Set<string>();
+    const rooms: Awaited<ReturnType<MatrixSettings["room"]>>[] = [];
+    const visit = async (roomId: string) => {
+      if (visited.has(roomId)) return;
+      visited.add(roomId);
+      const room = await this.room(roomId);
+      this.assertCurrent(client);
+      if (!room.canPermissions || !room.canAccess || !room.canGuestAccess || !room.canKick || (room.space && !room.canChildren) || room.members.some(member => member.id !== room.ownId && member.level >= room.level && member.membership !== "ban")) {
+        throw new Error(`You need permission to close ${room.name} and remove every member before deleting this server.`);
+      }
+      for (const child of room.children) await visit(child.id);
+      rooms.push(room);
+    };
+    if (!client.getRoom(id)?.isSpaceRoom()) throw new Error("Choose a server to delete.");
+    await visit(id);
+    return rooms;
+  }
+  async deleteServer(id: string) {
+    const client = this.client();
+    const rooms = await this.prepareServerDeletion(id);
+    // Close all rooms before removing members so new invitations and joins stop.
+    for (const room of rooms) {
+      this.assertCurrent(client);
+      await client.sendStateEvent(room.id, EventType.RoomJoinRules, { join_rule: JoinRule.Invite }, "");
+      this.assertCurrent(client);
+      await this.roomState(room.id, EventType.RoomGuestAccess, { guest_access: "forbidden" });
+      this.assertCurrent(client);
+      await client.sendStateEvent(room.id, EventType.RoomPowerLevels, {
+        ...room.power, users: { [room.ownId]: room.level }, users_default: -1,
+        events_default: room.level, state_default: room.level, invite: room.level,
+        events: Object.fromEntries(Object.keys(room.power.events ?? {}).map(key => [key, room.level])),
+      }, "");
+    }
+    for (const room of rooms) {
+      for (const member of room.members) {
+        if (member.id === room.ownId || member.membership === "ban") continue;
+        this.assertCurrent(client);
+        try { await client.kick(room.id, member.id, "Server deleted by its administrator"); }
+        catch (cause) { throw new Error(`Deletion stopped while removing ${member.name} from ${room.name}. Some channels may already be closed. ${cause instanceof Error ? cause.message : "Retry after checking permissions."}`); }
+      }
+      for (const child of room.children) { this.assertCurrent(client); await client.sendStateEvent(room.id, EventType.SpaceChild, {}, child.id); }
+    }
+    // Leave last so a failure above can still be reviewed and retried.
+    for (const room of rooms) {
+      this.assertCurrent(client);
+      await this.leaveRoom(room.id);
+    }
   }
   async leaveRoom(id: string) {
     const client = this.client();

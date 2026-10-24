@@ -6,6 +6,36 @@
   try { void window.grungusAudio?.configure(JSON.parse(params.get("grungusAudio") || "{}")).catch(() => {}); } catch { /* Use speech defaults for malformed settings. */ }
   let quality = params.get("grungusCameraQuality") || "720p";
   if (!Object.hasOwn(presets, quality)) quality = "720p";
+  // The build adds a hook where Element maps Matrix users to LiveKit participants.
+  // Use that authoritative mapping; display names and DOM positions are ambiguous.
+  const participants = new Map();
+  const participantSettings = new Map();
+  const wrappedParticipants = new WeakMap();
+  const sources = ["microphone", "screen_share_audio"];
+  const applyParticipant = entry => {
+    const settings = participantSettings.get(entry.userId) ?? { volume: 100, muted: false };
+    const gain = settings.muted ? 0 : settings.volume / 100;
+    for (const source of sources) entry.original((entry.base.get(source) ?? 1) * gain, source);
+  };
+  window.grungusRegisterParticipant = (userId, identity, participant) => {
+    if (typeof userId !== "string" || typeof identity !== "string") return;
+    const key = JSON.stringify([userId, identity]);
+    if (!participant) { participants.delete(key); return; }
+    if (participants.get(key)?.participant === participant) return;
+    let entry = wrappedParticipants.get(participant);
+    if (!entry) {
+      entry = { userId, participant, original: participant.setVolume.bind(participant), base: new Map() };
+      wrappedParticipants.set(participant, entry);
+      participant.setVolume = (value, source = "microphone") => {
+        entry.base.set(source, value);
+        const settings = participantSettings.get(entry.userId) ?? { volume: 100, muted: false };
+        entry.original(value * (settings.muted ? 0 : settings.volume / 100), source);
+      };
+    }
+    entry.userId = userId;
+    participants.set(key, entry);
+    if (participantSettings.has(userId)) applyParticipant(entry);
+  };
   const cameraTracks = new Set();
   const media = navigator.mediaDevices;
   const originalGetUserMedia = media.getUserMedia.bind(media);
@@ -76,6 +106,20 @@
   window.addEventListener("message", async (event) => {
     const data = event.data;
     const fromHost = event.source === parent && event.origin === parentOrigin && data?.widgetId === params.get("widgetId");
+    if (fromHost && data.type === "grungus:participant-audio") {
+      const reply = { requestId: data.requestId, userId: data.userId };
+      try {
+        if (typeof data.userId !== "string" || !Number.isFinite(data.volume) || data.volume < 0 || data.volume > 200 || typeof data.muted !== "boolean") throw new Error("Invalid participant audio settings.");
+        const entries = [...participants.values()].filter(entry => entry.userId === data.userId);
+        // Keep settings for members whose media is still connecting or reconnecting.
+        participantSettings.set(data.userId, { volume: data.volume, muted: data.muted });
+        for (const entry of entries) applyParticipant(entry);
+        sendStatus({ participantAudio: { ...reply, success: true } });
+      } catch {
+        sendStatus({ participantAudio: { ...reply, error: "Unable to adjust this user's audio. Rejoin the channel and retry." } });
+      }
+      return;
+    }
     if (fromHost && data.type === "grungus:audio-settings") {
       try {
         if (!window.grungusAudio) throw new Error("Microphone processing is unavailable. Rejoin the call.");
