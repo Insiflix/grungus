@@ -10,6 +10,7 @@ import { Headphones, HeadphoneOff, Maximize2, Minimize2, PhoneOff, Mic, MicOff, 
 import { createPortal } from "react-dom";
 import { mountCall } from "../../app/providers/MatrixProvider";
 import { VoiceChatToggle } from "./VoiceChatToggle";
+import { StreamLiveBadge } from "./StreamLiveBadge";
 export function CallPanel({ roomId, name, video, mode = "group", autoJoin = mode === "voice" && !video, chat, search, chatVisible = true, chatUnreadCount = 0, onToggleChat, dock, visible = true, onOpen, onViewChange, onClose, mount = mountCall }: { roomId: string; name: string; video: boolean; mode?: "voice" | "group"; autoJoin?: boolean; chat?: ReactNode; search?: ReactNode; chatVisible?: boolean; chatUnreadCount?: number; onToggleChat?: () => void; dock?: HTMLElement | null; visible?: boolean; onOpen?: () => void; onViewChange?: (expanded: boolean) => void; onClose: () => void; mount?: ICallProvider["mountCall"] }) {
   const callHandle = useRef<CallHandle | null>(null);
   const [quality, setQuality] = useState(loadCameraQuality);
@@ -22,6 +23,13 @@ export function CallPanel({ roomId, name, video, mode = "group", autoJoin = mode
   const [ping, setPing] = useState<number | null>(null);
   const [activity, setActivity] = useState<{ userId: string; name: string; speaking: boolean; screen: boolean; camera: boolean }[]>([]);
   const [watched, setWatched] = useState<{ userId: string; name: string; source: "screen_share" | "camera" } | null>(null);
+  useEffect(() => voiceActivity.onWatch(request => {
+    if (request.roomId !== roomId) return;
+    const member = activity.find(entry => entry.userId === request.userId && (request.source === "screen_share" ? entry.screen : entry.camera));
+    if (!member) return;
+    setWatched({ userId: request.userId, name: member.name, source: request.source });
+    setMinimized(false); onOpen?.();
+  }), [roomId, activity, onOpen]);
   useEffect(() => {
     if (!joined || !frame.current?.src) return;
     const element = frame.current;
@@ -83,7 +91,7 @@ export function CallPanel({ roomId, name, video, mode = "group", autoJoin = mode
   }, [watched, pip, loading]);
   useEffect(() => () => { voiceActivity.update(roomId, []); }, [roomId]);
   const [error, setError] = useState<string | null>(null);
-  const [devices, setDevices] = useState({ audio_enabled: true, video_enabled: video });
+  const [devices, setDevices] = useState({ audio_enabled: false, video_enabled: false });
   const [deafened, setDeafened] = useState(false);
   const [pending, setPending] = useState(false);
   const restoreMicrophone = useRef(true);
@@ -102,7 +110,7 @@ export function CallPanel({ roomId, name, video, mode = "group", autoJoin = mode
       const url = new URL(frame.current.src);
       const style = getComputedStyle(document.documentElement);
       const colors = Object.fromEntries(Object.entries({ background: "--bg-base", surface: "--surface-3", text: "--text", muted: "--text-soft", accent: "--accent", border: "--border-strong" }).map(([key, variable]) => [key, style.getPropertyValue(variable).trim()]));
-      frame.current.contentWindow?.postMessage({ type: "grungus:host-controls", widgetId: new URLSearchParams(url.hash.slice(2)).get("widgetId"), enabled: docked, linuxAudio: window.desktop?.platform === "linux", colors }, url.origin);
+      frame.current.contentWindow?.postMessage({ type: "grungus:host-controls", widgetId: new URLSearchParams(url.hash.slice(2)).get("widgetId"), enabled: docked, linuxAudio: window.desktop?.platform === "linux", captureSettings: Boolean(window.desktop?.capture?.getSettings), colors }, url.origin);
     };
     update();
     const observer = new MutationObserver(update);
@@ -111,10 +119,31 @@ export function CallPanel({ roomId, name, video, mode = "group", autoJoin = mode
   }, [docked, loading]);
   useEffect(() => {
     const element = frame.current;
-    const update = (event: Event) => setDevices((event as CustomEvent).detail);
+    const update = (event: Event) => {
+      const state = (event as CustomEvent).detail;
+      setDevices(current => ({ audio_enabled: typeof state?.audio_enabled === "boolean" ? state.audio_enabled : current.audio_enabled, video_enabled: typeof state?.video_enabled === "boolean" ? state.video_enabled : current.video_enabled }));
+    };
     element?.addEventListener("grungus:devices", update);
     return () => element?.removeEventListener("grungus:devices", update);
   }, []);
+  useEffect(() => {
+    const handle = callHandle.current;
+    if (loading || !handle?.setDevices) return;
+    let active = true;
+    setPending(true);
+    // Read the widget's initial state; a lobby-free voice join explicitly asks
+    // for the microphone once, rather than relying on Element's startup default.
+    void handle.setDevices(autoJoin && joined ? { audio_enabled: true } : {}).then(state => {
+      if (!active) return;
+      setDevices(state);
+      if (autoJoin && joined && !state.audio_enabled) setError("Your microphone is muted. Check microphone access, then use Unmute to retry.");
+    }).catch(() => {
+      if (!active) return;
+      if (autoJoin && joined) setDevices(current => ({ ...current, audio_enabled: false }));
+      setError("Could not confirm your microphone state. Use the microphone control to retry.");
+    }).finally(() => { if (active) setPending(false); });
+    return () => { active = false; };
+  }, [loading, joined, autoJoin, roomId]);
   useEffect(() => {
     if (deafened && devices.audio_enabled) void callHandle.current?.setDevices?.({ audio_enabled: false }).catch(() => setError("Could not mute your microphone. Please leave voice and rejoin."));
   }, [deafened, devices.audio_enabled]);
@@ -134,6 +163,10 @@ export function CallPanel({ roomId, name, video, mode = "group", autoJoin = mode
       if (!frame.current?.src) return;
       const widgetId = frame.current ? new URLSearchParams(new URL(frame.current.src).hash.slice(2)).get("widgetId") : null;
       if (!frame.current || event.source !== frame.current.contentWindow || event.origin !== new URL(frame.current.src).origin || data?.type !== "grungus:media-status" || data.widgetId !== widgetId) return;
+      if (data.captureSettingsRequest === true) {
+        const target = frame.current.contentWindow, origin = event.origin;
+        void (window.desktop?.capture?.getSettings?.() ?? Promise.resolve({ frameRate: 30 })).then(settings => target?.postMessage({ type: "grungus:capture-settings", widgetId, frameRate: settings.frameRate }, origin)).catch(() => target?.postMessage({ type: "grungus:capture-settings", widgetId, frameRate: 30 }, origin));
+      }
       if (data.linuxAudioRequest === true && window.desktop?.platform === "linux") {
         const target = frame.current.contentWindow;
         const origin = event.origin;
@@ -213,8 +246,8 @@ export function CallPanel({ roomId, name, video, mode = "group", autoJoin = mode
     qualityTimeout.current = setTimeout(() => { setQualityPending(false); setError("Unable to apply camera setting."); }, 5000);
   };
   return <>{docked && createPortal(<section className="voice-dock" aria-label="Voice controls">
-    {activity.some(member => member.screen || member.camera) && <div className="voice-dock__streams"><small>Streaming now</small>{activity.flatMap(member => (["screen_share", "camera"] as const).filter(source => source === "screen_share" ? member.screen : member.camera).map(source => <button key={`${member.userId}:${source}`} onClick={() => { setWatched({ userId: member.userId, name: member.name, source }); open(); }}><Video size={16} /><span>{member.name}</span><b>{source === "screen_share" ? "Watch stream" : "Watch camera"}</b></button>))}</div>}
-    <div className="voice-dock__connection"><Signal size={21} aria-label={connectionTooltip} data-tooltip={connectionTooltip} /><button className="voice-dock__room" onClick={open} data-tooltip={connectionTooltip}><strong>{error ? "Connection problem" : joined ? "Voice Connected" : "Connecting…"}</strong><small>{name}</small></button><button className="icon-button voice-dock__disconnect" data-tooltip="Disconnect" aria-label="Disconnect from voice" disabled={leaving} onClick={leave}><PhoneOff size={18} /></button></div>
+
+    <div className="voice-dock__connection"><Signal size={21} aria-label={connectionTooltip} data-tooltip={connectionTooltip} /><button className="voice-dock__room" onClick={open} data-tooltip={connectionTooltip}><strong>{error ? "Connection problem" : joined ? "Voice Connected" : "Connecting…"}</strong><small>{name}</small></button>{activity.some(member => member.screen || member.camera) && <StreamLiveBadge roomId={roomId} camera={!activity.some(member => member.screen)} streams={activity.flatMap(member => (["screen_share", "camera"] as const).filter(source => source === "screen_share" ? member.screen : member.camera).map(source => ({ userId: member.userId, name: member.name, source })))} />}<button className="icon-button voice-dock__disconnect" data-tooltip="Disconnect" aria-label="Disconnect from voice" disabled={leaving} onClick={leave}><PhoneOff size={18} /></button></div>
     <div className="voice-dock__actions">
       <button aria-label={devices.video_enabled ? "Turn camera off" : "Turn camera on"} data-tooltip={devices.video_enabled ? "Turn camera off" : "Turn camera on"} aria-pressed={devices.video_enabled} disabled={pending || !joined} onClick={() => void setDevice({ video_enabled: !devices.video_enabled })}>{devices.video_enabled ? <Video size={19} /> : <VideoOff size={19} />}</button>
       <button aria-label={sharing.active ? "Stop sharing screen" : "Share screen"} data-tooltip={sharing.active ? "Stop sharing screen" : "Share screen"} aria-pressed={sharing.active} disabled={sharePending || leaving || !joined} onClick={toggleScreenshare}><MonitorUp size={19} /><span>{sharing.active ? "Stop sharing" : "Share screen"}</span></button>

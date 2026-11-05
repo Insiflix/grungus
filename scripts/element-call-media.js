@@ -18,6 +18,36 @@
   const participants = new Map();
   const participantSettings = new Map();
   const wrappedParticipants = new WeakMap();
+  let speakingContext;
+  const releaseMeter = entry => {
+    entry.meter?.source.disconnect(); entry.meter?.analyser.disconnect(); entry.meter = null;
+  };
+  const releaseParticipant = entry => {
+    releaseMeter(entry);
+    for (const event of activityEvents) entry.participant.off?.(event, entry.activityChanged);
+    entry.activityChanged = null;
+  };
+  const activityEvents = ["isSpeakingChanged", "trackSubscribed", "trackUnsubscribed", "trackMuted", "trackUnmuted", "localTrackPublished", "localTrackUnpublished"];
+  const microphoneLevel = (entry, track) => {
+    if (entry.meter?.track !== track) {
+      releaseMeter(entry);
+      if (!track || !window.AudioContext?.prototype.createMediaStreamSource || !window.MediaStream) return 0;
+      try {
+        speakingContext ??= new window.AudioContext();
+        const source = speakingContext.createMediaStreamSource(new window.MediaStream([track]));
+        const analyser = speakingContext.createAnalyser(); analyser.fftSize = 2048;
+        source.connect(analyser);
+        entry.meter = { track, source, analyser, samples: new Float32Array(analyser.fftSize) };
+        if (speakingContext.state === "suspended") void speakingContext.resume().catch(() => {});
+      } catch { return 0; }
+    }
+    if (!entry.meter) return 0;
+    try { entry.meter.analyser.getFloatTimeDomainData(entry.meter.samples); }
+    catch { releaseMeter(entry); return 0; }
+    let energy = 0;
+    for (const sample of entry.meter.samples) energy += sample * sample;
+    return Math.sqrt(energy / entry.meter.samples.length);
+  };
   const sources = ["microphone", "screen_share_audio"];
   const applyParticipant = entry => {
     const settings = participantSettings.get(entry.userId) ?? { volume: 100, muted: false };
@@ -27,7 +57,12 @@
   window.grungusRegisterParticipant = (userId, identity, participant) => {
     if (typeof userId !== "string" || typeof identity !== "string") return;
     const key = JSON.stringify([userId, identity]);
-    if (!participant) { participants.delete(key); return; }
+    const previous = participants.get(key);
+    if (!participant) {
+      participants.delete(key);
+      if (previous && ![...participants.values()].includes(previous)) releaseParticipant(previous);
+      updateActivity(); return;
+    }
     if (participants.get(key)?.participant === participant) return;
     let entry = wrappedParticipants.get(participant);
     if (!entry) {
@@ -41,7 +76,13 @@
     }
     entry.userId = userId;
     participants.set(key, entry);
+    if (previous && previous !== entry && ![...participants.values()].includes(previous)) releaseParticipant(previous);
+    if (!entry.activityChanged) {
+      entry.activityChanged = () => updateActivity();
+      for (const event of activityEvents) participant.on?.(event, entry.activityChanged);
+    }
     if (participantSettings.has(userId)) applyParticipant(entry);
+    updateActivity();
   };
   const cameraTracks = new Set();
   const media = navigator.mediaDevices;
@@ -52,6 +93,13 @@
   };
   const sendStatus = (data) => parent.postMessage({ type: "grungus:media-status", widgetId: params.get("widgetId"), ...data }, parentOrigin);
   let linuxAudio = false;
+  let captureSettings = false;
+  let settingsReply = null;
+  const requestCaptureSettings = () => new Promise((resolve, reject) => {
+    const timer = setTimeout(() => { settingsReply = null; reject(new Error("Screen share settings did not respond.")); }, 5000);
+    settingsReply = data => { clearTimeout(timer); settingsReply = null; resolve(data.frameRate === 60 ? 60 : 30); };
+    sendStatus({ captureSettingsRequest: true });
+  });
   let audioReply = null;
   const requestLinuxAudio = () => new Promise((resolve, reject) => {
     const timer = setTimeout(() => { audioReply = null; reject(new Error("Computer audio did not respond.")); }, 15000);
@@ -62,9 +110,18 @@
   let lastActivity = "";
   const updateActivity = () => {
     const members = new Map();
-    for (const { userId, participant } of participants.values()) {
+    const now = Date.now();
+    for (const entry of participants.values()) {
+      const { userId, participant } = entry;
+      const microphone = participant.getTrackPublication?.("microphone") ?? [...(participant.audioTrackPublications?.values() ?? [])].find(publication => publication.source === "microphone");
+      const track = microphone?.track?.mediaStreamTrack;
+      const muted = microphone?.isMuted || track?.enabled === false || track?.readyState === "ended";
+      const level = microphoneLevel(entry, muted ? null : track);
+      if (muted) entry.speakingUntil = 0;
+      else if (participant.isSpeaking || level >= (now < (entry.speakingUntil ?? 0) ? .002 : .004)) entry.speakingUntil = now + 220;
+      const speaking = !muted && now < (entry.speakingUntil ?? 0);
       const previous = members.get(userId);
-      members.set(userId, { userId, name: participant.name || userId, speaking: Boolean(previous?.speaking || participant.isSpeaking), screen: Boolean(previous?.screen || participant.isScreenShareEnabled), camera: Boolean(previous?.camera || participant.isCameraEnabled) });
+      members.set(userId, { userId, name: participant.name || userId, speaking: Boolean(previous?.speaking || speaking), screen: Boolean(previous?.screen || participant.isScreenShareEnabled), camera: Boolean(previous?.camera || participant.isCameraEnabled) });
     }
     const activity = [...members.values()];
     const signature = JSON.stringify(activity);
@@ -83,7 +140,13 @@
       if (selected) for (let ancestor = video.parentElement; ancestor; ancestor = ancestor.parentElement) ancestor.classList.add("grungus-watch-ancestor");
     }
   };
-  window.setInterval?.(updateActivity, 150);
+  const activityTimer = window.setInterval?.(updateActivity, 80);
+  window.addEventListener("pagehide", () => {
+    window.clearInterval?.(activityTimer);
+    for (const entry of new Set(participants.values())) releaseParticipant(entry);
+    participants.clear();
+    void speakingContext?.close().catch(() => {});
+  });
   window.addEventListener("grungus:audio-warning", event => sendStatus({ audioError: event.detail }));
   // Track the actual media connections, including publisher/subscriber reconnects.
   const connections = new Set();
@@ -131,7 +194,11 @@
     const originalGetDisplayMedia = media.getDisplayMedia.bind(media);
     media.getDisplayMedia = async (constraints) => {
       // The native picker still requires explicit source/audio confirmation.
-      const stream = await originalGetDisplayMedia({ ...constraints, video: constraints?.video || true, audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false }, systemAudio: "include" });
+      const stream = await originalGetDisplayMedia({ ...constraints, video: { ...(typeof constraints?.video === "object" ? constraints.video : {}), frameRate: { ideal: 30, max: 30 } }, audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false, restrictOwnAudio: true }, systemAudio: "include" });
+      try {
+        const frameRate = captureSettings ? await requestCaptureSettings() : 30;
+        for (const track of stream.getVideoTracks()) await track.applyConstraints?.({ frameRate: { ideal: frameRate, max: frameRate } });
+      } catch (error) { stream.getTracks().forEach(track => track.stop()); sendStatus({ shareError: error.message, linuxAudioStop: linuxAudio }); throw error; }
       let systemStream;
       if (linuxAudio && !stream.getAudioTracks().length) {
         try {
@@ -168,6 +235,7 @@
   window.addEventListener("message", async (event) => {
     const data = event.data;
     const fromHost = event.source === parent && event.origin === parentOrigin && data?.widgetId === params.get("widgetId");
+    if (fromHost && data.type === "grungus:capture-settings") { settingsReply?.(data); return; }
     if (fromHost && data.type === "grungus:linux-audio") { audioReply?.(data); return; }
     if (fromHost && data.type === "grungus:watch-media") {
       watched = typeof data.userId === "string" && ["screen_share", "camera"].includes(data.source) ? { userId: data.userId, source: data.source } : null;
@@ -204,6 +272,7 @@
     }
     if (fromHost && data.type === "grungus:host-controls" && typeof data.enabled === "boolean") {
       linuxAudio = data.linuxAudio === true;
+      captureSettings = data.captureSettings === true;
       document.documentElement.toggleAttribute("data-grungus-host-controls", data.enabled);
       for (const key of ["background", "surface", "text", "muted", "accent", "border"]) {
         if (typeof data.colors?.[key] === "string") document.documentElement.style.setProperty(`--grungus-${key}`, data.colors[key]);

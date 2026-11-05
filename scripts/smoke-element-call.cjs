@@ -134,6 +134,33 @@ app.whenReady().then(async () => {
         const context = canvas.getContext('2d'); context.fillStyle=id === 'screen' ? '#205b45' : '#294563'; context.fillRect(0,0,320,180); context.fillStyle='white'; context.font='20px sans-serif'; context.fillText('Live '+id+' preview', 50, 95); video.srcObject=canvas.captureStream(1); video.muted=true;
       }
     })()`);
+    // Exercise decrypted microphone samples independently of LiveKit/SFU VAD.
+    await callFrame().executeJavaScript(`(async () => {
+      const context = new AudioContext(); await context.resume();
+      const oscillator = context.createOscillator(); oscillator.frequency.value = 220;
+      const inputs = ['@preview:invalid.test','@quiet:invalid.test'].map((userId,index) => {
+        const gain = context.createGain(); gain.gain.value = index === 0 ? .03 : 0;
+        const destination = context.createMediaStreamDestination(); oscillator.connect(gain); gain.connect(destination);
+        const track = destination.stream.getAudioTracks()[0];
+        const participant = { name:index === 0 ? 'Preview user' : 'Quiet user', setVolume() {}, isSpeaking:false, audioTrackPublications:new Map([['microphone',{source:'microphone',isMuted:false,track:{mediaStreamTrack:track}}]]) };
+        const identity = index === 0 ? 'preview-device' : 'quiet-device';
+        window.grungusRegisterParticipant(userId, identity, participant);
+        return {gain,track,participant,userId,identity};
+      });
+      oscillator.start(); window.__smokeSpeaking = {context,oscillator,inputs};
+    })()`, true);
+    await new Promise(resolve => setTimeout(resolve,450));
+    const speakers = () => window.webContents.executeJavaScript(`(() => [...document.querySelectorAll('.voice-members li.is-speaking')].map(row=>row.dataset.profileUserId))()`);
+    const firstSpeakers = await speakers();
+    if (JSON.stringify(firstSpeakers) !== JSON.stringify(['@preview:invalid.test'])) throw new Error('First microphone speaking outline missing: '+JSON.stringify(firstSpeakers));
+    await callFrame().executeJavaScript(`window.__smokeSpeaking.inputs[0].gain.gain.value=0; window.__smokeSpeaking.inputs[1].gain.gain.value=.03;`);
+    await new Promise(resolve => setTimeout(resolve,600));
+    const secondSpeakers = await speakers();
+    if (JSON.stringify(secondSpeakers) !== JSON.stringify(['@quiet:invalid.test'])) throw new Error('Second microphone speaking outline missing: '+JSON.stringify(secondSpeakers));
+    const ring = await window.webContents.executeJavaScript(`(() => {const avatar=document.querySelector('.voice-members li.is-speaking .avatar'),style=getComputedStyle(avatar),rect=avatar.getBoundingClientRect();return {width:rect.width,height:rect.height,offset:style.outlineOffset,ring:style.outlineWidth};})()`);
+    if (ring.width!==24 || ring.height!==24 || ring.offset!=='-2px' || ring.ring!=='2px') throw new Error('Speaking ring is too large: '+JSON.stringify(ring));
+    await callFrame().executeJavaScript(`(async () => {const {context,oscillator,inputs}=window.__smokeSpeaking; for(const input of inputs) { window.grungusRegisterParticipant(input.userId,input.identity,null); input.track.stop(); } oscillator.stop(); await context.close();})()`);
+    console.log('PASS: both microphone streams independently drive avatar outlines without SFU speaker flags; the ring stays inside the 24px avatar.');
     await callFrame().executeJavaScript(`(() => {
       const publications = new Map(['camera','screen'].map(id => {
         const video = document.querySelector('#smoke-'+id+' video');
@@ -144,7 +171,17 @@ app.whenReady().then(async () => {
     })()`);
     await new Promise(resolve => setTimeout(resolve,350));
     for (const source of ['stream','camera']) {
-      await window.webContents.executeJavaScript(`(() => { const button = [...document.querySelectorAll('.voice-dock__streams button')].find(item => item.textContent.includes('Watch ${source}')); if (!button) throw new Error('Watch action missing'); button.click(); })()`);
+      const trigger = await window.webContents.executeJavaScript(`(() => { if (document.querySelector('.stream-hover-card')) throw new Error('Stream notice should be hidden before hover'); const rect=document.querySelector('.voice-dock .voice-live-trigger').getBoundingClientRect(); return {x:Math.round(rect.left+rect.width/2),y:Math.round(rect.top+rect.height/2)}; })()`);
+      window.webContents.sendInputEvent({type:'mouseMove',...trigger});
+      await new Promise(resolve => setTimeout(resolve,200));
+      await window.webContents.executeJavaScript(`(() => { const tab=[...document.querySelectorAll('.stream-hover-card [role="tab"]')].find(item => item.getAttribute('aria-label').endsWith(': ${source === 'camera' ? 'Camera' : 'Stream'}')); tab?.click(); })()`);
+      await new Promise(resolve => setTimeout(resolve,50));
+      const watch = await window.webContents.executeJavaScript(`(() => { const button = [...document.querySelectorAll('.stream-hover-card button')].find(item => item.textContent.includes('Watch ${source}')); if (!button) throw new Error('Watch action missing'); const rect=button.getBoundingClientRect(); return {x:Math.round(rect.left+rect.width/2),y:Math.round(rect.top+rect.height/2)}; })()`);
+      window.webContents.sendInputEvent({type:'mouseMove',...watch});
+      await new Promise(resolve => setTimeout(resolve,180));
+      if (source === 'stream' && process.env.GRUNGUS_LIVE_SCREENSHOT) require('node:fs').writeFileSync(process.env.GRUNGUS_LIVE_SCREENSHOT, (await window.webContents.capturePage()).toPNG());
+      await window.webContents.executeJavaScript(`(() => { const button = [...document.querySelectorAll('.stream-hover-card button')].find(item => item.textContent.includes('Watch ${source}')); if (!button) throw new Error('Hover card disappeared while moving to watch'); button.click(); })()`);
+      window.webContents.sendInputEvent({type:'mouseMove',x:1,y:1});
       await new Promise(resolve => setTimeout(resolve,150));
       await window.webContents.executeJavaScript(`window.__smokeBrowseAway()`);
       await new Promise(resolve => setTimeout(resolve,250));

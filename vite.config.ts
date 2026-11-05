@@ -40,7 +40,8 @@ function bundleElementCall() {
   if (!hooked) throw new Error("Element Call participant audio bridge needs updating.");
   cpSync(resolve("public/audio"), resolve(target, "audio"), { recursive: true });
   for (const license of ["LICENSE-AGPL-3.0", "LICENSE-COMMERCIAL"]) cpSync(resolve("node_modules/@element-hq/element-call-embedded", license), resolve(target, license));
-  writeFileSync(resolve(target, "config.json"), JSON.stringify({ matrix_rtc_mode: "compatibility", media_quality: { video: { max_resolution: 1080, max_bitrate: 3000000, max_framerate: 30 }, screen_share: { max_resolution: 1440, max_bitrate: 5000000, max_framerate: 30 } } }));
+  // 60 is the encoder ceiling; capture remains 30 unless selected in the picker.
+  writeFileSync(resolve(target, "config.json"), JSON.stringify({ matrix_rtc_mode: "compatibility", media_quality: { video: { max_resolution: 1080, max_bitrate: 3000000, max_framerate: 30 }, screen_share: { max_resolution: 1440, max_bitrate: 5000000, max_framerate: 60 } } }));
   writeFileSync(resolve(target, "grungus-media.js"), readFileSync(resolve("scripts/element-call-media.js"), "utf8").replace("__GRUNGUS_CAMERA_PRESETS__", JSON.stringify(cameraQualityPresets)));
   cpSync(resolve("scripts/element-call-fullscreen.js"), resolve(target, "grungus-fullscreen.js"));
   cpSync(resolve("scripts/element-call-tooltips.js"), resolve(target, "grungus-tooltips.js"));

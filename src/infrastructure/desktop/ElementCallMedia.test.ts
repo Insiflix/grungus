@@ -1,20 +1,36 @@
 ﻿import { readFileSync } from "node:fs";
 import { runInNewContext } from "node:vm";
-import { describe, expect, it, vi } from "vitest";
+import { EventEmitter } from "node:events";
+import { afterEach, describe, expect, it, vi } from "vitest";
 import { cameraQualityPresets } from "../../domain/calls/CameraQuality";
 function fixture(document = { querySelector: vi.fn(), documentElement: { toggleAttribute: vi.fn(), style: { setProperty: vi.fn() } } }, extraWindow: object = {}) {
   const camera = { readyState: "live", applyConstraints: vi.fn().mockResolvedValue(undefined), addEventListener: vi.fn() };
-  const screen = { stop: vi.fn(), addEventListener: vi.fn() };
+  const screen = { stop: vi.fn(), addEventListener: vi.fn(), applyConstraints: vi.fn().mockResolvedValue(undefined) };
   const getUserMedia = vi.fn().mockResolvedValue({ getVideoTracks: () => [camera] });
   const getDisplayMedia = vi.fn().mockResolvedValue({ getVideoTracks: () => [screen], getAudioTracks: () => [{}] });
   const postMessage = vi.fn(); let listener: (event: object) => Promise<void> = async () => {};
   const parent = { postMessage };
-  const context = { document, navigator: { mediaDevices: { getUserMedia, getDisplayMedia } }, parent, location: { origin: "http://localhost", hash: "#?widgetId=test&grungusCameraQuality=720p&parentUrl=http%3A%2F%2Flocalhost%2F" }, URL, URLSearchParams, setTimeout, clearTimeout, window: { ...extraWindow, addEventListener: (_event: string, callback: typeof listener) => { listener = callback; } } };
+  const events = new Map<string, typeof listener>();
+  const context = { document, navigator: { mediaDevices: { getUserMedia, getDisplayMedia } }, parent, location: { origin: "http://localhost", hash: "#?widgetId=test&grungusCameraQuality=720p&parentUrl=http%3A%2F%2Flocalhost%2F" }, URL, URLSearchParams, Date, setTimeout, clearTimeout, window: { ...extraWindow, addEventListener: (_event: string, callback: typeof listener) => { events.set(_event, callback); if (_event === "message") listener = callback; } } };
   const source = readFileSync("scripts/element-call-media.js", "utf8").replace("__GRUNGUS_CAMERA_PRESETS__", JSON.stringify(cameraQualityPresets));
   runInNewContext(source, context);
-  return { media: context.navigator.mediaDevices, camera, screen, getUserMedia, getDisplayMedia, postMessage, parent, listener, window: context.window };
+  return { media: context.navigator.mediaDevices, camera, screen, getUserMedia, getDisplayMedia, postMessage, parent, listener, window: context.window, events };
 }
+afterEach(() => vi.restoreAllMocks());
 describe("Element Call camera and display capture adapter", () => {
+  it.each([30, 60])("uses %i FPS only after the authenticated picker response", async frameRate => {
+    const f = fixture();
+    const host = (data: object) => f.listener({ source: f.parent, origin: "http://localhost", data: { widgetId: "test", ...data } });
+    await host({ type: "grungus:host-controls", enabled: true, captureSettings: true });
+    const capture = f.media.getDisplayMedia({ video: true });
+    await vi.waitFor(() => expect(f.postMessage).toHaveBeenCalledWith(expect.objectContaining({ captureSettingsRequest: true }), "http://localhost"));
+    expect(f.getDisplayMedia).toHaveBeenCalledWith(expect.objectContaining({ video: { frameRate: { ideal: 30, max: 30 } } }));
+    await f.listener({ source: f.parent, origin: "https://evil.test", data: { type: "grungus:capture-settings", widgetId: "test", frameRate: 120 } });
+    expect(f.screen.applyConstraints).not.toHaveBeenCalled();
+    await host({ type: "grungus:capture-settings", frameRate });
+    await capture;
+    expect(f.screen.applyConstraints).toHaveBeenCalledWith({ frameRate: { ideal: frameRate, max: frameRate } });
+  });
   it("uses the default output when LiveKit has not selected a sink yet", async () => {
     const setSinkId = vi.fn().mockResolvedValue(undefined);
     class AudioContext { setSinkId = setSinkId; }
@@ -52,6 +68,7 @@ describe("Element Call camera and display capture adapter", () => {
     expect(f.postMessage).toHaveBeenLastCalledWith(expect.objectContaining({ sharing: false, linuxAudioStop: true }), "http://localhost");
   });
   it("reports speaking and video activity for local and remote users, including stop and disconnect", () => {
+    const now = vi.spyOn(Date, "now").mockReturnValue(1000);
     let poll!: () => void;
     const f = fixture(undefined, { setInterval: (callback: () => void) => { poll = callback; } });
     const register = (f.window as typeof f.window & { grungusRegisterParticipant: (user: string, identity: string, participant: object | null) => void }).grungusRegisterParticipant;
@@ -64,8 +81,53 @@ describe("Element Call camera and display capture adapter", () => {
       { userId: "@me:test", name: "Me", speaking: true, screen: false, camera: true },
     ] }), "http://localhost");
     remote.isSpeaking = false; remote.isScreenShareEnabled = false;
+    now.mockReturnValue(1300);
     register("@me:test", "local", null); poll();
     expect(f.postMessage).toHaveBeenLastCalledWith(expect.objectContaining({ activity: [{ userId: "@alice:test", name: "Alice", speaking: false, screen: false, camera: false }] }), "http://localhost");
+  });
+  it("detects each microphone without SFU speaking flags, holds short gaps, and cleans up replaced tracks", () => {
+    let now = 1000, poll!: () => void;
+    vi.spyOn(Date, "now").mockImplementation(() => now);
+    type Track = { level: number; enabled: boolean; readyState: string; stop: ReturnType<typeof vi.fn> };
+    const sources: { disconnect: ReturnType<typeof vi.fn> }[] = [];
+    const close = vi.fn().mockResolvedValue(undefined);
+    class MediaStream { constructor(public tracks: Track[]) {} }
+    class AudioContext {
+      state = "running"; close = close;
+      createMediaStreamSource(stream: MediaStream) {
+        const source = { connect: (node: { track?: Track }) => { node.track = stream.tracks[0]; }, disconnect: vi.fn() };
+        sources.push(source); return source;
+      }
+      createAnalyser() { return { fftSize: 512, track: undefined as Track | undefined, getFloatTimeDomainData(samples: Float32Array) { samples.fill(this.track?.level ?? 0); }, disconnect: vi.fn() }; }
+    }
+    const f = fixture(undefined, { AudioContext, MediaStream, setInterval: (callback: () => void) => { poll = callback; } });
+    const register = (f.window as typeof f.window & { grungusRegisterParticipant: (user: string, identity: string, participant: object | null) => void }).grungusRegisterParticipant;
+    const first: Track = { level: .02, enabled: true, readyState: "live", stop: vi.fn() };
+    const second: Track = { level: 0, enabled: true, readyState: "live", stop: vi.fn() };
+    const a = Object.assign(new EventEmitter(), { name: "Alice", isSpeaking: false, audioTrackPublications: new Map([["mic", { source: "microphone", isMuted: false, track: { mediaStreamTrack: first } }]]) });
+    const b = Object.assign(new EventEmitter(), { name: "Bob", isSpeaking: false, audioTrackPublications: new Map([["mic", { source: "microphone", isMuted: false, track: { mediaStreamTrack: second } }]]) });
+    const speaking = () => Object.fromEntries(f.postMessage.mock.lastCall![0].activity.map((member: { userId: string; speaking: boolean }) => [member.userId, member.speaking]));
+    register("@alice:test", "alice", a); register("@bob:test", "bob", b);
+    expect(speaking()).toEqual({ "@alice:test": true, "@bob:test": false });
+    second.level = .006; b.emit("trackSubscribed");
+    expect(speaking()).toEqual({ "@alice:test": true, "@bob:test": true });
+    first.level = 0; now += 80; poll();
+    expect(speaking()["@alice:test"]).toBe(true);
+    now += 250; poll();
+    expect(speaking()["@alice:test"]).toBe(false);
+    const replacement = { ...first, level: .01 };
+    a.audioTrackPublications.get("mic")!.track.mediaStreamTrack = replacement;
+    a.emit("trackSubscribed");
+    expect(speaking()["@alice:test"]).toBe(true);
+    expect(sources[0].disconnect).toHaveBeenCalled();
+    b.audioTrackPublications.get("mic")!.isMuted = true; b.emit("trackMuted");
+    expect(speaking()["@bob:test"]).toBe(false);
+    register("@alice:test", "alice", null);
+    expect(a.listenerCount("isSpeakingChanged")).toBe(0);
+    f.events.get("pagehide")!({});
+    expect(close).toHaveBeenCalledOnce();
+    expect(b.listenerCount("trackSubscribed")).toBe(0);
+    expect(first.stop).not.toHaveBeenCalled(); expect(second.stop).not.toHaveBeenCalled();
   });
   it("reports selected WebRTC round-trip times only to the authenticated host", async () => {
     let receive!: (event: object) => Promise<void>;
@@ -157,7 +219,8 @@ describe("Element Call camera and display capture adapter", () => {
   it("requests unprocessed system audio and reports capture stop", async () => {
     const { media, getDisplayMedia, postMessage, screen } = fixture();
     await media.getDisplayMedia({ video: true, audio: false } as never);
-    expect(getDisplayMedia).toHaveBeenCalledWith(expect.objectContaining({ audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false }, systemAudio: "include" }));
+    expect(screen.applyConstraints).toHaveBeenCalledWith({ frameRate: { ideal: 30, max: 30 } });
+    expect(getDisplayMedia).toHaveBeenCalledWith(expect.objectContaining({ audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false, restrictOwnAudio: true }, systemAudio: "include" }));
     expect(postMessage).toHaveBeenCalledWith(expect.objectContaining({ sharing: true, systemAudio: true }), "http://localhost");
     screen.stop(); expect(postMessage).toHaveBeenLastCalledWith(expect.objectContaining({ sharing: false, systemAudio: false }), "http://localhost");
   });

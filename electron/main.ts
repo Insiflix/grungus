@@ -46,7 +46,7 @@ protocol.registerSchemesAsPrivileged([{ scheme: "grungus-app", privileges: { sta
 const PROTOCOL = isPackaged ? "grungus-matrix" : "grungus-matrix-dev";
 const SESSION_FILE = "matrix-session.bin";
 let desktopCapture: DesktopCaptureBroker | null = null;
-const linuxAudio = new LinuxSystemAudio();
+const linuxAudio = new LinuxSystemAudio(process.platform, undefined, () => [process.pid, ...app.getAppMetrics().map(metric => metric.pid)]);
 let mainWindow: BrowserWindow | null = null;
 let windowsIconPath = process.execPath;
 let pendingAuthCallback: string | null = null;
@@ -215,6 +215,7 @@ function createWindow(): void {
 }
 
 function registerIpc(): void {
+  ipcMain.handle("desktop-capture:settings", event => { assertTrustedAppSender(event, mainWindow, isTrustedRendererUrl); return desktopCapture?.getSettings() ?? { frameRate: 30 }; });
   ipcMain.handle("desktop-capture:linux-audio", event => { assertTrustedAppSender(event, mainWindow, isTrustedRendererUrl); return linuxAudio.claim(); });
   ipcMain.handle("desktop-capture:stop-linux-audio", event => { assertTrustedAppSender(event, mainWindow, isTrustedRendererUrl); return linuxAudio.cancel(); });
   registerLoggingIpc(ipcMain, () => mainWindow, isTrustedRendererUrl, persistentLog, directory => shell.openPath(directory));
@@ -230,10 +231,11 @@ function registerIpc(): void {
     assertTrustedAppSender(event, mainWindow, isTrustedRendererUrl);
     await writeClipboardImage(bytes);
   });
-  ipcMain.handle("desktop-capture:respond", (event, requestId: unknown, sourceId: unknown, audio: unknown) => {
+  ipcMain.handle("desktop-capture:respond", (event, requestId: unknown, sourceId: unknown, audio: unknown, frameRate: unknown = 30) => {
     if (event.sender !== mainWindow?.webContents || event.senderFrame !== mainWindow.webContents.mainFrame || !isTrustedRendererUrl(event.senderFrame.url)) throw new Error("Untrusted capture response");
     if (typeof requestId !== "string" || (sourceId !== null && typeof sourceId !== "string") || typeof audio !== "boolean") throw new Error("Invalid capture response");
-    desktopCapture?.respond(requestId, sourceId, audio);
+    if (frameRate !== 30 && frameRate !== 60) throw new Error("Invalid sharing frame rate");
+    desktopCapture?.respond(requestId, sourceId, audio, frameRate);
   });
   ipcMain.handle("matrix-session:load", event => { assertTrustedAppSender(event, mainWindow, isTrustedRendererUrl); return sessionOperations.run(loadSession); });
   ipcMain.handle(

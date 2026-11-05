@@ -139,17 +139,20 @@
   window.grungusAudio = { configure, getLevel: track => meters.get(track)?.(), captureSystemAudio };
   // Classic Matrix calls capture in the main renderer; embedded calls use the
   // authenticated host bridge because the call origin has no desktop IPC.
-  if (media?.getDisplayMedia && window.desktop?.platform === 'linux') {
+  if (media?.getDisplayMedia && window.desktop?.capture) {
     const originalDisplayMedia = media.getDisplayMedia.bind(media);
     media.getDisplayMedia = async constraints => {
-      const stream = await originalDisplayMedia(constraints);
+      const stream = await originalDisplayMedia({ ...constraints, video: { ...(typeof constraints?.video === 'object' ? constraints.video : {}), frameRate: { ideal: 30, max: 30 } }, audio: constraints?.audio ? { ...(typeof constraints.audio === 'object' ? constraints.audio : {}), restrictOwnAudio: true } : false });
       let audioStream;
       const stop = () => {
         audioStream?.getTracks().forEach(track => track.stop());
         void window.desktop.capture.stopLinuxAudio().catch(() => {});
       };
       try {
-        if (!stream.getAudioTracks().length) {
+        const settings = await window.desktop.capture.getSettings?.() ?? { frameRate: 30 };
+        const frameRate = settings.frameRate === 60 ? 60 : 30;
+        for (const track of stream.getVideoTracks()) await track.applyConstraints({ frameRate: { ideal: frameRate, max: frameRate } });
+        if (window.desktop.platform === 'linux' && !stream.getAudioTracks().length) {
           const label = await window.desktop.capture.claimLinuxAudio();
           if (label) {
             let device;

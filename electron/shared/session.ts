@@ -49,11 +49,12 @@ export interface DesktopBridge {
     onCallback(listener: (url: string) => void): () => void;
   };
   capture: {
+    getSettings(): Promise<{ frameRate: 30 | 60 }>;
     claimLinuxAudio(): Promise<string | null>;
     stopLinuxAudio(): Promise<void>;
     onRequest(listener: (request: ScreenShareRequest) => void): () => void;
     onDismiss(listener: (requestId: string) => void): () => void;
-    respond(requestId: string, sourceId: string | null, audio: boolean): Promise<void>;
+    respond(requestId: string, sourceId: string | null, audio: boolean, frameRate?: 30 | 60): Promise<void>;
   };
   platform: NodeJS.Platform;
 }
@@ -61,4 +62,4 @@ export interface DesktopBridge {
 export interface DesktopNotification { title: string; body: string; silent: boolean; roomId?: string; iconDataUrl?: string }
 
 export interface ScreenShareSource { id: string; name: string; kind: "screen" | "window"; thumbnail: string; icon?: string }
-export interface ScreenShareRequest { id: string; sources: ScreenShareSource[]; audioRequested: boolean; systemAudioSupported: boolean }
+export interface ScreenShareRequest { id: string; sources: ScreenShareSource[]; audioRequested: boolean; systemAudioSupported: boolean; audioUnavailableReason?: string }

@@ -10,6 +10,8 @@ interface CaptureDependencies {
   authorizeLinuxAudio?(enabled: boolean): void;
 }
 export class DesktopCaptureBroker {
+  private settings: { frameRate: 30 | 60 } = { frameRate: 30 };
+  getSettings() { return this.settings; }
   private pending: { id: string; sources: DesktopCapturerSource[]; audioRequested: boolean; callback: (streams: Streams) => void; timeout: ReturnType<typeof setTimeout> } | null = null;
   private preparing = false;
   constructor(private dependencies: CaptureDependencies) {}
@@ -25,11 +27,12 @@ export class DesktopCaptureBroker {
     } catch { if (this.pending) this.cancel(); else callback({}); }
     finally { this.preparing = false; }
   };
-  respond(requestId: string, sourceId: string | null, audio: boolean): void {
+  respond(requestId: string, sourceId: string | null, audio: boolean, frameRate: 30 | 60 = 30): void {
     const pending = this.pending;
     if (!pending || pending.id !== requestId) return;
     this.pending = null; clearTimeout(pending.timeout);
     const video = pending.sources.find(source => source.id === sourceId);
+    this.settings = { frameRate: video && frameRate === 60 ? 60 : 30 };
     this.dependencies.authorizeLinuxAudio?.(Boolean(video && audio && pending.audioRequested && this.dependencies.platform === "linux"));
     const includeAudio = Boolean(video && audio && pending.audioRequested && this.dependencies.platform === "win32");
     pending.callback(video ? { video, ...(includeAudio ? { audio: "loopback" as const } : {}) } : {});

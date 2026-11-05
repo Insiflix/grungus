@@ -2,6 +2,7 @@ import { CallPanel } from "../../src/renderer/features/chat/CallPanel";
 import { createElement, useState } from "react";
 import { createRoot } from "react-dom/client";
 import { ScreenShareDialogHost } from "../../src/renderer/features/chat/ScreenShareDialog";
+import { SpaceChannels } from "../../src/renderer/features/rooms/SpaceChannels";
 import "../../src/renderer/styles/index.css";
 ﻿// An isolated widget host: no access token, real contacts, room writes, or real media.
 import { MatrixEvent, Room, createClient } from "matrix-js-sdk";
@@ -33,7 +34,11 @@ function VoiceWorkspace() {
   return createElement("main", { className: "app-shell" },
     createElement("aside", { className: "room-sidebar" },
       createElement("header", { className: "sidebar-header" }, "Test server"),
-      createElement("div", { className: "room-list" }, "Voice channels"),
+      createElement("div", { className: "room-list" }, createElement(SpaceChannels, {
+        rooms: [{ id: room.roomId, name: "Testanruf", roomType: "org.matrix.msc3417.call", membership: "join", avatarUrl: null, topic: null, unreadCount: 0, highlightCount: 0, memberCount: 2, isEncrypted: false }],
+        selectedRoomId: null, callActive: true, onOpen: async () => {},
+        calls: [{ roomId: room.roomId, name: "Testanruf", participants: 2, members: [{ id: "@preview:invalid.test", displayName: "Preview user" }, { id: "@quiet:invalid.test", displayName: "Quiet user" }] }],
+      })),
       createElement("div", { className: "voice-dock-slot", ref: setDock }),
       createElement("footer", { className: "account-strip" }, "Smoke")),
     createElement("section", { className: "chat-workspace" }, "Another conversation"),

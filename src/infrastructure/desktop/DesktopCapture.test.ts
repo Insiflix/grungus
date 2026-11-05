@@ -12,6 +12,15 @@ function fixture(platform: NodeJS.Platform = "win32") {
 }
 afterEach(() => { vi.useRealTimers(); });
 describe("screen capture consent and system audio", () => {
+  it("defaults to 30 FPS each share and permits explicitly selected 60 FPS", async () => {
+    const f = fixture();
+    await f.broker.request(request, f.callback);
+    f.broker.respond(f.notify.mock.lastCall![0].id, f.sources[0].id, false, 60);
+    expect(f.broker.getSettings()).toEqual({ frameRate: 60 });
+    await f.broker.request(request, f.callback);
+    f.broker.respond(f.notify.mock.lastCall![0].id, f.sources[0].id, false);
+    expect(f.broker.getSettings()).toEqual({ frameRate: 30 });
+  });
   it.each(["screen:1:0", "window:2:0"])("grants Linux monitor capture for %s only after explicit audio consent", async id => {
     const authorizeLinuxAudio = vi.fn();
     const sources = [source(id)];

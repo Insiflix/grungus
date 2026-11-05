@@ -3,9 +3,10 @@ import { createPortal } from "react-dom";
 
 // A custom surface in the top layer also works inside modal settings dialogs.
 // Keep its DOM under the trigger so parent overlays recognize internal clicks.
-export function ThemedPopover({ anchor, onClose, children, className = "", role, id, label, width }: {
+export function ThemedPopover({ anchor, onClose, children, className = "", role, id, label, width, side }: {
   anchor: RefObject<HTMLElement | null>; onClose: () => void; children: ReactNode;
   className?: string; role?: "listbox" | "dialog"; id?: string; label?: string; width?: number;
+  side?: "right";
 }) {
   const surface = useRef<HTMLDivElement>(null);
   const close = useRef(onClose); close.current = onClose;
@@ -16,6 +17,11 @@ export function ThemedPopover({ anchor, onClose, children, className = "", role,
     const position = () => {
       const rect = trigger.getBoundingClientRect();
       const size = Math.min(width ?? Math.max(180, rect.width), innerWidth - 16);
+      if (side === "right") {
+        Object.assign(node.style, { width: `${size}px`, maxHeight: `${innerHeight - 16}px`, left: `${Math.max(8, Math.min(rect.right + 12, innerWidth - size - 8))}px` });
+        node.style.top = `${Math.max(8, Math.min(rect.top - 12, innerHeight - node.getBoundingClientRect().height - 8))}px`;
+        return;
+      }
       const below = innerHeight - rect.bottom - 14, above = rect.top - 14;
       const up = below < 240 && above > below;
       Object.assign(node.style, { width: `${size}px`, maxHeight: `${Math.max(80, Math.min(340, up ? above : below))}px`, left: `${Math.max(8, Math.min(rect.left, innerWidth - size - 8))}px` });
@@ -30,6 +36,6 @@ export function ThemedPopover({ anchor, onClose, children, className = "", role,
     window.addEventListener("blur", blur);
     window.addEventListener("resize", position); window.addEventListener("scroll", position, true);
     return () => { document.removeEventListener("pointerdown", outside, true); document.removeEventListener("focusin", outside, true); node.removeEventListener("keydown", escape); trigger.removeEventListener("keydown", escape); window.removeEventListener("blur", blur); window.removeEventListener("resize", position); window.removeEventListener("scroll", position, true); };
-  }, [anchor, width]);
+  }, [anchor, width, side]);
   return createPortal(<div ref={surface} style={{display:typeof HTMLElement.prototype.showPopover === "function" ? undefined : "block"}} popover="manual" data-themed-overlay className={`themed-popover ${className}`} role={role} id={id} aria-label={label}>{children}</div>, anchor.current?.parentElement ?? document.body);
 }

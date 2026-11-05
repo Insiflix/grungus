@@ -7,11 +7,11 @@ import { CallPanel } from "./CallPanel";
 vi.mock("../../app/providers/MatrixProvider", () => ({ mountCall: vi.fn() }));
 afterEach(cleanup);
 
-function fixture() {
+async function fixture(initialAudioEnabled = true, autoJoin = true) {
   let joined = () => {};
   const dispose = vi.fn();
   const hangup = vi.fn().mockResolvedValue(undefined);
-  let devices = { audio_enabled: true, video_enabled: false };
+  let devices = { audio_enabled: initialAudioEnabled, video_enabled: false };
   const setDevices = vi.fn(async (state: Partial<typeof devices>) => (devices = { ...devices, ...state }));
   const mount: ICallProvider["mountCall"] = vi.fn((frame, _room, _video, _close, ready, onJoined) => {
     frame.src = "http://localhost/element-call/index.html#?widgetId=test";
@@ -21,21 +21,61 @@ function fixture() {
   });
   const dock = document.createElement("div");
   document.body.append(dock);
-  const props = { roomId: "!voice:test", name: "Lounge", video: false, mode: "voice" as const, dock, mount, onClose: vi.fn() };
+  const props = { roomId: "!voice:test", name: "Lounge", video: false, mode: "voice" as const, autoJoin, dock, mount, onClose: vi.fn() };
   const view = render(<CallPanel {...props} />);
   const frame = screen.getByTitle("Element Call: Lounge") as HTMLIFrameElement;
   const status = (data: object) => act(() => { window.dispatchEvent(new MessageEvent("message", { source: frame.contentWindow, origin: "http://localhost", data: { type: "grungus:media-status", widgetId: "test", ...data } })); });
-  act(() => joined());
+  await act(async () => joined());
   return { ...view, frame, props, dock, dispose, hangup, setDevices, mount, status };
 }
 
 describe("voice channel controls", () => {
-  it.each(["screen", "camera"])("opens %s on request and preserves the iframe in PiP across chat navigation", source => {
-    const f = fixture();
+  it("reads a muted widget on startup and explicitly enables its microphone once on auto-join", async () => {
+    const f = await fixture(false);
+    expect(f.setDevices).toHaveBeenCalledWith({});
+    expect(f.setDevices).toHaveBeenCalledWith({ audio_enabled: true });
+    expect(f.setDevices).not.toHaveBeenCalledWith({ audio_enabled: false });
+    expect(screen.getByRole("button", { name: "Mute microphone" })).toBeTruthy();
+    const initialRequests = f.setDevices.mock.calls.length;
+    fireEvent.click(screen.getByRole("button", { name: "Mute microphone" }));
+    await waitFor(() => expect(screen.getByRole("button", { name: "Unmute microphone" })).toBeTruthy());
+    f.rerender(<CallPanel {...f.props} visible={false} />);
+    expect(f.setDevices).toHaveBeenCalledTimes(initialRequests + 1);
+    expect(screen.getByRole("button", { name: "Unmute microphone" })).toBeTruthy();
+    act(() => f.frame.dispatchEvent(new CustomEvent("grungus:devices", { detail: { video_enabled: true } })));
+    expect(screen.getByRole("button", { name: "Unmute microphone" })).toBeTruthy();
+    expect(screen.getByRole("button", { name: "Turn camera off" })).toBeTruthy();
+    f.unmount(); f.dock.remove();
+  });
+  it("keeps a rejected microphone enable visibly muted and permits a manual retry", async () => {
+    const dock = document.createElement("div"); document.body.append(dock);
+    const setDevices = vi.fn().mockResolvedValue({ audio_enabled: false, video_enabled: false });
+    let joined!: () => void;
+    const mount: ICallProvider["mountCall"] = vi.fn((frame, _room, _video, _close, ready, onJoined) => {
+      frame.src = "http://localhost/element-call/index.html#?widgetId=test";
+      joined = onJoined!; ready?.(); return { dispose() {}, hangup: async () => {}, setDevices };
+    });
+    const view = render(<CallPanel roomId="!voice" name="Lounge" video={false} mode="voice" dock={dock} mount={mount} onClose={() => {}} />);
+    await act(async () => joined());
+    expect(screen.getByRole("button", { name: "Unmute microphone" })).toBeTruthy();
+    expect(screen.getAllByRole("alert")[0].textContent).toContain("Your microphone is muted");
+    expect((screen.getByRole("button", { name: "Unmute microphone" }) as HTMLButtonElement).disabled).toBe(false);
+    view.unmount(); dock.remove();
+  });
+  it("preserves a microphone muted in the lobby instead of unmuting it on join", async () => {
+    const f = await fixture(false, false);
+    expect(f.setDevices.mock.calls.every(([request]) => Object.keys(request).length === 0)).toBe(true);
+    expect(screen.getByRole("button", { name: "Unmute microphone" })).toBeTruthy();
+    f.unmount(); f.dock.remove();
+  });
+  it.each(["screen", "camera"])("opens %s on request and preserves the iframe in PiP across chat navigation", async source => {
+    const f = await fixture();
     expect(f.frame.closest(".call-panel--away")).not.toBeNull();
     f.status({ activity: [{ userId: "@alice:test", name: "Alice", speaking: true, screen: source === "screen", camera: source === "camera" }] });
     const post = vi.spyOn(f.frame.contentWindow!, "postMessage");
-    fireEvent.click(screen.getByRole("button", { name: /Alice.*Watch/ }));
+    expect(screen.queryByText("Streaming now")).toBeNull();
+    fireEvent.pointerEnter(screen.getByRole("button", { name: source === "screen" ? "Live stream from Alice" : "Camera from Alice" }));
+    fireEvent.click(screen.getByRole("button", { name: source === "screen" ? "Watch stream" : "Watch camera" }));
     expect(f.frame.closest(".call-panel--away")).toBeNull();
     f.rerender(<CallPanel {...f.props} visible={false} />);
     expect(f.frame.closest(".call-panel--pip")).not.toBeNull();
@@ -49,8 +89,8 @@ describe("voice channel controls", () => {
     expect(screen.queryByText("Back to call")).toBeNull();
     f.unmount(); f.dock.remove();
   });
-  it("shows real latency in the connection tooltip and clears unavailable samples", () => {
-    const f = fixture();
+  it("shows real latency in the connection tooltip and clears unavailable samples", async () => {
+    const f = await fixture();
     const connection = screen.getByRole("button", { name: /Voice Connected/ });
     expect(connection.getAttribute("data-tooltip")).toBe("Ping unavailable");
     f.status({ pingMs: 42.4 });
@@ -89,8 +129,8 @@ describe("voice channel controls", () => {
     expect(document.querySelector(".call-panel--preview")).not.toBeNull();
     view.unmount();
   });
-  it("hides chat without losing drafts or reconnecting, and shows the unread count", () => {
-    const f = fixture();
+  it("hides chat without losing drafts or reconnecting, and shows the unread count", async () => {
+    const f = await fixture();
     const onToggleChat = vi.fn();
     const chat = <aside className="voice-channel-chat"><textarea aria-label="Draft" defaultValue="Unsent message" /></aside>;
     f.rerender(<CallPanel {...f.props} chat={chat} onToggleChat={onToggleChat} />);
@@ -109,7 +149,7 @@ describe("voice channel controls", () => {
     f.unmount(); f.dock.remove();
   });
   it("starts and stops sharing through the widget after revealing the call", async () => {
-    const f = fixture();
+    const f = await fixture();
     const post = vi.spyOn(f.frame.contentWindow!, "postMessage");
     f.rerender(<CallPanel {...f.props} visible={false} />);
     fireEvent.click(screen.getByRole("button", { name: "Share screen" }));
@@ -121,16 +161,16 @@ describe("voice channel controls", () => {
     expect(screen.getByRole("button", { name: "Share screen" })).toBeDefined();
     f.unmount(); f.dock.remove();
   });
-  it("shows sharing failures and lets the user retry", () => {
-    const f = fixture();
+  it("shows sharing failures and lets the user retry", async () => {
+    const f = await fixture();
     fireEvent.click(screen.getByRole("button", { name: "Share screen" }));
     f.status({ shareError: "Not connected yet" });
     expect(screen.getAllByRole("alert")[0].textContent).toBe("Not connected yet");
     expect((screen.getByRole("button", { name: "Share screen" }) as HTMLButtonElement).disabled).toBe(false);
     f.unmount(); f.dock.remove();
   });
-  it("keeps the iframe and connection alive when browsing and reopening voice", () => {
-    const f = fixture();
+  it("keeps the iframe and connection alive when browsing and reopening voice", async () => {
+    const f = await fixture();
     expect(screen.getByRole("region", { name: "Voice controls" }).parentElement).toBe(f.dock);
     f.rerender(<CallPanel {...f.props} visible={false} />);
     expect(f.frame.closest(".call-panel--away")).not.toBeNull();
@@ -141,7 +181,7 @@ describe("voice channel controls", () => {
     f.unmount(); f.dock.remove();
   });
   it.each([true, false])("restores microphone enabled=%s after undeafening", async (enabled) => {
-    const f = fixture();
+    const f = await fixture();
     if (!enabled) {
       fireEvent.click(screen.getByRole("button", { name: "Mute microphone" }));
       await waitFor(() => expect(screen.getByRole("button", { name: "Unmute microphone" })).toBeDefined());
@@ -156,7 +196,7 @@ describe("voice channel controls", () => {
     f.unmount(); f.dock.remove();
   });
   it("controls camera and disconnects using the existing call session", async () => {
-    const f = fixture();
+    const f = await fixture();
     fireEvent.click(screen.getByRole("button", { name: "Turn camera on" }));
     await waitFor(() => expect(f.setDevices).toHaveBeenCalledWith({ video_enabled: true }));
     fireEvent.click(screen.getByRole("button", { name: "Disconnect from voice" }));
@@ -166,7 +206,7 @@ describe("voice channel controls", () => {
 });
 
 it("sends participant gain to the current widget and only accepts its acknowledgement", async () => {
-  const f = fixture();
+  const f = await fixture();
   const post = vi.spyOn(f.frame.contentWindow!, "postMessage");
   let finished = false;
   const request = participantAudio.set(f.props.roomId, "@alice:test", { volume: 150, muted: false }).then(() => { finished = true; });

@@ -6,6 +6,7 @@ import type { RoomCall } from "../../../domain/calls/ICallProvider";
 import { canJoinChannel, isVoiceRoom } from "../../../domain/matrix/RoomNavigation";
 import { PeopleDialog } from "./PeopleDialog";
 import { Avatar } from "../../components/common/Avatar";
+import { StreamLiveBadge } from "../chat/StreamLiveBadge";
 
 export function SpaceChannels({ rooms, selectedRoomId, calls, onOpen, callActive, onSettings }: {
   rooms: MatrixRoom[]; selectedRoomId: string | null; calls: RoomCall[];
@@ -49,7 +50,7 @@ export function SpaceChannels({ rooms, selectedRoomId, calls, onOpen, callActive
             {voice && call && <ul className="voice-members" aria-label={`People in ${room.name}`}>
               {call.members?.map(member => {
                 const state = activity?.roomId === room.id ? activity.members.find(entry => entry.userId === member.id) : undefined;
-                return <li key={member.id} className={state?.speaking ? "is-speaking" : undefined} aria-label={`${member.displayName}${state?.speaking ? ", speaking" : ""}`} data-profile-user-id={member.id} data-voice-room-id={room.id}><Avatar name={member.displayName} url={member.avatarUrl} size="small" /><span>{member.displayName}</span>{state?.screen && <b className="voice-live-badge">LIVE</b>}{state?.camera && <small>Camera</small>}</li>;
+                return <li key={member.id} className={state?.speaking ? "is-speaking" : undefined} aria-label={`${member.displayName}${state?.speaking ? ", speaking" : ""}`} data-profile-user-id={member.id} data-voice-room-id={room.id}><Avatar name={member.displayName} url={member.avatarUrl} size="small" /><span>{member.displayName}</span>{(state?.screen || state?.camera) && <StreamLiveBadge roomId={room.id} camera={!state.screen} streams={(["screen_share", "camera"] as const).filter(source => source === "screen_share" ? state.screen : state.camera).map(source => ({ userId: member.id, name: member.displayName, source }))} />}</li>;
               })}
               {!call.members?.length && <li>{call.participants} in voice</li>}
             </ul>}
