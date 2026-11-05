@@ -51,7 +51,7 @@ function startup(packaged: boolean, defaultApp = false) {
     fileURLToPath: () => "G:\\project\\electron\\main.ts",
     createHash: () => ({ update: () => ({ digest: () => "1234567890abcdef" }) }),
     protocol: { registerSchemesAsPrivileged: vi.fn(), handle: () => { throw stop; } },
-    SessionOperationQueue: class {}, SsoCallback: class {},
+    SessionOperationQueue: class {}, SsoCallback: class {}, LinuxSystemAudio: class {},
   });
   return { app, shell, fs, paths, lockedProfile, RotatingLog, captureMainConsole, ready: () => expect(ready()).rejects.toBe(stop) };
 }

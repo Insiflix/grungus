@@ -32,6 +32,7 @@ function ImageOrFileAttachment({ attachment, inline, onLoad, sender, timestamp }
   const [downloading, setDownloading] = useState(false);
   const [retry, setRetry] = useState(0);
   const [viewing, setViewing] = useState(false);
+  const [preview, setPreview] = useState<string | null>(null);
   const [menu, setMenu] = useState<{ x: number; y: number } | null>(null);
   const closeMenu = useCallback(() => setMenu(null), []);
   const attachmentKey = JSON.stringify(attachment);
@@ -39,6 +40,22 @@ function ImageOrFileAttachment({ attachment, inline, onLoad, sender, timestamp }
   const kind = inline ? attachmentMediaKind(attachment) : null;
   const image = kind === "image";
   const original = useRef<{ key: string; blob: Blob } | null>(null);
+  const text = inline && (attachment.mimeType.startsWith("text/") || /\.(txt|md|json|csv|log|ya?ml|xml|ini|toml|js|ts|tsx|jsx|css|html|py|sh|rs|go|c|cpp|h)$/i.test(attachment.name));
+  useEffect(() => {
+    setPreview(null);
+    if (!text || (attachment.size ?? 0) > 1024 * 1024) return;
+    const controller = new AbortController();
+    void load(attachment, controller.signal).then(async blob => {
+      const value = await blob.slice(0, 16384).text();
+      if (!controller.signal.aborted && !value.includes("\0")) {
+        original.current = { key: attachmentKey, blob };
+        const lines = value.split(/\r?\n/);
+        setPreview(lines.slice(0, 12).map(line => line.slice(0, 500)).join("\n") + (lines.length > 12 || blob.size > 16384 ? "\n…" : ""));
+        onLoad?.();
+      }
+    }).catch(() => { /* Download remains available when preview cannot load. */ });
+    return () => controller.abort();
+  }, [attachmentKey, text, load]);
   useEffect(() => {
     setSrc(null); setDecoded(false); setError(""); setViewing(false); setMenu(null);
     if (!image) return;
@@ -91,6 +108,7 @@ function ImageOrFileAttachment({ attachment, inline, onLoad, sender, timestamp }
     </div>}
 
     {!image && <div className="message-attachment__details"><FileText size={22} /><span><strong>{attachment.name}</strong><small>{attachment.size !== undefined ? formatFileSize(attachment.size) : "Attachment"}</small></span><button type="button" className="icon-button" aria-label={`Download ${attachment.name}`} disabled={downloading} onClick={() => void download()}><Download size={18} /></button></div>}
+    {preview !== null && <pre className="attachment-text-preview" aria-label={`Preview of ${attachment.name}`}><code>{preview}</code></pre>}
     {error && <div className="message-attachment__error" role="alert">{error} {image && <button type="button" onClick={() => { original.current = null; setRetry(value => value + 1); }}>Retry</button>}</div>}
     {menu && <ImageActionsMenu position={menu} onClose={closeMenu} onView={() => setViewing(true)} onDownload={() => void download()} onCopy={() => void copy()} onCopyLink={copyLink} downloading={downloading} />}
     {viewing && src && <ImageViewer src={src} name={attachment.name} sender={sender} timestamp={timestamp} onClose={() => setViewing(false)} onDownload={() => void download()} onCopy={() => void copy()} onCopyLink={copyLink} downloading={downloading} error={error} />}

@@ -84,8 +84,8 @@ export function RoomSidebar({ space, onOpenIdentity, onOpenSettings, onManageSpa
           {discoveryPending && <p className="channel-notice" role="status">Discovering channels…</p>}
           {discoveryError && <p className="channel-notice" role="alert">{discoveryError} <button type="button" onClick={onRetryDiscovery}>Retry</button></p>}
           <SpaceChannels onSettings={onManageChannel} rooms={channels} selectedRoomId={selectedRoomId} calls={calls} callActive={callActive} onOpen={async (channel, voice) => {
-            if (channel.membership !== "join") { if (!await joinRoom(channel.id, channel.viaServers)) return; }
-            else selectRoom(channel.id);
+            if (channel.membership !== "join") { if (!await (voice ? joinRoom(channel.id, channel.viaServers, false) : joinRoom(channel.id, channel.viaServers))) return; }
+            else if (!voice) selectRoom(channel.id);
             if (voice) onJoinVoice?.(channel);
           }} />
         </> : <>

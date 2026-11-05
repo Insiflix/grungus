@@ -6,6 +6,7 @@ import { writeClipboardImage } from "./imageClipboard.js";
 import { registerNotifications } from "./notifications.js";
 import { registerWindowControls } from "./windowControls.js";
 import { DesktopCaptureBroker } from "./desktopCapture.js";
+import { LinuxSystemAudio } from "./linuxAudio.js";
 import { configureAppPermissions, allowsAppPermission } from "./permissions.js";
 import { assertTrustedAppSender } from "./ipcSecurity.js";
 import { secureStorageAvailable, isPersistedSession, SessionOperationQueue } from "./sessionSecurity.js";
@@ -45,6 +46,7 @@ protocol.registerSchemesAsPrivileged([{ scheme: "grungus-app", privileges: { sta
 const PROTOCOL = isPackaged ? "grungus-matrix" : "grungus-matrix-dev";
 const SESSION_FILE = "matrix-session.bin";
 let desktopCapture: DesktopCaptureBroker | null = null;
+const linuxAudio = new LinuxSystemAudio();
 let mainWindow: BrowserWindow | null = null;
 let windowsIconPath = process.execPath;
 let pendingAuthCallback: string | null = null;
@@ -183,7 +185,8 @@ function createWindow(): void {
     try { void shell.openExternal(secureMessageUrl(url)).catch(() => undefined); } catch { /* Unsupported external scheme. */ }
     return { action: "deny" };
   });
-  mainWindow.webContents.on("render-process-gone", () => ssoCallback.cancel());
+  mainWindow.webContents.on("render-process-gone", () => { ssoCallback.cancel(); void linuxAudio.cancel(); });
+  mainWindow.webContents.on("destroyed", () => { void linuxAudio.cancel(); });
   mainWindow.webContents.on("did-start-navigation", (_event, _url, isInPlace, isMainFrame) => { if (isMainFrame && !isInPlace) ssoCallback.cancel(); });
   mainWindow.webContents.on("will-navigate", (event, url) => {
     desktopCapture?.cancel();
@@ -212,6 +215,8 @@ function createWindow(): void {
 }
 
 function registerIpc(): void {
+  ipcMain.handle("desktop-capture:linux-audio", event => { assertTrustedAppSender(event, mainWindow, isTrustedRendererUrl); return linuxAudio.claim(); });
+  ipcMain.handle("desktop-capture:stop-linux-audio", event => { assertTrustedAppSender(event, mainWindow, isTrustedRendererUrl); return linuxAudio.cancel(); });
   registerLoggingIpc(ipcMain, () => mainWindow, isTrustedRendererUrl, persistentLog, directory => shell.openPath(directory));
   registerNotifications(ipcMain, () => mainWindow, isTrustedRendererUrl, path.join(app.getAppPath(), isPackaged ? "dist" : "public", "grungus.png"));
   registerWindowControls(ipcMain, () => mainWindow, isTrustedRendererUrl);
@@ -322,6 +327,7 @@ if (!app.requestSingleInstanceLock()) {
       return net.fetch(pathToFileURL(destination).href);
     });
     desktopCapture = new DesktopCaptureBroker({
+      authorizeLinuxAudio: enabled => linuxAudio.authorize(enabled),
       platform: process.platform,
       getSources: () => desktopCapturer.getSources({ types: ["screen", "window"], thumbnailSize: { width: 320, height: 180 }, fetchWindowIcons: true }),
       isTrusted: request => Boolean(mainWindow && request.frame && request.frame.top === mainWindow.webContents.mainFrame && allowsAppPermission("display-capture", request.frame.url, isPackaged, request.frame === mainWindow.webContents.mainFrame)),
@@ -329,8 +335,13 @@ if (!app.requestSingleInstanceLock()) {
       dismiss: id => mainWindow?.webContents.send("desktop-capture:dismiss", id),
     });
     session.defaultSession.setDisplayMediaRequestHandler((request, callback) => { void desktopCapture!.request(request, callback); });
+    let audioCleanupComplete = false;
     app.on("before-quit", event => {
       desktopCapture?.cancel();
+      if (process.platform === "linux" && !audioCleanupComplete) {
+        event.preventDefault();
+        void linuxAudio.cancel().finally(() => { audioCleanupComplete = true; app.quit(); });
+      }
     });
     configureAppPermissions(session.defaultSession, () => mainWindow, isPackaged);
     if (process.platform === "darwin" && !isPackaged) {

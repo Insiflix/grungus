@@ -12,6 +12,21 @@ function fixture(platform: NodeJS.Platform = "win32") {
 }
 afterEach(() => { vi.useRealTimers(); });
 describe("screen capture consent and system audio", () => {
+  it.each(["screen:1:0", "window:2:0"])("grants Linux monitor capture for %s only after explicit audio consent", async id => {
+    const authorizeLinuxAudio = vi.fn();
+    const sources = [source(id)];
+    const notify = vi.fn(), callback = vi.fn();
+    const broker = new DesktopCaptureBroker({ platform: "linux", getSources: async () => sources, isTrusted: () => true, notify, dismiss: vi.fn(), authorizeLinuxAudio });
+    await broker.request(request, callback);
+    expect(notify).toHaveBeenCalledWith(expect.objectContaining({ systemAudioSupported: true }));
+    expect(authorizeLinuxAudio).not.toHaveBeenCalled();
+    broker.respond(notify.mock.calls[0][0].id, id, true);
+    expect(authorizeLinuxAudio).toHaveBeenLastCalledWith(true);
+    expect(callback).toHaveBeenCalledWith({ video: sources[0] });
+    await broker.request(request, callback);
+    broker.respond(notify.mock.calls.at(-1)![0].id, id, false);
+    expect(authorizeLinuxAudio).toHaveBeenLastCalledWith(false);
+  });
   it("never selects a desktop until the user responds", async () => {
     const { broker, notify, callback, sources } = fixture();
     await broker.request(request, callback);

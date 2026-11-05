@@ -56,6 +56,8 @@ const bridge: DesktopBridge = {
     },
   },
   capture: {
+    claimLinuxAudio: () => ipcRenderer.invoke("desktop-capture:linux-audio"),
+    stopLinuxAudio: () => ipcRenderer.invoke("desktop-capture:stop-linux-audio"),
     onRequest: (listener) => { const callback = (_event: Electron.IpcRendererEvent, request: Parameters<typeof listener>[0]) => listener(request); ipcRenderer.on("desktop-capture:request", callback); return () => { ipcRenderer.removeListener("desktop-capture:request", callback); }; },
     onDismiss: (listener) => { const callback = (_event: Electron.IpcRendererEvent, id: string) => listener(id); ipcRenderer.on("desktop-capture:dismiss", callback); return () => { ipcRenderer.removeListener("desktop-capture:dismiss", callback); }; },
     respond: (requestId, sourceId, audio) => ipcRenderer.invoke("desktop-capture:respond", requestId, sourceId, audio),

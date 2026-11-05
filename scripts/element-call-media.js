@@ -24,7 +24,7 @@
     if (participants.get(key)?.participant === participant) return;
     let entry = wrappedParticipants.get(participant);
     if (!entry) {
-      entry = { userId, participant, original: participant.setVolume.bind(participant), base: new Map() };
+      entry = { userId, participant, original: participant.setVolume?.bind(participant) ?? (() => {}), base: new Map() };
       wrappedParticipants.set(participant, entry);
       participant.setVolume = (value, source = "microphone") => {
         entry.base.set(source, value);
@@ -44,6 +44,39 @@
     return { width: { ideal: preset.width, max: preset.width }, height: { ideal: preset.height, max: preset.height }, frameRate: { ideal: preset.frameRate, max: preset.frameRate } };
   };
   const sendStatus = (data) => parent.postMessage({ type: "grungus:media-status", widgetId: params.get("widgetId"), ...data }, parentOrigin);
+  let linuxAudio = false;
+  let audioReply = null;
+  const requestLinuxAudio = () => new Promise((resolve, reject) => {
+    const timer = setTimeout(() => { audioReply = null; reject(new Error("Computer audio did not respond.")); }, 15000);
+    audioReply = data => { clearTimeout(timer); audioReply = null; data.error ? reject(new Error(data.error)) : resolve(data.label); };
+    sendStatus({ linuxAudioRequest: true });
+  });
+  let watched = null;
+  let lastActivity = "";
+  const updateActivity = () => {
+    const members = new Map();
+    for (const { userId, participant } of participants.values()) {
+      const previous = members.get(userId);
+      members.set(userId, { userId, name: participant.name || userId, speaking: Boolean(previous?.speaking || participant.isSpeaking), screen: Boolean(previous?.screen || participant.isScreenShareEnabled), camera: Boolean(previous?.camera || participant.isCameraEnabled) });
+    }
+    const activity = [...members.values()];
+    const signature = JSON.stringify(activity);
+    if (signature !== lastActivity) { lastActivity = signature; sendStatus({ activity }); }
+    const trackIds = new Set();
+    if (watched) for (const entry of participants.values()) {
+      if (entry.userId !== watched.userId) continue;
+      for (const publication of entry.participant.videoTrackPublications?.values() ?? []) {
+        if (publication.source === watched.source && !publication.isMuted && publication.track?.mediaStreamTrack) trackIds.add(publication.track.mediaStreamTrack.id);
+      }
+    }
+    for (const ancestor of document.querySelectorAll?.(".grungus-watch-ancestor") ?? []) ancestor.classList.remove("grungus-watch-ancestor");
+    for (const video of document.querySelectorAll?.("video") ?? []) {
+      const selected = [...(video.srcObject?.getVideoTracks?.() ?? [])].some(track => trackIds.has(track.id));
+      video.classList.toggle("grungus-watched-video", selected);
+      if (selected) for (let ancestor = video.parentElement; ancestor; ancestor = ancestor.parentElement) ancestor.classList.add("grungus-watch-ancestor");
+    }
+  };
+  window.setInterval?.(updateActivity, 150);
   window.addEventListener("grungus:audio-warning", event => sendStatus({ audioError: event.detail }));
   // Track the actual media connections, including publisher/subscriber reconnects.
   const connections = new Set();
@@ -92,10 +125,32 @@
     media.getDisplayMedia = async (constraints) => {
       // The native picker still requires explicit source/audio confirmation.
       const stream = await originalGetDisplayMedia({ ...constraints, video: constraints?.video || true, audio: { echoCancellation: false, noiseSuppression: false, autoGainControl: false }, systemAudio: "include" });
+      let systemStream;
+      if (linuxAudio && !stream.getAudioTracks().length) {
+        try {
+          const label = await requestLinuxAudio();
+          if (label) {
+            let device;
+            for (let attempt = 0; attempt < 15; attempt++) {
+              device = (await media.enumerateDevices()).find(item => item.kind === "audioinput" && item.label === label);
+              if (device) break;
+              await new Promise(resolve => setTimeout(resolve, 200));
+            }
+            if (!device) throw new Error("Computer audio input was not found. Check PipeWire/PulseAudio and try again.");
+            systemStream = await window.grungusAudio.captureSystemAudio(device.deviceId);
+            for (const track of systemStream.getAudioTracks()) stream.addTrack(track);
+          }
+        } catch (error) {
+          stream.getTracks().forEach(track => track.stop());
+          systemStream?.getTracks().forEach(track => track.stop());
+          sendStatus({ linuxAudioStop: true, shareError: error.message });
+          throw error;
+        }
+      }
       const audio = stream.getAudioTracks().length > 0;
       sendStatus({ sharing: true, systemAudio: audio });
       for (const track of stream.getVideoTracks()) {
-        const stopped = () => sendStatus({ sharing: false, systemAudio: false });
+        const stopped = () => { systemStream?.getTracks().forEach(track => track.stop()); sendStatus({ sharing: false, systemAudio: false, linuxAudioStop: linuxAudio }); };
         track.addEventListener("ended", stopped, { once: true });
         const originalStop = track.stop.bind(track);
         track.stop = () => { originalStop(); stopped(); };
@@ -106,6 +161,14 @@
   window.addEventListener("message", async (event) => {
     const data = event.data;
     const fromHost = event.source === parent && event.origin === parentOrigin && data?.widgetId === params.get("widgetId");
+    if (fromHost && data.type === "grungus:linux-audio") { audioReply?.(data); return; }
+    if (fromHost && data.type === "grungus:watch-media") {
+      watched = typeof data.userId === "string" && ["screen_share", "camera"].includes(data.source) ? { userId: data.userId, source: data.source } : null;
+      document.documentElement.toggleAttribute("data-grungus-pip", Boolean(watched && data.compact));
+      document.documentElement.toggleAttribute("data-grungus-watch", Boolean(watched));
+      updateActivity();
+      return;
+    }
     if (fromHost && data.type === "grungus:participant-audio") {
       const reply = { requestId: data.requestId, userId: data.userId };
       try {
@@ -133,6 +196,7 @@
       return;
     }
     if (fromHost && data.type === "grungus:host-controls" && typeof data.enabled === "boolean") {
+      linuxAudio = data.linuxAudio === true;
       document.documentElement.toggleAttribute("data-grungus-host-controls", data.enabled);
       for (const key of ["background", "surface", "text", "muted", "accent", "border"]) {
         if (typeof data.colors?.[key] === "string") document.documentElement.style.setProperty(`--grungus-${key}`, data.colors[key]);

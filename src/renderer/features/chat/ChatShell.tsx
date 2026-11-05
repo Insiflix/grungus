@@ -44,6 +44,7 @@ export function ChatShell() {
   const [roomCalls, setRoomCalls] = useState<RoomCall[]>([]);
   useEffect(() => observeCalls(setRoomCalls), []);
   const [call, setCall] = useState<{ roomId: string; name: string; video: boolean } | null>(null);
+  const [callViewOpen, setCallViewOpen] = useState(false);
   const [voiceDock, setVoiceDock] = useState<HTMLDivElement | null>(null);
   const [hiddenVoiceChats, setHiddenVoiceChats] = useState<ReadonlySet<string>>(() => new Set());
   const closeCall = useCallback(() => setCall(null), []);
@@ -191,7 +192,7 @@ export function ChatShell() {
             {error && <button type="button" onClick={clearError}>Dismiss</button>}
           </div>
         )}
-        {!room && !spaceId ? <GrungusHome onAddPeople={() => setAddingPeople(true)} rooms={rooms} calls={roomCalls} channelServers={channelServers} onOpen={selectRoom} onJoinVoice={target => startCall(target, false)} callActive={Boolean(call || directCall)} /> : room && voiceRoom ? <div className="voice-workspace"><div className="voice-workspace__main"><div className="voice-workspace__tools">{renderSearch(room)}<VoiceChatToggle visible={!hiddenVoiceChats.has(room.id)} unreadCount={room.unreadCount} onToggle={() => toggleVoiceChat(room.id)} controls={`voice-room-chat-${room.id}`} /></div><ConversationCallCard room={room} call={selectedCall} voice disabled={Boolean(call || directCall)} onCall={video => startCall(room, video)} /></div>{call?.roomId !== room.id && <div id={`voice-room-chat-${room.id}`} className="voice-chat-slot" hidden={hiddenVoiceChats.has(room.id)}>{voiceChat(room)}</div>}</div> : <>
+        {!room && !spaceId ? <GrungusHome onAddPeople={() => setAddingPeople(true)} rooms={rooms} calls={roomCalls} channelServers={channelServers} onOpen={selectRoom} onJoinVoice={target => startCall(target, false)} callActive={Boolean(call || directCall)} /> : room && voiceRoom ? <div className="voice-workspace"><div className="voice-workspace__main"><div className="voice-workspace__tools">{renderSearch(room)}<VoiceChatToggle visible={!hiddenVoiceChats.has(room.id)} unreadCount={room.unreadCount} onToggle={() => toggleVoiceChat(room.id)} controls={`voice-room-chat-${room.id}`} /></div><ConversationCallCard room={room} call={selectedCall} voice disabled={Boolean(call || directCall)} onCall={video => startCall(room, video)} /></div>{(call?.roomId !== room.id || !callViewOpen) && <div id={`voice-room-chat-${room.id}`} className="voice-chat-slot" hidden={hiddenVoiceChats.has(room.id)}>{voiceChat(room)}</div>}</div> : <>
           {room && groupRoom && selectedCall && <ConversationCallCard room={room} call={selectedCall} disabled={Boolean(call || directCall)} onCall={video => startCall(room, video)} />}
           {renderTimeline(room)}
         </>}
@@ -199,7 +200,7 @@ export function ChatShell() {
       </ChatSurface>
       {!call && !directCall && otherGroupCalls.length > 0 && <aside className="active-calls" aria-label="Group calls">{otherGroupCalls.map(active => <button key={active.roomId} onClick={() => setCall({ roomId: active.roomId, name: active.name, video: false })}><Phone size={18} /><span><strong>{active.name}</strong><small>{active.participants} in call</small></span><b>Join call</b></button>)}</aside>}
       {directCall && <DirectCallPanel key={directCall.id} call={directCall} canAnswer={!call} />}
-      {call && <CallPanel {...call} search={renderSearch(rooms.find(item => item.id === call.roomId) ?? null)} mode={serverRooms.has(call.roomId) ? "voice" : "group"} dock={voiceDock} visible={selectedRoomId === call.roomId} onOpen={() => selectRoom(call.roomId)} chatVisible={!hiddenVoiceChats.has(call.roomId)} chatUnreadCount={voiceCallRoom?.unreadCount ?? 0} onToggleChat={() => toggleVoiceChat(call.roomId)} chat={voiceCallRoom ? voiceChat(voiceCallRoom) : undefined} onClose={closeCall} />}
+      {call && <CallPanel {...call} search={renderSearch(rooms.find(item => item.id === call.roomId) ?? null)} mode={serverRooms.has(call.roomId) ? "voice" : "group"} dock={voiceDock} onViewChange={setCallViewOpen} visible={selectedRoomId === call.roomId} onOpen={() => selectRoom(call.roomId)} chatVisible={!hiddenVoiceChats.has(call.roomId)} chatUnreadCount={voiceCallRoom?.unreadCount ?? 0} onToggleChat={() => toggleVoiceChat(call.roomId)} chat={voiceCallRoom && callViewOpen ? voiceChat(voiceCallRoom) : undefined} onClose={closeCall} />}
       {creatingServer && <CreateServerDialog onClose={() => setCreatingServer(false)} onCreated={id => { runtime.clearSelectedRoom(); setSpaceId(id); void refreshSpace(id); }} />}
       {addingPeople && <PeopleDialog onClose={() => setAddingPeople(false)} />}
       {exploringServers && <JoinMatrixDialog onClose={() => setExploringServers(false)} onJoined={id => {

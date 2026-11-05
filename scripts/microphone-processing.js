@@ -123,8 +123,10 @@
     if (current === revision && results.some(result => result.status === 'rejected')) throw new Error('Microphone settings could not be applied. Reconnect your microphone and retry.');
   };
   const media = navigator.mediaDevices;
+  let captureSystemAudio;
   if (media?.getUserMedia) {
     const original = media.getUserMedia.bind(media);
+    captureSystemAudio = deviceId => original({ audio: { deviceId: { exact: deviceId }, echoCancellation: false, noiseSuppression: false, autoGainControl: false, channelCount: 2 }, video: false });
     media.getUserMedia = async constraints => {
       const audio = constraints?.audio;
       const screen = typeof constraints?.video === 'object' && (constraints.video.mandatory?.chromeMediaSource || constraints.video.mediaSource);
@@ -134,5 +136,40 @@
     };
   }
   window.addEventListener('pagehide', () => { for (const session of sessions) session.close(); });
-  window.grungusAudio = { configure, getLevel: track => meters.get(track)?.() };
+  window.grungusAudio = { configure, getLevel: track => meters.get(track)?.(), captureSystemAudio };
+  // Classic Matrix calls capture in the main renderer; embedded calls use the
+  // authenticated host bridge because the call origin has no desktop IPC.
+  if (media?.getDisplayMedia && window.desktop?.platform === 'linux') {
+    const originalDisplayMedia = media.getDisplayMedia.bind(media);
+    media.getDisplayMedia = async constraints => {
+      const stream = await originalDisplayMedia(constraints);
+      let audioStream;
+      const stop = () => {
+        audioStream?.getTracks().forEach(track => track.stop());
+        void window.desktop.capture.stopLinuxAudio().catch(() => {});
+      };
+      try {
+        if (!stream.getAudioTracks().length) {
+          const label = await window.desktop.capture.claimLinuxAudio();
+          if (label) {
+            let device;
+            for (let attempt = 0; attempt < 15; attempt++) {
+              device = (await media.enumerateDevices()).find(item => item.kind === 'audioinput' && item.label === label);
+              if (device) break;
+              await new Promise(resolve => setTimeout(resolve, 200));
+            }
+            if (!device) throw new Error('Computer audio input was not found. Check PipeWire/PulseAudio and try again.');
+            audioStream = await captureSystemAudio(device.deviceId);
+            audioStream.getAudioTracks().forEach(track => stream.addTrack(track));
+          }
+        }
+        for (const track of stream.getVideoTracks()) {
+          track.addEventListener('ended', stop, { once: true });
+          const originalStop = track.stop.bind(track);
+          track.stop = () => { originalStop(); stop(); };
+        }
+        return stream;
+      } catch (error) { stream.getTracks().forEach(track => track.stop()); stop(); throw error; }
+    };
+  }
 })();

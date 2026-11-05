@@ -11,6 +11,9 @@
   --cpd-color-text-action-accent: var(--grungus-accent);
 }
 body { background: var(--grungus-background) !important; }
+html[data-grungus-watch] body * { visibility: hidden !important; }
+html[data-grungus-watch] .grungus-watch-ancestor { transform: none !important; filter: none !important; perspective: none !important; contain: none !important; overflow: visible !important; }
+html[data-grungus-watch] video.grungus-watched-video { visibility: visible !important; position: fixed !important; inset: 0 !important; width: 100vw !important; height: 100vh !important; object-fit: contain !important; transform: none !important; z-index: 99999 !important; }
 
 /* Keep Element's working settings, reactions and layout actions, with the app's styling. */
 [data-testid="footer-container"] {

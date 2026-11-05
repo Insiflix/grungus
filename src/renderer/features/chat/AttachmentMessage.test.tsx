@@ -18,6 +18,22 @@ beforeEach(() => {
 afterEach(() => { cleanup(); vi.restoreAllMocks(); vi.unstubAllGlobals(); Reflect.deleteProperty(window, "desktop"); });
 
 describe("received attachments", () => {
+  it("previews the first twelve text lines as escaped text and reuses the original for download", async () => {
+    const text = Array.from({ length: 20 }, (_, index) => index === 0 ? "<script>alert('test')</script>" : `line ${index + 1}`).join("\n");
+    const blob = new NodeBlob([text], { type: "text/plain" });
+    const load = vi.fn().mockResolvedValue(blob);
+    vi.spyOn(HTMLAnchorElement.prototype, "click").mockImplementation(() => {});
+    const file = { name: "notes.txt", url: "mxc://example/text", mimeType: "text/plain", size: blob.size };
+    render(<AttachmentMediaContext.Provider value={load}><AttachmentMessage attachment={file} inline /></AttachmentMediaContext.Provider>);
+    const preview = await screen.findByLabelText("Preview of notes.txt");
+    expect(preview.textContent).toContain("<script>alert('test')</script>");
+    expect(preview.querySelector("script")).toBeNull();
+    expect(preview.textContent).toContain("line 12\n…");
+    expect(preview.textContent).not.toContain("line 13");
+    fireEvent.click(screen.getByRole("button", { name: "Download notes.txt" }));
+    await waitFor(() => expect(URL.createObjectURL).toHaveBeenCalledWith(blob));
+    expect(load).toHaveBeenCalledOnce();
+  });
   it.each([["clip.webm", "video/webm", "video"], ["clip.mp4", "video/mp4", "video"], ["song.mp3", "audio/mpeg", "audio"], ["song.wav", "audio/wav", "audio"]])("loads %s on demand with custom controls and cleans up media URLs", async (name, mimeType, tag) => {
     const load = vi.fn().mockResolvedValue(new Blob(["media"], { type: mimeType }));
     const view = render(<AttachmentMediaContext.Provider value={load}><AttachmentMessage attachment={{ name, mimeType, url: "mxc://example/media" }} inline /></AttachmentMediaContext.Provider>);

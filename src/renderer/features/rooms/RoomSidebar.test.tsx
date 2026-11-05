@@ -47,7 +47,7 @@ describe("chat search", () => {
     expect((screen.getByRole("button", { name: "Open text channel staff, invitation required" }) as HTMLButtonElement).disabled).toBe(true);
     fireEvent.click(screen.getByRole("button", { name: "Join voice channel Lounge" }));
     await waitFor(() => expect(onJoinVoice).toHaveBeenCalledWith(voice));
-    expect(mocks.joinRoom).toHaveBeenCalledWith(voice.id, undefined);
+    expect(mocks.joinRoom).toHaveBeenCalledWith(voice.id, undefined, false);
   });
   it("does not start a voice call when joining the channel fails", async () => {
     mocks.joinRoom.mockResolvedValueOnce(false);
@@ -68,6 +68,6 @@ describe("chat search", () => {
     expect(channel.querySelector(".lucide-lock-keyhole")).toBeNull();
     fireEvent.click(channel);
     await waitFor(() => expect(onJoinVoice).toHaveBeenCalledWith(voice));
-    expect(mocks.joinRoom).toHaveBeenCalledWith(voice.id, undefined);
+    expect(mocks.joinRoom).toHaveBeenCalledWith(voice.id, undefined, false);
   });
 });

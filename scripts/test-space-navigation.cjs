@@ -199,6 +199,7 @@ app.whenReady().then(async () => {
     await screenshot("server");
     await evaluate(`document.querySelector('[aria-label="Join voice channel Lounge"]').click()`);
     await waitFor('!!document.querySelector(".call-panel--voice")');
+    await evaluate(`(() => { if (!document.querySelector('.call-panel--away') || document.querySelector('.room-header h1')?.textContent !== 'introductions') throw new Error('Joining voice replaced the open text chat'); document.querySelector('.voice-dock__room').click(); })()`);
     await waitFor('!!document.querySelector(".call-panel--voice .voice-channel-chat textarea")');
     await evaluate(`(() => { const chat = document.querySelector('.call-panel--voice .voice-channel-chat'); const input = chat.querySelector('textarea'); Object.getOwnPropertyDescriptor(HTMLTextAreaElement.prototype, 'value').set.call(input, 'Hello from voice'); input.dispatchEvent(new Event('input', { bubbles: true })); })()`);
     await evaluate(`document.querySelector('.call-panel--voice .voice-channel-chat form').requestSubmit()`);

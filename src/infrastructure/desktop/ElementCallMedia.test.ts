@@ -2,19 +2,57 @@
 import { runInNewContext } from "node:vm";
 import { describe, expect, it, vi } from "vitest";
 import { cameraQualityPresets } from "../../domain/calls/CameraQuality";
-function fixture(document = { querySelector: vi.fn(), documentElement: { toggleAttribute: vi.fn(), style: { setProperty: vi.fn() } } }) {
+function fixture(document = { querySelector: vi.fn(), documentElement: { toggleAttribute: vi.fn(), style: { setProperty: vi.fn() } } }, extraWindow: object = {}) {
   const camera = { readyState: "live", applyConstraints: vi.fn().mockResolvedValue(undefined), addEventListener: vi.fn() };
   const screen = { stop: vi.fn(), addEventListener: vi.fn() };
   const getUserMedia = vi.fn().mockResolvedValue({ getVideoTracks: () => [camera] });
   const getDisplayMedia = vi.fn().mockResolvedValue({ getVideoTracks: () => [screen], getAudioTracks: () => [{}] });
   const postMessage = vi.fn(); let listener: (event: object) => Promise<void> = async () => {};
   const parent = { postMessage };
-  const context = { document, navigator: { mediaDevices: { getUserMedia, getDisplayMedia } }, parent, location: { origin: "http://localhost", hash: "#?widgetId=test&grungusCameraQuality=720p&parentUrl=http%3A%2F%2Flocalhost%2F" }, URL, URLSearchParams, window: { addEventListener: (_event: string, callback: typeof listener) => { listener = callback; } } };
+  const context = { document, navigator: { mediaDevices: { getUserMedia, getDisplayMedia } }, parent, location: { origin: "http://localhost", hash: "#?widgetId=test&grungusCameraQuality=720p&parentUrl=http%3A%2F%2Flocalhost%2F" }, URL, URLSearchParams, setTimeout, clearTimeout, window: { ...extraWindow, addEventListener: (_event: string, callback: typeof listener) => { listener = callback; } } };
   const source = readFileSync("scripts/element-call-media.js", "utf8").replace("__GRUNGUS_CAMERA_PRESETS__", JSON.stringify(cameraQualityPresets));
   runInNewContext(source, context);
   return { media: context.navigator.mediaDevices, camera, screen, getUserMedia, getDisplayMedia, postMessage, parent, listener, window: context.window };
 }
 describe("Element Call camera and display capture adapter", () => {
+  it.each([null, "grungus_share_test"])("attaches only the consented Linux output monitor (%s) and releases it on stop", async label => {
+    const audio = { stop: vi.fn() };
+    const captureSystemAudio = vi.fn().mockResolvedValue({ getAudioTracks: () => [audio], getTracks: () => [audio] });
+    const f = fixture(undefined, { grungusAudio: { captureSystemAudio } });
+    const addTrack = vi.fn();
+    const stream = { getVideoTracks: () => [f.screen], getAudioTracks: () => [], getTracks: () => [f.screen], addTrack };
+    f.getDisplayMedia.mockResolvedValue(stream);
+    Object.assign(f.media, { enumerateDevices: vi.fn(async () => [{ kind: "audioinput", label: "grungus_share_test", deviceId: "monitor-id" }, { kind: "audioinput", label: "Microphone", deviceId: "mic-id" }]) });
+    const host = (data: object) => f.listener({ source: f.parent, origin: "http://localhost", data: { widgetId: "test", ...data } });
+    await host({ type: "grungus:host-controls", enabled: true, linuxAudio: true });
+    const pending = f.media.getDisplayMedia({ video: true, audio: true });
+    await vi.waitFor(() => expect(f.postMessage).toHaveBeenCalledWith(expect.objectContaining({ linuxAudioRequest: true }), "http://localhost"));
+    await f.listener({ source: f.parent, origin: "https://evil.test", data: { widgetId: "test", type: "grungus:linux-audio", label: "Microphone" } });
+    expect(captureSystemAudio).not.toHaveBeenCalled();
+    await host({ type: "grungus:linux-audio", label });
+    expect(await pending).toBe(stream);
+    if (label) { expect(captureSystemAudio).toHaveBeenCalledWith("monitor-id"); expect(addTrack).toHaveBeenCalledWith(audio); }
+    else expect(captureSystemAudio).not.toHaveBeenCalled();
+    f.screen.stop();
+    if (label) expect(audio.stop).toHaveBeenCalled();
+    expect(f.postMessage).toHaveBeenLastCalledWith(expect.objectContaining({ sharing: false, linuxAudioStop: true }), "http://localhost");
+  });
+  it("reports speaking and video activity for local and remote users, including stop and disconnect", () => {
+    let poll!: () => void;
+    const f = fixture(undefined, { setInterval: (callback: () => void) => { poll = callback; } });
+    const register = (f.window as typeof f.window & { grungusRegisterParticipant: (user: string, identity: string, participant: object | null) => void }).grungusRegisterParticipant;
+    const remote = { setVolume: vi.fn(), name: "Alice", isSpeaking: true, isScreenShareEnabled: true, isCameraEnabled: false };
+    register("@alice:test", "remote", remote);
+    register("@me:test", "local", { name: "Me", isSpeaking: true, isCameraEnabled: true });
+    poll();
+    expect(f.postMessage).toHaveBeenLastCalledWith(expect.objectContaining({ activity: [
+      { userId: "@alice:test", name: "Alice", speaking: true, screen: true, camera: false },
+      { userId: "@me:test", name: "Me", speaking: true, screen: false, camera: true },
+    ] }), "http://localhost");
+    remote.isSpeaking = false; remote.isScreenShareEnabled = false;
+    register("@me:test", "local", null); poll();
+    expect(f.postMessage).toHaveBeenLastCalledWith(expect.objectContaining({ activity: [{ userId: "@alice:test", name: "Alice", speaking: false, screen: false, camera: false }] }), "http://localhost");
+  });
   it("reports selected WebRTC round-trip times only to the authenticated host", async () => {
     let receive!: (event: object) => Promise<void>;
     const postMessage = vi.fn();

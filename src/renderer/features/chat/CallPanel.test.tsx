@@ -30,6 +30,25 @@ function fixture() {
 }
 
 describe("voice channel controls", () => {
+  it.each(["screen", "camera"])("opens %s on request and preserves the iframe in PiP across chat navigation", source => {
+    const f = fixture();
+    expect(f.frame.closest(".call-panel--away")).not.toBeNull();
+    f.status({ activity: [{ userId: "@alice:test", name: "Alice", speaking: true, screen: source === "screen", camera: source === "camera" }] });
+    const post = vi.spyOn(f.frame.contentWindow!, "postMessage");
+    fireEvent.click(screen.getByRole("button", { name: /Alice.*Watch/ }));
+    expect(f.frame.closest(".call-panel--away")).toBeNull();
+    f.rerender(<CallPanel {...f.props} visible={false} />);
+    expect(f.frame.closest(".call-panel--pip")).not.toBeNull();
+    expect(post).toHaveBeenCalledWith(expect.objectContaining({ type: "grungus:watch-media", userId: "@alice:test", source: source === "screen" ? "screen_share" : "camera", compact: true }), "http://localhost");
+    fireEvent.doubleClick(document.querySelector(".call-pip-controls")!);
+    f.rerender(<CallPanel {...f.props} visible />);
+    expect(screen.getByTitle("Element Call: Lounge")).toBe(f.frame);
+    expect(f.frame.closest(".call-panel--pip")).toBeNull();
+    expect(f.mount).toHaveBeenCalledTimes(1);
+    f.status({ activity: [] });
+    expect(screen.queryByText("Back to call")).toBeNull();
+    f.unmount(); f.dock.remove();
+  });
   it("shows real latency in the connection tooltip and clears unavailable samples", () => {
     const f = fixture();
     const connection = screen.getByRole("button", { name: /Voice Connected/ });

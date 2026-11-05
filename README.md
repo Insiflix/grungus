@@ -54,6 +54,12 @@ On Windows, `npm run dev` creates a separate Grungus-branded development executa
 
 With the development app running, `npm run test:notification -- --examples` sends real Windows test notifications, including labeled DM and channel examples. Message notifications use the sender's name/avatar for DMs and the channel name/server avatar for channels; missing avatars use initials.
 
+## Voice channels and Linux screen audio
+
+Joining a voice channel leaves the current text conversation open. Active speakers have green avatar outlines. The voice dock lists available streams and cameras; choose **Watch stream** or **Watch camera** to open one. Browsing to another conversation keeps the selected video in an in-app preview. Hover for expand/close controls, or double-click to return to the full call view. Server icons can be dragged into a saved order, or moved with Alt+Up/Down.
+
+Linux computer-audio sharing requires `pactl` on PATH and a running PulseAudio server or PipeWire with `pipewire-pulse`. On Debian/Ubuntu, `pactl` is supplied by `pulseaudio-utils`. Select **Share all computer audio** in the screen picker for either an entire screen or a window. Both capture the default output device's audio from all applications. Grungus creates a temporary [remapped monitor source](https://docs.pipewire.org/page_pulse_module_remap_source.html) and removes it when sharing or the call ends. Microphone filters do not affect shared audio. If the audio service or utility is unavailable, sharing reports an error; turn off computer audio to share video alone.
+
 ## Electron module format
 
 The Electron main process and shared session types are ES modules. The preload alone compiles from `.cts` to CommonJS intentionally: Electron sandboxed preloads run as plain JavaScript and do not support ESM imports. Keeping that one boundary as CommonJS preserves `sandbox: true`; it is not an application-wide CommonJS choice. See Electron's [ES Modules documentation](https://www.electronjs.org/docs/latest/tutorial/esm#sandboxed-preload-scripts).

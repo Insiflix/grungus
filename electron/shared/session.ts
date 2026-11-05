@@ -48,6 +48,8 @@ export interface DesktopBridge {
     onCallback(listener: (url: string) => void): () => void;
   };
   capture: {
+    claimLinuxAudio(): Promise<string | null>;
+    stopLinuxAudio(): Promise<void>;
     onRequest(listener: (request: ScreenShareRequest) => void): () => void;
     onDismiss(listener: (requestId: string) => void): () => void;
     respond(requestId: string, sourceId: string | null, audio: boolean): Promise<void>;

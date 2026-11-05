@@ -1,4 +1,5 @@
-import { useState } from "react";
+import { useState, useSyncExternalStore } from "react";
+import { voiceActivity } from "../../../domain/calls/VoiceActivity";
 import { ChevronDown, Hash, LockKeyhole, Volume2, UserPlus, Settings } from "lucide-react";
 import type { MatrixRoom } from "../../../domain/matrix/MatrixTypes";
 import type { RoomCall } from "../../../domain/calls/ICallProvider";
@@ -11,6 +12,7 @@ export function SpaceChannels({ rooms, selectedRoomId, calls, onOpen, callActive
   onOpen: (room: MatrixRoom, voice: boolean) => Promise<void>; callActive: boolean; onSettings?: (roomId: string) => void;
 }) {
   const [inviting, setInviting] = useState<MatrixRoom | null>(null);
+  const activity = useSyncExternalStore(voiceActivity.subscribe, voiceActivity.getSnapshot);
   const [pending, setPending] = useState<string | null>(null);
   const [error, setError] = useState<string | null>(null);
   const open = async (room: MatrixRoom, voice: boolean) => {
@@ -45,7 +47,10 @@ export function SpaceChannels({ rooms, selectedRoomId, calls, onOpen, callActive
             </div>}
             </div>
             {voice && call && <ul className="voice-members" aria-label={`People in ${room.name}`}>
-              {call.members?.map(member => <li key={member.id} data-profile-user-id={member.id} data-voice-room-id={room.id}><Avatar name={member.displayName} url={member.avatarUrl} size="small" /><span>{member.displayName}</span></li>)}
+              {call.members?.map(member => {
+                const state = activity?.roomId === room.id ? activity.members.find(entry => entry.userId === member.id) : undefined;
+                return <li key={member.id} className={state?.speaking ? "is-speaking" : undefined} aria-label={`${member.displayName}${state?.speaking ? ", speaking" : ""}`} data-profile-user-id={member.id} data-voice-room-id={room.id}><Avatar name={member.displayName} url={member.avatarUrl} size="small" /><span>{member.displayName}</span>{state?.screen && <b className="voice-live-badge">LIVE</b>}{state?.camera && <small>Camera</small>}</li>;
+              })}
               {!call.members?.length && <li>{call.participants} in voice</li>}
             </ul>}
           </div>;

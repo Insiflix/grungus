@@ -131,9 +131,39 @@ app.whenReady().then(async () => {
         const tile = document.createElement('div'); tile.dataset.testid = 'videoTile'; tile.dataset.videoEnabled = 'true'; tile.id = 'smoke-'+id;
         const video = document.createElement('video'); tile.append(video); document.body.append(tile);
         const canvas = document.createElement('canvas'); canvas.width=320; canvas.height=180;
-        canvas.getContext('2d').fillRect(0,0,320,180); video.srcObject=canvas.captureStream(1); video.muted=true;
+        const context = canvas.getContext('2d'); context.fillStyle=id === 'screen' ? '#205b45' : '#294563'; context.fillRect(0,0,320,180); context.fillStyle='white'; context.font='20px sans-serif'; context.fillText('Live '+id+' preview', 50, 95); video.srcObject=canvas.captureStream(1); video.muted=true;
       }
     })()`);
+    await callFrame().executeJavaScript(`(() => {
+      const publications = new Map(['camera','screen'].map(id => {
+        const video = document.querySelector('#smoke-'+id+' video');
+        video.play();
+        return [id, { source: id === 'screen' ? 'screen_share' : 'camera', isMuted: false, track: { mediaStreamTrack: video.srcObject.getVideoTracks()[0] } }];
+      }));
+      window.grungusRegisterParticipant('@preview:invalid.test', 'preview-device', { name: 'Preview user', setVolume() {}, isSpeaking: true, isScreenShareEnabled: true, isCameraEnabled: true, videoTrackPublications: publications });
+    })()`);
+    await new Promise(resolve => setTimeout(resolve,350));
+    for (const source of ['stream','camera']) {
+      await window.webContents.executeJavaScript(`(() => { const button = [...document.querySelectorAll('.voice-dock__streams button')].find(item => item.textContent.includes('Watch ${source}')); if (!button) throw new Error('Watch action missing'); button.click(); })()`);
+      await new Promise(resolve => setTimeout(resolve,150));
+      await window.webContents.executeJavaScript(`window.__smokeBrowseAway()`);
+      await new Promise(resolve => setTimeout(resolve,250));
+      const pip = await window.webContents.executeJavaScript(`(() => { const panel=document.querySelector('.call-panel--pip'); if (!panel) throw new Error('PiP missing'); const bounds=panel.getBoundingClientRect(); return { width:bounds.width, height:bounds.height, right:bounds.right, bottom:bounds.bottom, viewport:[innerWidth,innerHeight] }; })()`);
+      if (pip.width > 350 || pip.height > 220 || pip.right > pip.viewport[0] || pip.bottom > pip.viewport[1] || callFrame().routingId !== originalFrame) throw new Error('Invalid PiP bounds or replaced iframe: '+JSON.stringify(pip));
+      const selected = await callFrame().executeJavaScript(`(() => { const videos=[...document.querySelectorAll('video.grungus-watched-video')]; const video=videos.find(item => getComputedStyle(item).visibility === 'visible'); if(!video) throw new Error('Preview video is hidden'); const rect=video.getBoundingClientRect(); return { width:rect.width, height:rect.height, viewport:[innerWidth,innerHeight] }; })()`);
+      if (Math.abs(selected.width - selected.viewport[0]) > 1 || Math.abs(selected.height - selected.viewport[1]) > 1) throw new Error('Preview video does not fill iframe: '+JSON.stringify(selected));
+      if (source === 'stream' && process.env.GRUNGUS_PIP_SCREENSHOT) {
+        window.webContents.sendInputEvent({type:'mouseMove',x:Math.round(pip.right-70),y:Math.round(pip.bottom-30)});
+        await new Promise(resolve => setTimeout(resolve,250));
+        require('node:fs').writeFileSync(process.env.GRUNGUS_PIP_SCREENSHOT, (await window.webContents.capturePage()).toPNG());
+      }
+      await window.webContents.executeJavaScript(`document.querySelector('.call-pip-controls').dispatchEvent(new MouseEvent('dblclick', {bubbles:true}))`);
+      await new Promise(resolve => setTimeout(resolve,150));
+      if (await window.webContents.executeJavaScript(`!!document.querySelector('.call-panel--pip')`)) throw new Error('Double-click did not expand video');
+      await window.webContents.executeJavaScript(`document.querySelector('.call-panel header button').closest('header').querySelectorAll('button').forEach(button => { if(button.textContent === 'Back to call') button.click(); })`);
+    }
+    await callFrame().executeJavaScript(`window.grungusRegisterParticipant('@preview:invalid.test', 'preview-device', null)`);
+    console.log('PASS: live screen and camera previews stay inside the app while browsing, fill PiP, and expand on double-click without reconnecting.');
     await new Promise(resolve => setTimeout(resolve,100));
     await callFrame().executeJavaScript(`document.querySelector('#smoke-camera .grungus-tile-fullscreen').click()`, true);
     await new Promise(resolve => setTimeout(resolve,250));

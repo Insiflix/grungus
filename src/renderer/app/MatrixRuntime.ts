@@ -345,13 +345,13 @@ export class MatrixRuntime {
     return request;
   }
 
-  async joinRoom(roomIdOrAlias: string, viaServers?: string[]): Promise<boolean> {
+  async joinRoom(roomIdOrAlias: string, viaServers?: string[], selectAfterJoining = true): Promise<boolean> {
     const session = this.snapshot.session;
     try {
       const room = await this.client.joinRoom(roomIdOrAlias.trim(), viaServers);
       if (this.snapshot.session !== session) return false;
       this.update({ rooms: this.client.getRooms() });
-      this.selectRoom(room.id);
+      if (selectAfterJoining) this.selectRoom(room.id);
       membershipNotices.publish("join", room);
       return true;
     } catch (error) {

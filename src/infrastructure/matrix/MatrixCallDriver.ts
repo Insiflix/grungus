@@ -158,7 +158,16 @@ export function mountMatrixCall(client: MatrixClient, iframe: HTMLIFrameElement,
   catch (error) { releaseGuard(); throw error; }
   const localCall = beginLocalCall(client, roomId);
   let closed = false;
-  const close = () => { if (closed) return; closed = true; localCall.left(); onClose(); };
+  let joined = false;
+  const close = () => {
+    if (closed) return;
+    closed = true;
+    if (joined && typeof Audio !== "undefined") {
+      const sound = new Audio(new URL("./element-call/left-call.ogg", window.location.href).href);
+      void sound.play().catch(() => {});
+    }
+    localCall.left(); onClose();
+  };
   api.setViewedRoomId(roomId);
   // Source + widget origin are enforced by the capture-phase guard above.
   api.transport.strictOriginCheck = false;
@@ -171,7 +180,7 @@ export function mountMatrixCall(client: MatrixClient, iframe: HTMLIFrameElement,
   client.on(RoomEvent.Timeline, timeline); client.on(RoomStateEvent.Events, state); client.on(ClientEvent.ToDeviceEvent, device); client.on(MatrixEventEvent.Decrypted, decrypted);
   api.on("action:im.vector.hangup", event => { event.preventDefault(); api.transport.reply(event.detail, {}); close(); });
   api.on("action:io.element.close", event => { event.preventDefault(); api.transport.reply(event.detail, {}); close(); });
-  api.on("action:io.element.join", event => { event.preventDefault(); api.transport.reply(event.detail, {}); if (!closed) { localCall.joined(); onJoined?.(); } });
+  api.on("action:io.element.join", event => { event.preventDefault(); api.transport.reply(event.detail, {}); if (!closed) { joined = true; localCall.joined(); onJoined?.(); } });
   api.on("action:io.element.device_mute", event => {
     event.preventDefault();
     api.transport.reply(event.detail, {});

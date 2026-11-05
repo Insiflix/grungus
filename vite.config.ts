@@ -17,18 +17,24 @@ function bundleElementCall() {
   const target = resolve("public/element-call");
   mkdirSync(target, { recursive: true });
   cpSync(resolve("node_modules/@element-hq/element-call-embedded/dist"), target, { recursive: true });
+  const leaveSound = readdirSync(resolve(target, "assets")).find(name => name.startsWith("left_call-") && name.endsWith(".ogg"));
+  if (!leaveSound) throw new Error("Element Call leave sound is missing.");
+  cpSync(resolve(target, "assets", leaveSound), resolve(target, "left-call.ogg"));
   // Pin the bridge to the installed Element mapping and fail loudly on API changes.
   const participantHook = "subscribe(e=>{let n=t.value.connection?.transport.livekit_service_url;";
+  const localParticipantHook = "k=e.behavior(S.pipe(B(e=>e.value.find(e=>e.userId===d&&e.deviceId===f)??null)))";
   let hooked = false;
   for (const name of readdirSync(resolve(target, "assets"))) {
     if (!name.endsWith(".js")) continue;
     const file = resolve(target, "assets", name);
     let source = readFileSync(file, "utf8");
     if (!source.includes(participantHook)) continue;
+    if (!source.includes(localParticipantHook)) throw new Error("Element Call local participant bridge needs updating.");
     const audioMix = "webAudioMix:!1,singlePeerConnection:!0";
     if (!source.includes(audioMix)) throw new Error("Element Call Web Audio bridge needs updating.");
     source = source.replace(participantHook, "subscribe(e=>{window.grungusRegisterParticipant?.(t.value.membership.userId,t.value.membership.rtcBackendIdentity,e);let n=t.value.connection?.transport.livekit_service_url;")
-      .replace(audioMix, "webAudioMix:!0,singlePeerConnection:!0");
+      .replace(audioMix, "webAudioMix:!0,singlePeerConnection:!0")
+      .replace(localParticipantHook, "grungusLocalBridge=O.participant$.pipe(e.bind()).subscribe(t=>window.grungusRegisterParticipant?.(d,`local:${f}`,t))," + localParticipantHook);
     writeFileSync(file, source); hooked = true;
   }
   if (!hooked) throw new Error("Element Call participant audio bridge needs updating.");
