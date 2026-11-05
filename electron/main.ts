@@ -1,7 +1,7 @@
 import { SsoCallback } from "./ssoCallback.js";
 import { RotatingLog, logDirectory, captureMainConsole } from "./logging.js";
 import { registerLoggingIpc } from "./loggingIpc.js";
-import { startAutoUpdates } from "./updates.js";
+import { startAutoUpdates, registerUpdateIpc } from "./updates.js";
 import { writeClipboardImage } from "./imageClipboard.js";
 import { registerNotifications } from "./notifications.js";
 import { registerWindowControls } from "./windowControls.js";
@@ -220,6 +220,7 @@ function registerIpc(): void {
   registerLoggingIpc(ipcMain, () => mainWindow, isTrustedRendererUrl, persistentLog, directory => shell.openPath(directory));
   registerNotifications(ipcMain, () => mainWindow, isTrustedRendererUrl, path.join(app.getAppPath(), isPackaged ? "dist" : "public", "grungus.png"));
   registerWindowControls(ipcMain, () => mainWindow, isTrustedRendererUrl);
+  registerUpdateIpc(ipcMain, () => mainWindow, isTrustedRendererUrl);
   ipcMain.handle("clipboard:write-text", (event, text: unknown) => {
     if (event.sender !== mainWindow?.webContents || event.senderFrame !== mainWindow.webContents.mainFrame || !isTrustedRendererUrl(event.senderFrame.url)) throw new Error("Untrusted clipboard request");
     if (typeof text !== "string") throw new Error("Invalid clipboard text");

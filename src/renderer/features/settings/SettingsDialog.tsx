@@ -20,7 +20,7 @@ const tabs = [
   { id: "voice", name: "Voice & video", hint: "microphone camera speaker noise echo", icon: Mic },
   { id: "rooms", name: "Rooms & spaces", hint: "create manage administration members permissions", icon: UsersRound },
   { id: "keyboard", name: "Keyboard", hint: "shortcuts navigation", icon: Keyboard },
-  { id: "about", name: "Help & about", hint: "version diagnostics sync server logs folder path", icon: Info },
+  { id: "about", name: "Help & about", hint: "version updates check diagnostics sync server logs folder path", icon: Info },
 ] as const;
 type Tab = typeof tabs[number]["id"];
 
@@ -41,6 +41,17 @@ export function SettingsDialog({ onClose, onOpenIdentity, onManageRoom }: { onCl
   const pending = useRef<{ action: (auth?: AuthDict) => Promise<unknown>; success: string } | null>(null);
   const [password, setPassword] = useState("");
   const [authStage, setAuthStage] = useState("");
+  const [updateBusy, setUpdateBusy] = useState(false);
+  const [updateNotice, setUpdateNotice] = useState("");
+  const [updateError, setUpdateError] = useState("");
+  const updateLock = useRef(false);
+  const checkUpdates = async () => {
+    if (updateLock.current || !window.desktop?.updates) return;
+    updateLock.current = true; setUpdateBusy(true); setUpdateNotice(""); setUpdateError("");
+    try { setUpdateNotice(await window.desktop.updates.check()); }
+    catch (cause) { setUpdateError(cause instanceof Error ? cause.message : "Unable to check for updates. Please try again."); }
+    finally { updateLock.current = false; setUpdateBusy(false); }
+  };
   useEffect(() => { const el = dialog.current; el?.showModal(); return () => { pending.current = null; el?.close(); }; }, []);
 
   const execute: ExecuteSettings = async (action, success = "Changes saved.", auth) => {
@@ -104,6 +115,12 @@ export function SettingsDialog({ onClose, onOpenIdentity, onManageRoom }: { onCl
           {tab === "rooms" && <RoomListSettings {...panelProps} onManageRoom={onManageRoom} />}
           {tab === "keyboard" && <SettingsSection title="Keyboard shortcuts"><dl className="settings-shortcuts"><dt>Open settings</dt><dd>Ctrl / ⌘ + ,</dd><dt>Find a room</dt><dd>Ctrl / ⌘ + K</dd><dt>Close a dialog</dt><dd>Escape</dd><dt>Send message</dt><dd>Enter, or Ctrl / ⌘ + Enter when configured</dd><dt>New line</dt><dd>Shift + Enter</dd><dt>Emoji suggestions</dt><dd>Type : then use ↑ / ↓ and Enter or Tab</dd></dl></SettingsSection>}
           {tab === "about" && <>
+            <SettingsSection title="Updates">
+              <button type="button" className="button button--secondary" disabled={!window.desktop?.updates || updateBusy} aria-busy={updateBusy || undefined} onClick={() => void checkUpdates()}>{updateBusy ? "Checking for updates..." : "Check for updates"}</button>
+              {!window.desktop?.updates && <p>Update checks are available in the desktop app.</p>}
+              {updateNotice && <p role="status">{updateNotice}</p>}
+              {updateError && <p className="settings-inline-error" role="alert">{updateError}</p>}
+            </SettingsSection>
             {window.desktop?.logs && <SettingsSection title="Application logs">
               <p>Logs are saved locally across restarts. Up to five files of 2 MB are kept, with automatic cleanup after seven days. Verbose debug output is excluded.</p>
               <p>Known credential fields are masked. Review logs before sharing them; diagnostics may include server addresses and account identifiers.</p>

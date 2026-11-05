@@ -37,6 +37,21 @@ afterEach(() => { cleanup(); vi.unstubAllGlobals(); vi.restoreAllMocks(); });
 const showSettings = () => render(<><PreferenceEffects /><SettingsDialog onClose={vi.fn()} onOpenIdentity={vi.fn()} onManageRoom={vi.fn()} /></>);
 
 describe("account settings interactions", () => {
+  it("checks for updates and allows retry after a failed check", async () => {
+    const user = userEvent.setup();
+    let finish!: (message: string) => void;
+    const check = vi.fn(() => new Promise<string>(resolve => { finish = resolve; }));
+    vi.stubGlobal("desktop", { updates: { check } });
+    showSettings(); await user.click(screen.getByRole("button", { name: "Help & about" }));
+    await user.click(screen.getByRole("button", { name: "Check for updates" }));
+    expect(screen.getByRole("button", { name: "Checking for updates..." })).toHaveProperty("disabled", true);
+    await act(async () => finish("You are up to date."));
+    expect(await screen.findByText("You are up to date.")).toBeTruthy();
+    check.mockRejectedValueOnce(new Error("Offline"));
+    await user.click(screen.getByRole("button", { name: "Check for updates" }));
+    expect((await screen.findByRole("alert")).textContent).toContain("Offline");
+    expect(screen.getByRole("button", { name: "Check for updates" })).toHaveProperty("disabled", false);
+  });
   it("opens the log folder, copies its path, and reports file manager failures", async () => {
     const user = userEvent.setup();
     const openFolder = vi.fn().mockResolvedValue(undefined);

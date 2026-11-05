@@ -1,13 +1,30 @@
 import { app, BrowserWindow, dialog } from "electron";
 import electronUpdater from "electron-updater";
+import type { IpcMain } from "electron";
+import { assertTrustedAppSender } from "./ipcSecurity.js";
 
 const { autoUpdater } = electronUpdater;
 const CHECK_INTERVAL_MS = 4 * 60 * 60 * 1000;
 
+function updatesSupported(): boolean {
+  return app.isPackaged && !process.defaultApp && (process.platform === "win32" || (process.platform === "linux" && Boolean(process.env.APPIMAGE)));
+}
+
+export function registerUpdateIpc(ipc: IpcMain, getWindow: () => BrowserWindow | null, trusted: (url: string) => boolean): void {
+  ipc.handle("updates:check", async event => {
+    assertTrustedAppSender(event, getWindow(), trusted);
+    if (!updatesSupported()) return "Automatic updates are available in installed Windows and Linux AppImage builds.";
+    const result = await autoUpdater.checkForUpdates();
+    if (!result) throw new Error("The update service is unavailable. Please try again later.");
+    return result.isUpdateAvailable
+      ? `Grungus ${result.updateInfo.version} is available and downloading. You will be prompted when it is ready to install.`
+      : "You are up to date.";
+  });
+}
+
 /** Use the public GitHub feed embedded by electron-builder, never a client token. */
 export function startAutoUpdates(getWindow: () => BrowserWindow | null): void {
-  if (!app.isPackaged || process.defaultApp) return;
-  if (process.platform !== "win32" && !(process.platform === "linux" && process.env.APPIMAGE)) return;
+  if (!updatesSupported()) return;
 
   autoUpdater.logger = console;
   autoUpdater.autoDownload = true;

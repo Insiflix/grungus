@@ -15,6 +15,20 @@ function fixture(document = { querySelector: vi.fn(), documentElement: { toggleA
   return { media: context.navigator.mediaDevices, camera, screen, getUserMedia, getDisplayMedia, postMessage, parent, listener, window: context.window };
 }
 describe("Element Call camera and display capture adapter", () => {
+  it("uses the default output when LiveKit has not selected a sink yet", async () => {
+    const setSinkId = vi.fn().mockResolvedValue(undefined);
+    class AudioContext { setSinkId = setSinkId; }
+    Object.assign(AudioContext.prototype, { setSinkId });
+    fixture(undefined, { AudioContext });
+    const context = Object.create(AudioContext.prototype);
+    await context.setSinkId(undefined);
+    expect(setSinkId).toHaveBeenLastCalledWith("");
+    await context.setSinkId("speakers");
+    expect(setSinkId).toHaveBeenLastCalledWith("speakers");
+    const silent = { type: "none" };
+    await context.setSinkId(silent);
+    expect(setSinkId).toHaveBeenLastCalledWith(silent);
+  });
   it.each([null, "grungus_share_test"])("attaches only the consented Linux output monitor (%s) and releases it on stop", async label => {
     const audio = { stop: vi.fn() };
     const captureSystemAudio = vi.fn().mockResolvedValue({ getAudioTracks: () => [audio], getTracks: () => [audio] });

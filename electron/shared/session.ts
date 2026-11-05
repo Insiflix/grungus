@@ -19,6 +19,7 @@ export interface SessionStoreResult {
 }
 
 export interface DesktopBridge {
+  updates: { check(): Promise<string> };
   logs: {
     getPath(): Promise<string>;
     openFolder(): Promise<void>;

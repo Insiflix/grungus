@@ -41,6 +41,8 @@ function ProfileMenu({ target, onClose, onVerification, onCall, callActive }: { 
   const audio = target.voiceRoomId ? participantAudio.get(target.voiceRoomId, target.userId) : { volume: 100, muted: false };
   const [volume, setVolume] = useState(audio.volume);
   const [audioBusy, setAudioBusy] = useState(false);
+  const audioPending = useRef(false);
+  const queuedAudio = useRef<{ volume: number; muted: boolean } | null>(null);
   const canAdjustAudio = Boolean(target.voiceRoomId && participantAudio.connected(target.voiceRoomId));
   const menu = useRef<HTMLDivElement>(null);
   const pending = useRef(false);
@@ -109,11 +111,21 @@ function ProfileMenu({ target, onClose, onVerification, onCall, callActive }: { 
     }
   };
   const changeAudio = async (next: { volume: number; muted: boolean }) => {
-    if (!target.voiceRoomId || audioBusy) return;
+    if (!target.voiceRoomId) return;
+    queuedAudio.current = next;
+    if (audioPending.current) return;
+    audioPending.current = true;
     setAudioBusy(true); setError("");
-    try { await participantAudio.set(target.voiceRoomId, target.userId, next); }
-    catch (cause) { setVolume(audio.volume); setError(cause instanceof Error ? cause.message : "Unable to adjust audio."); }
-    finally { setAudioBusy(false); }
+    try {
+      while (queuedAudio.current) {
+        const value = queuedAudio.current; queuedAudio.current = null;
+        try { await participantAudio.set(target.voiceRoomId, target.userId, value); setError(""); }
+        catch (cause) {
+          if (!queuedAudio.current) setVolume(participantAudio.get(target.voiceRoomId, target.userId).volume);
+          setError(cause instanceof Error ? cause.message : "Unable to adjust audio.");
+        }
+      }
+    } finally { audioPending.current = false; setAudioBusy(false); }
   };
   const run = async (action: () => Promise<void>) => {
     if (pending.current) return;
@@ -131,7 +143,7 @@ function ProfileMenu({ target, onClose, onVerification, onCall, callActive }: { 
       buttons[event.key === "Home" ? 0 : event.key === "End" ? buttons.length - 1 : (index + (event.key === "ArrowDown" ? 1 : -1) + buttons.length) % buttons.length]?.focus();
     }
   }}>
-    {target.voiceRoomId && <div className="profile-actions-menu__volume"><label>User volume <output>{volume}%</output><input aria-label="User volume" type="range" min="0" max="200" step="1" value={volume} disabled={!canAdjustAudio || audioBusy} onChange={event => setVolume(Number(event.target.value))} onPointerUp={event => void changeAudio({ ...audio, volume: Number(event.currentTarget.value) })} onKeyUp={event => { if (["ArrowLeft", "ArrowRight", "ArrowUp", "ArrowDown", "Home", "End", "PageUp", "PageDown"].includes(event.key)) void changeAudio({ ...audio, volume: Number(event.currentTarget.value) }); }} /></label>{!canAdjustAudio && <small>Join this channel to adjust audio.</small>}</div>}
+    {target.voiceRoomId && <div className="profile-actions-menu__volume"><label>User volume <output>{volume}%</output><input aria-label="User volume" type="range" min="0" max="200" step="1" value={volume} disabled={!canAdjustAudio} onChange={event => { const next = Number(event.target.value); setVolume(next); void changeAudio({ ...audio, volume: next }); }} /></label>{!canAdjustAudio && <small>Join this channel to adjust audio.</small>}</div>}
     {target.voiceRoomId && <button role="menuitemcheckbox" aria-checked={audio.muted} disabled={!canAdjustAudio || audioBusy} onClick={() => void changeAudio({ ...audio, muted: !audio.muted })}>{audio.muted ? "Unmute for me" : "Mute for me"}{audio.muted ? <VolumeX /> : <Volume2 />}</button>}
     <button role="menuitem" disabled={busy} onClick={() => void run(() => runtime.startDirectMessage(target.userId))}>Message <MessageCircle /></button>
     <button role="menuitem" disabled={busy || callActive || !onCall} onClick={() => void run(async () => { await runtime.startDirectMessage(target.userId); const current = runtime.getSnapshot(); const room = current.rooms.find(room => room.id === current.selectedRoomId); if (!room) throw new Error("Unable to open the conversation."); onCall?.(room); })}>Start a Call <Phone /></button>

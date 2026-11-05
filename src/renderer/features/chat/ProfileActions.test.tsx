@@ -93,7 +93,7 @@ it("adjusts local voice volume up to 200% and mutes only the selected participan
   try {
     setup("@alice:test", "!voice:test");
     const slider = screen.getByRole("slider", { name: "User volume" });
-    fireEvent.change(slider, { target: { value: "175" } }); fireEvent.pointerUp(slider);
+    fireEvent.change(slider, { target: { value: "175" } });
     await waitFor(() => expect(apply).toHaveBeenCalledWith("@alice:test", { volume: 175, muted: false }));
     const mute = screen.getByRole("menuitemcheckbox", { name: "Mute for me" });
     await waitFor(() => expect(mute).toHaveProperty("disabled", false));
@@ -106,6 +106,24 @@ it("disables voice controls outside the connected channel", () => {
   setup("@alice:test", "!other-voice:test");
   expect(screen.getByRole("slider", { name: "User volume" })).toHaveProperty("disabled", true);
   expect(screen.getByRole("menuitemcheckbox", { name: "Mute for me" })).toHaveProperty("disabled", true);
+});
+
+it("applies the latest slider value while an earlier audio request is pending", async () => {
+  let finish!: () => void;
+  const apply = vi.fn().mockImplementationOnce(() => new Promise<void>(resolve => { finish = resolve; })).mockResolvedValue(undefined);
+  const unregister = participantAudio.register("!queued:test", apply);
+  try {
+    setup("@alice:test", "!queued:test");
+    const slider = screen.getByRole("slider", { name: "User volume" });
+    fireEvent.change(slider, { target: { value: "120" } });
+    fireEvent.change(slider, { target: { value: "140" } });
+    fireEvent.change(slider, { target: { value: "180" } });
+    expect(slider).toHaveProperty("disabled", false);
+    expect(apply).toHaveBeenCalledTimes(1);
+    finish();
+    await waitFor(() => expect(apply).toHaveBeenLastCalledWith("@alice:test", { volume: 180, muted: false }));
+    expect(apply).toHaveBeenCalledTimes(2);
+  } finally { unregister(); }
 });
 
 it("hides servers where the selected user cannot be invited", async () => {

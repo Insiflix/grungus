@@ -3,6 +3,13 @@
   const presets = __GRUNGUS_CAMERA_PRESETS__;
   const params = new URLSearchParams(location.hash.replace(/^#\??/, ""));
   const parentOrigin = new URL(params.get("parentUrl")).origin;
+  // LiveKit can pass an unset output device before device discovery finishes.
+  // Chromium requires an explicit empty string to select the default output.
+  const audioContextPrototype = window.AudioContext?.prototype;
+  if (audioContextPrototype?.setSinkId) {
+    const setSinkId = audioContextPrototype.setSinkId;
+    audioContextPrototype.setSinkId = function (deviceId) { return setSinkId.call(this, deviceId ?? ""); };
+  }
   try { void window.grungusAudio?.configure(JSON.parse(params.get("grungusAudio") || "{}")).catch(() => {}); } catch { /* Use speech defaults for malformed settings. */ }
   let quality = params.get("grungusCameraQuality") || "720p";
   if (!Object.hasOwn(presets, quality)) quality = "720p";
