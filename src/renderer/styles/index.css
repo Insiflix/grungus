@@ -653,6 +653,8 @@ body {
 .people-result strong { font-size: 13px; overflow-wrap: anywhere; }
 .people-result small { color: var(--text-muted); font-size: 11px; overflow-wrap: anywhere; }
 .people-result .button { flex-shrink: 0; font-size: 11px; }
+.people-result > .matrix-directory-copy { display: flex; min-width: 0; flex: 1; flex-direction: column; gap: 4px; }
+.matrix-directory-copy small { display: -webkit-box; -webkit-box-orient: vertical; -webkit-line-clamp: 3; overflow: hidden; }
 .success-banner { padding: 12px; border: 1px solid rgba(127,196,156,.3); border-radius: 10px; color: #b1e7c7; background: rgba(70,130,95,.15); font-size: 12px; }
 .invitation-list { margin-bottom: 12px; }
 .invitation-list .room-section-label { padding-inline: 8px; }

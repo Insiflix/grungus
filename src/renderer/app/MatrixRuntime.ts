@@ -399,6 +399,9 @@ export class MatrixRuntime {
   searchUsers(term: string) {
     return this.client.searchUsers(term);
   }
+  searchPublicRooms(server: string, term: string, since?: string) {
+    return this.client.searchPublicRooms(server, term, since);
+  }
   searchMessages = (query: MessageSearchQuery, signal?: AbortSignal, onProgress?: (result: MessageSearchResults) => void) => {
     const session = this.snapshot.session;
     return this.client.searchMessages(query, signal, result => { if (this.snapshot.session === session) onProgress?.(result); });

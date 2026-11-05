@@ -1,4 +1,5 @@
 import { oauthForSession, withAuthTimeout } from "./MatrixOAuth";
+import { matrixRoomAddress, matrixServerName, type MatrixDirectoryPage } from "../../domain/matrix/MatrixDirectory";
 import { TokenRefresher, type OAuth2 } from "matrix-js-sdk/lib/oauth/index.js";
 import { acceptPeerIdentity, observePeerVerification } from "./MatrixPeerVerification";
 import type { TimelineEvents } from "matrix-js-sdk";
@@ -338,6 +339,9 @@ export class MatrixJsSdkClient implements IMatrixClient, ICallProvider {
 
   async joinRoom(roomIdOrAlias: string, viaServers?: string[]): Promise<MatrixRoom> {
     const client = this.requireClient();
+    const target = matrixRoomAddress(roomIdOrAlias, viaServers);
+    roomIdOrAlias = target.address;
+    viaServers = target.viaServers.length ? target.viaServers : undefined;
     const inviter = client.getRoom(roomIdOrAlias)?.getDMInviter();
     const room = await client.joinRoom(roomIdOrAlias, { viaServers });
     this.assertCurrent(client);
@@ -434,13 +438,23 @@ export class MatrixJsSdkClient implements IMatrixClient, ICallProvider {
     }
     matches.delete(client.getUserId() ?? "");
     if (!matches.size && directoryError) throw directoryError;
-    const users = await Promise.all([...matches].slice(0, 20).map(async ([id, user]) => {
+    const users = await Promise.all([...matches].sort(([a], [b]) => Number(b === query) - Number(a === query)).slice(0, 20).map(async ([id, user]) => {
       const profile = await client.getProfileInfo(id).catch(() => null);
       return { id, displayName: profile?.displayname || user.displayName,
         avatarUrl: this.resolveMediaUrl(profile?.avatar_url || user.avatarUrl, 80, 80) };
     }));
     this.assertCurrent(client);
     return users;
+  }
+
+  async searchPublicRooms(server: string, term: string, since?: string): Promise<MatrixDirectoryPage> {
+    const client = this.requireClient();
+    const response = await client.publicRooms({ server: matrixServerName(server), limit: 30, since,
+      include_all_networks: false, filter: { generic_search_term: term.trim() } });
+    this.assertCurrent(client);
+    return { rooms: response.chunk.map(room => ({ id: room.room_id, name: room.name || room.canonical_alias || room.room_id,
+      alias: room.canonical_alias, topic: room.topic, memberCount: room.num_joined_members, isSpace: room.room_type === "m.space" })),
+      nextBatch: response.next_batch };
   }
 
   private validateUserId(userId: string): void {

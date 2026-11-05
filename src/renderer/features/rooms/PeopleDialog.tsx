@@ -62,7 +62,7 @@ export function PeopleDialog({ room, onClose }: { room?: MatrixRoom; onClose: ()
         <div><span className="eyebrow">{room ? "ROOM INVITATION" : "NEW CONVERSATION"}</span><h2 id="people-title">{room ? `Invite to ${room.name}` : "Add people"}</h2></div>
         <button type="button" className="icon-button" aria-label="Close" disabled={busy} onClick={onClose}><X /></button>
       </header>
-      <p>Find someone by name, or enter their full Matrix ID.</p>
+      <p>Find someone by name, or enter their full Matrix ID, such as @alice:matrix.org, to message or invite people on other instances. No additional account is needed. Name search only covers people known to your homeserver.</p>
       <form className="people-search" onSubmit={(event) => void search(event)}>
         <label className="sr-only" htmlFor="people-query">Name or Matrix ID</label>
         <input id="people-query" value={query} autoFocus placeholder="@alice:example.org" disabled={busy}

@@ -1,4 +1,5 @@
 import { beginLocalCall } from "./MatrixLocalCallState";
+import { sendEncryptedCallEvent } from "./MatrixCallEncryption";
 import { ClientEvent, RoomEvent, RoomStateEvent, MatrixEventEvent, MatrixError, UpdateDelayedEventAction, type MatrixClient, type MatrixEvent, type Room } from "matrix-js-sdk";
 import { ClientWidgetApi, Widget, WidgetDriver, OpenIDRequestState, type SimpleObservable, type IOpenIDUpdate, type IRoomEvent, type Capability } from "matrix-widget-api";
 import { allowedCallCapabilities, callEvents, callState, callToDevice, ownCallStateKeys, readableCallState, elementCallUrl, isConversationCall } from "./MatrixCallPolicy";
@@ -112,7 +113,7 @@ export class MatrixCallDriver extends WidgetDriver {
     for (const [userId, devices] of Object.entries(contentMap)) {
       if (room.getMember(userId)?.membership !== "join") throw new Error("Call recipient is outside this room");
       for (const [deviceId, content] of Object.entries(devices)) {
-        if (encrypted) await this.client.encryptAndSendToDevice(type, [{ userId, deviceId }], content);
+        if (encrypted) await sendEncryptedCallEvent(this.client, type, userId, deviceId, content);
         else await this.client.sendToDevice(type, new Map([[userId, new Map([[deviceId, content]])]]));
       }
     }

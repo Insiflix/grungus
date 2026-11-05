@@ -62,6 +62,7 @@ class FakeClient implements IMatrixClient {
   leaveRoom = vi.fn(async () => undefined);
   inviteUser = vi.fn(async () => undefined);
   searchUsers = vi.fn(async () => []);
+  searchPublicRooms = vi.fn(async () => ({ rooms: [] }));
   startDirectMessage = vi.fn(async () => this.rooms[0]!);
   setDirectMessageClosed = vi.fn(async (roomId: string, closed: boolean) => {
     this.rooms = this.rooms.map(room => room.id === roomId ? { ...room, isDirectClosed: closed } : room);

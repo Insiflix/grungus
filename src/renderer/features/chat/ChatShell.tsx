@@ -33,6 +33,7 @@ import { isVoiceRoom, spaceRoomIds } from "../../../domain/matrix/RoomNavigation
 import { ConversationCallCard } from "./ConversationCallCard";
 import type { MatrixRoom } from "../../../domain/matrix/MatrixTypes";
 import { CreateServerDialog } from "../rooms/CreateServerDialog";
+import { JoinMatrixDialog } from "../rooms/JoinMatrixDialog";
 import { VoiceChatToggle } from "./VoiceChatToggle";
 import { ProfileActions } from "./ProfileActions";
 
@@ -83,6 +84,7 @@ export function ChatShell() {
   const [spaceId, setSpaceId] = useState<string | null>(null);
   const [addingPeople, setAddingPeople] = useState(false);
   const [creatingServer, setCreatingServer] = useState(false);
+  const [exploringServers, setExploringServers] = useState(false);
   const [identityOpen, setIdentityOpen] = useState(false);
   const [userVerificationOpen, setUserVerificationOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -156,7 +158,7 @@ export function ChatShell() {
     <main className="app-shell">
       <ProfileActions onCall={room => { setSpaceId(null); startCall(room, false); }} callActive={Boolean(call || directCall)} onVerification={() => { setUserVerificationOpen(true); setIdentityOpen(true); }} />
       <MembershipToast />
-      <WorkspaceRail spaces={spaces} selectedSpaceId={spaceId} onSelectSpace={selectSpace} onCreateServer={() => setCreatingServer(true)} />
+      <WorkspaceRail spaces={spaces} selectedSpaceId={spaceId} onSelectSpace={selectSpace} onCreateServer={() => setCreatingServer(true)} onExploreServers={() => setExploringServers(true)} />
       <RoomSidebar onManageChannel={setManagedRoomId} voiceDockRef={setVoiceDock} key={spaceId ?? "home"} space={activeSpace ?? null} calls={roomCalls} callActive={Boolean(call || directCall)} onJoinVoice={room => startCall(room, false)} discoveryPending={spaceId ? discovery[spaceId]?.pending : false} discoveryError={spaceId ? discovery[spaceId]?.error : undefined} onRetryDiscovery={() => { if (spaceId) void refreshSpace(spaceId); }} onOpenIdentity={() => setIdentityOpen(true)} onOpenSettings={() => setSettingsOpen(true)} onManageSpace={() => { if (activeSpace) setManagedRoomId(activeSpace.id); }} />
       <ChatSurface activeRoomId={selectedRoomId}>
       <nav className="dm-tabs" aria-label={prefs.showChannelsInTopBar ? "Recent conversations" : "Direct messages"}>
@@ -200,6 +202,11 @@ export function ChatShell() {
       {call && <CallPanel {...call} search={renderSearch(rooms.find(item => item.id === call.roomId) ?? null)} mode={serverRooms.has(call.roomId) ? "voice" : "group"} dock={voiceDock} visible={selectedRoomId === call.roomId} onOpen={() => selectRoom(call.roomId)} chatVisible={!hiddenVoiceChats.has(call.roomId)} chatUnreadCount={voiceCallRoom?.unreadCount ?? 0} onToggleChat={() => toggleVoiceChat(call.roomId)} chat={voiceCallRoom ? voiceChat(voiceCallRoom) : undefined} onClose={closeCall} />}
       {creatingServer && <CreateServerDialog onClose={() => setCreatingServer(false)} onCreated={id => { runtime.clearSelectedRoom(); setSpaceId(id); void refreshSpace(id); }} />}
       {addingPeople && <PeopleDialog onClose={() => setAddingPeople(false)} />}
+      {exploringServers && <JoinMatrixDialog onClose={() => setExploringServers(false)} onJoined={id => {
+        const joined = runtime.getSnapshot().rooms.find(room => room.id === id);
+        setSpaceId(joined?.isSpace ? id : null);
+        if (joined?.isSpace) { runtime.clearSelectedRoom(); void refreshSpace(id); }
+      }} />}
       {settingsOpen && <SettingsDialog onClose={() => setSettingsOpen(false)} onOpenIdentity={() => setIdentityOpen(true)} onManageRoom={setManagedRoomId} />}
       {managedRoomId && <RoomSettingsDialog key={managedRoomId} roomId={managedRoomId} onClose={() => setManagedRoomId(null)} />}
       {identityOpen && <IdentityDialog userVerification={userVerificationOpen} onClose={() => { setIdentityOpen(false); setUserVerificationOpen(false); }} />}

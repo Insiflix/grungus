@@ -1,4 +1,4 @@
-import { Plus } from "lucide-react";
+import { Globe, Plus } from "lucide-react";
 import { Avatar } from "../../components/common/Avatar";
 import type { MatrixRoom } from "../../../domain/matrix/MatrixTypes";
 import { BrandLogo } from "../../components/common/BrandLogo";
@@ -8,9 +8,10 @@ interface WorkspaceRailProps {
   selectedSpaceId: string | null;
   onSelectSpace: (id: string | null) => void;
   onCreateServer: () => void;
+  onExploreServers?: () => void;
 }
 
-export function WorkspaceRail({ spaces, selectedSpaceId, onSelectSpace, onCreateServer }: WorkspaceRailProps) {
+export function WorkspaceRail({ spaces, selectedSpaceId, onSelectSpace, onCreateServer, onExploreServers }: WorkspaceRailProps) {
   return (
     <nav className="workspace-rail" aria-label="Servers">
       <button type="button" className={`rail-button rail-button--brand ${selectedSpaceId === null ? "is-active" : ""}`} aria-label="Grungus home" data-tooltip="Grungus home" onClick={() => onSelectSpace(null)}><BrandLogo /></button>
@@ -23,6 +24,7 @@ export function WorkspaceRail({ spaces, selectedSpaceId, onSelectSpace, onCreate
         ))}
       </div>
       <button type="button" className="rail-button rail-button--create" aria-label="Create server" data-tooltip="Create server" onClick={onCreateServer}><Plus /></button>
+      <button type="button" className="rail-button" aria-label="Explore Matrix servers" data-tooltip="Join rooms on other Matrix instances" onClick={onExploreServers}><Globe /></button>
       <div className="rail-spacer" />
       <span className="rail-caption">GRUNGUS</span>
     </nav>

@@ -4,6 +4,8 @@ Grungus is a functional Matrix desktop client proof of concept built with Electr
 
 ## Architecture
 
+For joining rooms on other Matrix instances, messaging remote users, and the required homeserver configuration, see [Matrix federation](docs/matrix-federation.md).
+
 The renderer never imports `MatrixClient`, `MatrixEvent`, `Room`, or other SDK implementation types. All SDK objects stop at `src/infrastructure/matrix`; the adapter maps them into application-owned domain objects and application events.
 
 ```text

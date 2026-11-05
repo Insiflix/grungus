@@ -53,6 +53,7 @@ function setup() {
     setAccountData: vi.fn(async (type: string, value: Record<string, string[]>) => { if (type === closedDirectRoomsEvent) closed = { rooms: value.rooms }; else direct = value; }),
     createRoom: vi.fn(async () => { const room = sdkRoom("!new:example.org"); rooms.push(room); return { room_id: room.roomId }; }),
     invite: vi.fn(async () => ({})),
+    publicRooms: vi.fn(async () => ({ chunk: [{ room_id: "!remote", name: "Remote", canonical_alias: "#remote:other.org", num_joined_members: 7, room_type: "m.space" }], next_batch: "next" })),
     joinRoom: vi.fn(async (id: string) => rooms.find((room) => room.roomId === id)!),
     leave: vi.fn(async () => ({})),
     searchUserDirectory: vi.fn(async () => ({ results: [
@@ -94,6 +95,33 @@ describe("OAuth session lifecycle", () => {
       expect(sdk.initRustCrypto).toHaveBeenCalledOnce();
     } finally { discovery.mockRestore(); refresh.mockRestore(); revoke.mockRestore(); }
   });
+});
+
+it("queries remote directories through the authenticated homeserver and maps pagination", async () => {
+  const { sdk } = setup();
+  const client = new MatrixJsSdkClient(); await client.start(session);
+  expect(await client.searchPublicRooms(" other.org ", " lounge ", "previous")).toEqual({
+    rooms: [{ id: "!remote", name: "Remote", alias: "#remote:other.org", memberCount: 7, isSpace: true }], nextBatch: "next",
+  });
+  expect(sdk.publicRooms).toHaveBeenCalledWith({ server: "other.org", limit: 30, since: "previous", include_all_networks: false, filter: { generic_search_term: "lounge" } });
+});
+
+it("joins remote room links with their routing hints", async () => {
+  const { sdk, rooms } = setup(); rooms.push(sdkRoom("!remote"));
+  const client = new MatrixJsSdkClient(); await client.start(session);
+  await client.joinRoom("https://matrix.to/#/!remote?via=other.org");
+  expect(sdk.joinRoom).toHaveBeenCalledWith("!remote", { viaServers: ["other.org"] });
+});
+
+it("can invite a remote user even when their directory and profile cannot be loaded", async () => {
+  const { sdk } = setup();
+  const client = new MatrixJsSdkClient(); await client.start(session);
+  sdk.searchUserDirectory.mockRejectedValueOnce(new Error("Directory unavailable"));
+  sdk.getProfileInfo.mockRejectedValueOnce(new Error("Profile unavailable"));
+  expect(await client.searchUsers("@alice:other.org")).toEqual([{ id: "@alice:other.org", displayName: "@alice:other.org", avatarUrl: null }]);
+  await client.startDirectMessage("@alice:other.org");
+  expect(sdk.createRoom).toHaveBeenCalledWith(expect.objectContaining({ invite: ["@alice:other.org"], is_direct: true,
+    initial_state: expect.arrayContaining([expect.objectContaining({ type: EventType.RoomEncryption })]) }));
 });
 
 it("allows contact reads before a room is stored, then returns members when sync stores it", async () => {
